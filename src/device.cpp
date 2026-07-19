@@ -1,0 +1,254 @@
+/*
+    Copyright (C) 2026 Matej Gomboc https://github.com/ai-quokka-wannabe/tron-grid-lite
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
+*/
+
+#include "device.hpp"
+#include "instance.hpp"
+#include <algorithm>
+#include <array>
+#include <cstdlib>
+#include <ranges>
+#include <set>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+/*!
+    Required device extensions.
+
+    Only the swapchain is needed. Dynamic rendering and synchronisation2 are Vulkan 1.3 core
+    features and are requested through vk::PhysicalDeviceVulkan13Features rather than as
+    extensions. Ray traversal runs in ordinary compute shaders, so none of the hardware
+    ray-tracing extensions are requested.
+*/
+static constexpr std::array REQUIRED_DEVICE_EXTENSIONS{
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+};
+
+//! Holds graphics and present queue family indices discovered during device selection.
+struct QueueFamilyIndices {
+    uint32_t graphics{UINT32_MAX}; //!< Graphics queue family index.
+    uint32_t present{UINT32_MAX}; //!< Present queue family index.
+    bool graphics_has_compute{false}; //!< Whether the chosen graphics family also supports compute.
+
+    //! Returns true if both graphics and present queue families have been found.
+    [[nodiscard]] bool isComplete() const
+    {
+        return (graphics != UINT32_MAX) && (present != UINT32_MAX);
+    }
+};
+
+//! Finds graphics and present queue family indices for the given device and surface.
+[[nodiscard]] static QueueFamilyIndices findQueueFamilies(const vk::raii::PhysicalDevice& device, VkSurfaceKHR surface)
+{
+    QueueFamilyIndices indices;
+    std::vector<vk::QueueFamilyProperties> families{device.getQueueFamilyProperties()};
+
+    for (uint32_t i{0}; i < static_cast<uint32_t>(families.size()); ++i) {
+        // Graphics support.
+        if (families[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+            indices.graphics = i;
+            indices.graphics_has_compute = static_cast<bool>(families[i].queueFlags & vk::QueueFlagBits::eCompute);
+        }
+
+        // Present support.
+        vk::Bool32 present_support{device.getSurfaceSupportKHR(i, surface)};
+        if (present_support) {
+            indices.present = i;
+        }
+
+        // Prefer a single family that supports both (better performance).
+        if ((indices.graphics == indices.present) && indices.isComplete()) {
+            break;
+        }
+    }
+
+    return indices;
+}
+
+//! Checks whether the device supports all required extensions.
+[[nodiscard]] static bool hasRequiredExtensions(const vk::raii::PhysicalDevice& device)
+{
+    std::vector<vk::ExtensionProperties> available{device.enumerateDeviceExtensionProperties()};
+
+    for (const char* required : REQUIRED_DEVICE_EXTENSIONS) {
+        bool found{std::ranges::any_of(available, [required](const vk::ExtensionProperties& ext) {
+            return std::string_view(ext.extensionName.data()) == required;
+        })};
+        if (!found) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+//! Checks whether the device exposes the Vulkan 1.3 core features the renderer relies on.
+[[nodiscard]] static bool hasRequiredVulkan13Features(const vk::raii::PhysicalDevice& device)
+{
+    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features> features_chain{
+        device.getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features>()};
+    const vk::PhysicalDeviceVulkan13Features& vulkan13{features_chain.get<vk::PhysicalDeviceVulkan13Features>()};
+
+    return (vulkan13.dynamicRendering == vk::True) && (vulkan13.synchronization2 == vk::True);
+}
+
+//! Scores a physical device for suitability; returns -1 if unsuitable.
+[[nodiscard]] static int rateDevice(const vk::raii::PhysicalDevice& device, VkSurfaceKHR surface)
+{
+    vk::PhysicalDeviceProperties properties{device.getProperties()};
+    QueueFamilyIndices indices{findQueueFamilies(device, surface)};
+
+    // Must support Vulkan 1.3 (for dynamic rendering and synchronisation2).
+    if (properties.apiVersion < VK_API_VERSION_1_3) {
+        return -1;
+    }
+
+    // Must have graphics + present queues and the swapchain extension.
+    if ((!indices.isComplete()) || (!hasRequiredExtensions(device))) {
+        return -1;
+    }
+
+    // Must expose the Vulkan 1.3 core features the renderer enables.
+    if (!hasRequiredVulkan13Features(device)) {
+        return -1;
+    }
+
+    int score{0};
+
+    // Strongly prefer discrete GPUs.
+    if (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu) {
+        score += 10000;
+    } else if (properties.deviceType == vk::PhysicalDeviceType::eIntegratedGpu) {
+        score += 1000;
+    }
+
+    // Bonus for a single queue family (graphics + present on the same family).
+    if (indices.graphics == indices.present) {
+        score += 100;
+    }
+
+    // Bonus for compute on the graphics family — it avoids cross-queue ownership transfers
+    // for the ray traversal passes.
+    if (indices.graphics_has_compute) {
+        score += 10;
+    }
+
+    return score;
+}
+
+//! Formats a packed Vulkan version number as "major.minor.patch".
+[[nodiscard]] static std::string formatVersion(uint32_t version)
+{
+    return std::to_string(VK_API_VERSION_MAJOR(version)) + "." + std::to_string(VK_API_VERSION_MINOR(version)) + "." + std::to_string(VK_API_VERSION_PATCH(version));
+}
+
+//! Formats a 32-bit value as a lower-case hexadecimal string with an "0x" prefix.
+[[nodiscard]] static std::string formatHex(uint32_t value)
+{
+    std::ostringstream stream;
+    stream << "0x" << std::hex << value;
+    return stream.str();
+}
+
+Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logger& logger) :
+    m_logger(logger)
+{
+    // Step 1: Enumerate physical devices.
+    std::vector<vk::raii::PhysicalDevice> physical_devices{instance.get().enumeratePhysicalDevices()};
+    if (physical_devices.empty()) {
+        m_logger.logFatal("No Vulkan-capable GPU found.");
+        std::abort();
+        return;
+    }
+
+    // Step 2: Score and pick the best device.
+    int best_score{-1};
+    size_t best_index{0};
+
+    for (size_t i{0}; i < physical_devices.size(); ++i) {
+        int score{rateDevice(physical_devices[i], surface)};
+        vk::PhysicalDeviceProperties props{physical_devices[i].getProperties()};
+        m_logger.logInfo("GPU " + std::to_string(i) + ": " + props.deviceName.data() + " (score: " + std::to_string(score) + ").");
+
+        if (score > best_score) {
+            best_score = score;
+            best_index = i;
+        }
+    }
+
+    if (best_score < 0) {
+        m_logger.logFatal("No suitable GPU found (need Vulkan 1.3 with dynamic rendering and synchronisation2, graphics + present queues, and VK_KHR_swapchain).");
+        std::abort();
+        return;
+    }
+
+    m_physical_device = std::move(physical_devices[best_index]);
+    vk::PhysicalDeviceProperties properties{m_physical_device.getProperties()};
+    m_device_name = properties.deviceName.data();
+
+    // The driver version is vendor-encoded rather than Vulkan-packed, so it is logged raw in
+    // hexadecimal — decoding it as major.minor.patch would be wrong for most vendors.
+    m_logger.logInfo("Selected GPU: " + m_device_name + " (Vulkan API " + formatVersion(properties.apiVersion) + ", driver version " + formatHex(properties.driverVersion)
+        + ", vendor ID " + formatHex(properties.vendorID) + ").");
+
+    // Step 3: Find queue families.
+    QueueFamilyIndices indices{findQueueFamilies(m_physical_device, surface)};
+    m_graphics_family_index = indices.graphics;
+    m_present_family_index = indices.present;
+    m_graphics_queue_supports_compute = indices.graphics_has_compute;
+
+    if (!m_graphics_queue_supports_compute) {
+        // Every target GPU exposes compute on its graphics family, so this is a warning rather
+        // than a fatal error — but the ray traversal passes cannot be dispatched without it.
+        m_logger.logWarning("Graphics queue family does not support compute; the ray traversal passes will not be dispatchable.");
+    }
+
+    // Step 4: Create the logical device.
+    constexpr float QUEUE_PRIORITY{1.0f};
+    std::vector<vk::DeviceQueueCreateInfo> queue_create_infos;
+
+    // Deduplicate queue family indices.
+    std::set<uint32_t> unique_families{m_graphics_family_index, m_present_family_index};
+    for (uint32_t family : unique_families) {
+        vk::DeviceQueueCreateInfo queue_info{};
+        queue_info.queueFamilyIndex = family;
+        queue_info.setQueuePriorities(QUEUE_PRIORITY);
+        queue_create_infos.push_back(queue_info);
+    }
+
+    // Enable the Vulkan 1.3 core features: dynamic rendering (no VkRenderPass / VkFramebuffer)
+    // and synchronisation2 (the barrier form used throughout the renderer).
+    vk::PhysicalDeviceVulkan13Features vulkan13_features{};
+    vulkan13_features.dynamicRendering = vk::True;
+    vulkan13_features.synchronization2 = vk::True;
+
+    vk::PhysicalDeviceFeatures2 features2{};
+    features2.setPNext(&vulkan13_features);
+
+    vk::DeviceCreateInfo device_info{};
+    device_info.setPNext(&features2);
+    device_info.setQueueCreateInfos(queue_create_infos);
+    device_info.setPEnabledExtensionNames(REQUIRED_DEVICE_EXTENSIONS);
+
+    m_device = vk::raii::Device(m_physical_device, device_info);
+
+    // Step 5: Load device-level function pointers.
+    volkLoadDevice(*m_device);
+    VULKAN_HPP_DEFAULT_DISPATCHER.init(*m_device);
+
+    // Step 6: Retrieve queue handles.
+    m_graphics_queue = m_device.getQueue(m_graphics_family_index, 0);
+    m_present_queue = m_device.getQueue(m_present_family_index, 0);
+}

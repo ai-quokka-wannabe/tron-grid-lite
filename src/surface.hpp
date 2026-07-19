@@ -12,11 +12,19 @@
     GNU General Public License for more details.
 */
 
-// The Vulkan SDK installs the header as Volk/volk.h on Windows and volk/volk.h elsewhere.
-// Clang-cl treats the case mismatch as -Wnonportable-include-path, which -Werror turns fatal.
-#define VOLK_IMPLEMENTATION
+#pragma once
+
 #ifdef _WIN32
 #include <Volk/volk.h>
 #else
 #include <volk/volk.h>
 #endif
+#include <vulkan/vulkan_raii.hpp>
+#include <window/window.hpp>
+#include <vector>
+
+//! Create a vk::raii::SurfaceKHR from the platform-native window handles of the spectator window.
+[[nodiscard]] vk::raii::SurfaceKHR createSurface(const vk::raii::Instance& instance, const WindowLib::Window& window);
+
+//! Required surface extensions for the current platform.
+[[nodiscard]] std::vector<const char*> requiredSurfaceExtensions();

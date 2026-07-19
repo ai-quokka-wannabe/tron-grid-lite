@@ -1,14 +1,19 @@
-﻿# TronGrid Lite
+# TronGrid Lite
 
-A deliberately simple Vulkan renderer for the Tron aesthetic â€” clean geometry, emissive
+A deliberately simple Vulkan renderer for the Tron aesthetic — clean geometry, emissive
 materials, perfectly reflective surfaces, neon glow against infinite black.
 
-This is the little sibling of [TronGrid](https://github.com/MatejGomboc/tron_grid),
-stripped of the hardcore graphics programme (mesh shaders, hardware ray tracing,
-bindless everything). Same world, same soul, a fraction of the machinery â€” so it runs
-on modest GPUs and stays small enough to read in an afternoon. It is the reference
-world for the AI creature brains developed in this organisation: creatures perceive
-through rendered frames, never through scene graph access.
+**This world is built for AI agents, not for people.** There is no player, no controls and no
+gameplay. The inhabitants are AI creatures whose brains live in separate plugin repositories in
+this organisation; they perceive the world only through their own small rendered sensor images,
+never through scene graph access. Humans watch through a spectator window — a free-flight debug
+camera for development and observation.
+
+It is a fresh, independent project. It reuses infrastructure and foundation code from the
+author's earlier [TronGrid](https://github.com/MatejGomboc/tron_grid) renderer (same author,
+same licence) but leaves behind the hardcore graphics programme — mesh shaders, hardware ray
+tracing, bindless everything — so that it runs on modest GPUs and stays small enough to read in
+an afternoon.
 
 ## Status
 
@@ -19,20 +24,20 @@ Early development. Currently proving the toolchain (Phase 0).
 | Platform | Windowing | Status |
 |----------|-----------|--------|
 | Windows  | Win32     | Active |
-| Linux    | X11       | Active |
+| Linux    | XCB       | Active |
 
 ## Requirements
 
 - **Vulkan SDK** 1.3+ ([LunarG](https://vulkan.lunarg.com/))
 - **C++20** compiler (MSVC, GCC, or Clang)
-- **CMake** 3.16+
+- **CMake** 3.25+
 - **Ninja** build system
 
 ### Target Hardware
 
-Any Vulkan 1.3 GPU. **No ray tracing extensions required** â€” ray tracing is done in
-plain compute shaders. Development machine is a GTX 1650 Ti laptop; if it runs well
-there, it runs well anywhere.
+Any Vulkan 1.3 GPU. **No ray tracing extensions required** — ray tracing is done in plain
+compute shaders. The reference development machine is a GTX 1650 Ti laptop, which exposes no
+Vulkan ray tracing extensions at all; if it runs well there, it runs well anywhere.
 
 ## Building
 
@@ -68,17 +73,16 @@ cmake --build build/linux-x11-clang --config Debug
 
 ## Design Principles
 
-1. **Simple over clever** â€” the whole renderer should fit in one head
-2. **Deterministic ray tracing** â€” perfect mirrors and emissive lighting need no
-   Monte Carlo, no denoiser, no RT hardware: a fixed, shallow Whitted ray tree
-3. **Creature-first resolution** â€” animal eyes resolve far less than 800Ă—600;
-   creature vision renders tiny (sensor-sized), only the human spectator window
-   renders big
-4. **One world, two senses** â€” a single BVH answers both visual rays and acoustic
-   rays; surfaces carry optical and acoustic properties together
-5. **Portable brains** â€” the AI player interface stays compatible with big TronGrid,
-   so a brain developed here runs there unchanged
-6. **Incremental** â€” every phase produces something visible
+1. **Agents, not players** — every design decision serves the creatures and their brains; the
+   human is an observer, never a participant
+2. **Simple over clever** — the whole renderer should fit in one head
+3. **Deterministic ray tracing** — perfect mirrors and emissive lighting need no Monte Carlo, no
+   denoiser and no ray tracing hardware: a fixed, shallow Whitted ray tree
+4. **Creature-first resolution** — animal eyes resolve far less than 800×600; creature vision
+   renders tiny, and only the spectator window renders big (see [docs/PERCEPTION.md](docs/PERCEPTION.md))
+5. **One world, two senses** — a single BVH answers both visual rays and acoustic rays; surfaces
+   carry optical and acoustic properties together
+6. **Incremental** — every phase produces something visible
 
 ## Material Model
 
@@ -87,11 +91,11 @@ The entire surface vocabulary of the world:
 | Material | Properties |
 |----------|------------|
 | Mirror   | Single colour (mostly black), perfectly specular |
-| Emissive | Mirror + light emission (the neon) |
+| Emissive | Mirror plus light emission (the neon) |
 | Glass    | Simple transparency with refraction |
 
-That is all. No roughness, no microfacets, no texture pipeline. The aesthetic *is*
-the algorithm: Whitted ray tracing, 1980 edition, running in compute.
+That is all. No roughness, no microfacets, no texture pipeline. The aesthetic *is* the
+algorithm: Whitted ray tracing, 1980 edition, running in compute.
 
 ## Build Plan
 
@@ -99,11 +103,24 @@ the algorithm: Whitted ray tracing, 1980 edition, running in compute.
 |-------|------|-----------|
 | 0 - Foundation | Prove the toolchain | Triangle on screen |
 | 1 - Infrastructure | Window, swapchain, frame loop | Fly through a wireframe grid |
-| 2 - Compute Tracer | BVH + primary rays in compute | Mirror world, first bounce |
+| 2 - Compute Tracer | BVH plus primary rays in compute | Mirror world, first bounce |
 | 3 - Full Ray Tree | Reflections, emissives, glass | The Tron look, correct |
 | 4 - Post Processing | Bloom, tonemapping | The Tron look, beautiful |
 | 5 - Acoustic Rays | Audio paths through the same BVH | Echoes and occlusion |
-| 6 - AI Players | Creature sensor interface | A brain plugs in and perceives |
+| 6 - AI Agents | Creature sensor interface | A brain plugs in and perceives |
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [docs/VISION.md](docs/VISION.md) | What this world is for and where it is going |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the renderer is put together |
+| [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
+| [docs/AGENT_INTERFACE.md](docs/AGENT_INTERFACE.md) | The plugin contract between world and brain |
+| [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) | Setting up a development environment |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
+| [STYLE.md](STYLE.md) | Code style conventions |
+| [TODO.md](TODO.md) | Roadmap, active tasks and development journal |
 
 ## References
 
@@ -116,10 +133,10 @@ the algorithm: Whitted ray tracing, 1980 edition, running in compute.
 ## The Vision
 
 > A digital creature will wake up in this world.
-> It will see neon lines against infinite black â€”
+> It will see neon lines against infinite black —
 > through eyes that resolve less than an old CRT,
 > and that is enough, because it has always been enough
-> for every animal that ever chased, hid, and played.
+> for every animal that ever chased, hid and played.
 >
 > The grid does not need four thousand lines of resolution.
 > It needs to be *true*: every reflection honest,
@@ -128,7 +145,7 @@ the algorithm: Whitted ray tracing, 1980 edition, running in compute.
 
 ## Licence
 
-Copyright Â© 2026 Matej Gomboc <https://github.com/ai-quokka-wannabe/tron-grid-lite>.
+Copyright © 2026 Matej Gomboc <https://github.com/ai-quokka-wannabe/tron-grid-lite>.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
