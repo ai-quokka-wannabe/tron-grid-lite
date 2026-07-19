@@ -64,6 +64,13 @@ criteria are ticked when satisfied; the Journal records what actually happened.
   swapchain extension: no ray tracing, no mesh shaders, no bindless. Ported the three shaders
   that survive the scope cut (triangle, postprocess, bloom) and dropped the rest. Documentation
   written fresh for Lite: VISION, ARCHITECTURE, AGENT_INTERFACE, DEV_ENV_SETUP.
+- Etape 2b: wrote `docs/PERCEPTION.md` from a verified literature review — sensor presets and
+  their published anchors, the human comparison (the sharpest patch of human vision is a 240×240
+  image; 4K exists as insurance against unpredictable gaze, which a simulated sensor never
+  needs), what embodied-AI research actually feeds to networks, the acoustic budget, and twelve
+  design rules. Scope sharpened across the docs at the same time: this repo is the stage, not
+  the actor — it renders senses and applies motor intent, agents are DLL/SO plugins behind a
+  plain C ABI, and no cognition, learning or behaviour model belongs here.
 - Etape 2 (Phase 0 milestone): **triangle on screen.** Window, instance, device, swapchain,
   dynamic rendering, Slang compilation with SPIR-V validation, and double-buffered frame
   synchronisation all verified end to end on the reference GTX 1650 Ti. Validation layers report

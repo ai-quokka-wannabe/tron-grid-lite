@@ -4,10 +4,14 @@ A deliberately simple Vulkan renderer for the Tron aesthetic — clean geometry,
 materials, perfectly reflective surfaces, neon glow against infinite black.
 
 **This world is built for AI agents, not for people.** There is no player, no controls and no
-gameplay. The inhabitants are AI creatures whose brains live in separate plugin repositories in
-this organisation; they perceive the world only through their own small rendered sensor images,
-never through scene graph access. Humans watch through a spectator window — a free-flight debug
-camera for development and observation.
+gameplay. Humans watch through a spectator window — a free-flight debug camera for development
+and observation.
+
+**It is the stage, not the actor.** TronGrid Lite renders senses and applies motor intent; it
+does not think. Agents load as shared-library plugins (DLL on Windows, SO on Linux), receive
+small sensor buffers, and return movement — so the world stays **completely agnostic about how
+any agent works inside**. No brain internals live here, and none should: creature minds are
+other repositories' business, behind a plain C ABI.
 
 It is a fresh, independent project. It reuses infrastructure and foundation code from the
 author's earlier [TronGrid](https://github.com/MatejGomboc/tron_grid) renderer (same author,

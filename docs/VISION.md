@@ -29,21 +29,21 @@ extensions. Everything here must run there.
 
 ## The Inhabitants: AI Creature Agents
 
-The creatures that live in the Grid are not written in this repository. Each brain is a **separate plugin repository**
-in the same organisation, loaded as a shared library at runtime. TronGrid Lite provides the world and the senses; the
-brain repositories provide the minds.
+The creatures that live in the Grid are not written in this repository, and their workings are none of this
+repository's business. Each agent is a **separate plugin** — a DLL on Windows, an SO on Linux — loaded at runtime
+behind a plain C ABI. **TronGrid Lite is the stage, not the actor.** It renders senses and applies motor intent. What
+happens between the two is entirely the plugin's affair, and the world is deliberately **agnostic about how any agent
+works inside**: a lookup table, a neural network, a hand-written reflex arc and a large model are all the same thing
+from here.
 
-The brains climb a **development ladder from the simplest animals upward**:
+That agnosticism is a design constraint, not modesty. The moment the world knows something about how an agent thinks,
+it starts serving that assumption, and it stops being a world. So there is no cognition, no learning and no behaviour
+model anywhere in this codebase, and there should never be one.
 
-- Start at the bottom — reflex arcs, taxis and kineses, the behavioural repertoire of something with a few hundred
-  neurons. Move toward light. Move away from a wall.
-- Then simple associative learning: this glow preceded that outcome, so approach it or avoid it.
-- Then spatial behaviour: place memory, path following, homing.
-- Then anything further the ladder supports.
-
-Nothing about this ladder is baked into the renderer. The renderer's only obligation is to be an **honest world**: what
-a creature senses must be a consequence of where it is and what is around it, never a privileged read of scene state.
-No entity list. No ground-truth positions. No cheating. A creature knows what its sensors resolve, and nothing more.
+What the renderer does owe the agents is **honesty**: what a creature senses must be a consequence of where it is and
+what is around it, never a privileged read of scene state. No entity list. No ground-truth positions. No cheating. A
+creature knows what its sensors resolve, and nothing more — see [PERCEPTION.md](PERCEPTION.md) for how small that
+deliberately is.
 
 The human observer sits outside that contract entirely. The spectator window is a debugging instrument — it shows the
 same world from a free camera at a comfortable resolution, so a developer can watch what a creature is doing and judge

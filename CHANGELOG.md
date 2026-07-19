@@ -27,5 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SPIR-V-validated at build time.
 - Documentation: `docs/VISION.md`, `docs/ARCHITECTURE.md`, `docs/AGENT_INTERFACE.md` and
   `docs/DEV_ENV_SETUP.md`.
+- `docs/PERCEPTION.md` — the sensor presets the world renders (`elegans`, `insect-min`,
+  `insect-mid`, `insect-high`, `rodent`, `macropod`), the published measurements that set their
+  sizes, and twelve binding design rules. Every figure is cited and every biology-to-pixels
+  translation is flagged as a translation.
 - **Phase 0 milestone reached: a triangle renders in the spectator window** via dynamic
   rendering, verified on a GTX 1650 Ti with validation layers enabled and no errors reported.
