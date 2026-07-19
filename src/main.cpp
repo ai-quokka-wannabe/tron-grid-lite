@@ -13,16 +13,24 @@
 */
 
 /*
-    Phase 0 — prove the toolchain.
+    Phase 1 — window, swapchain and frame loop.
 
-    Brings up the spectator window, a Vulkan instance, device and swapchain, then draws a single
-    triangle with dynamic rendering. The triangle is a smoke test for the graphics queue: the
-    world itself will be traced in compute shaders from Phase 2 onwards. There is no player and
-    no input handling here — the window exists so a human can watch, nothing more.
+    Brings up the spectator window, a Vulkan instance, device and swapchain, generates the neon
+    grid world on the CPU, and rasterises it with dynamic rendering while a free-flight camera
+    moves through it. The rasteriser is scaffolding: from Phase 2 the world is traced in compute
+    shaders against a self-built BVH, and this geometry becomes that BVH's input.
+
+    Nothing here is a game. The camera exists so a human can watch and debug; creatures are driven
+    by their own plugins and are not part of this loop yet.
 */
 
+#include "camera.hpp"
+#include "components.hpp"
 #include "device.hpp"
+#include "geometry.hpp"
 #include "instance.hpp"
+#include "profiler.hpp"
+#include "spectator.hpp"
 #include "surface.hpp"
 #include "swapchain.hpp"
 #include <log/logger.hpp>
@@ -32,8 +40,10 @@
 #include <window/window.hpp>
 #include <window/window_event.hpp>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <fstream>
 #include <string>
@@ -44,13 +54,6 @@ namespace
 
     //! Number of frames the host may record ahead of the GPU.
     constexpr uint32_t MAX_FRAMES_IN_FLIGHT{2};
-
-    //! Per-vertex data, matching the vertex input layout documented in triangle.slang.
-    struct Vertex {
-        float position[3]; //!< Object-space position.
-        float normal[3]; //!< Object-space normal, visualised as colour.
-        float uv[2]; //!< Texture coordinate, unused in Phase 0.
-    };
 
     //! Reads a compiled SPIR-V module from disk, next to the executable.
     [[nodiscard]] std::vector<uint32_t> readSpirv(const std::string& path)
@@ -156,9 +159,9 @@ int main()
     LoggingLib::Logger logger;
 
     try {
-        logger.logInfo("TronGrid Lite — Phase 0 (a world for AI agents; this window is for the human observer only).");
+        logger.logInfo("TronGrid Lite - Phase 1 (a world for AI agents; this window is for the human observer only).");
 
-        const WindowLib::WindowConfig window_config{.title = "TronGrid Lite — spectator", .width = 1280, .height = 720, .resizable = true, .decorated = true};
+        const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - spectator", .width = 1280, .height = 720, .resizable = true, .decorated = true};
         const std::unique_ptr<WindowLib::Window> window{WindowLib::create(window_config, logger)};
 
 #ifdef NDEBUG
@@ -173,11 +176,33 @@ int main()
 
         Swapchain swapchain{device, *surface, window->width(), window->height(), logger};
 
-        // A single triangle standing upright in front of the camera. Its normals become its colours.
-        constexpr std::array<Vertex, 3> vertices{Vertex{{0.0f, 0.6f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.5f, 0.0f}},
-            Vertex{{-0.6f, -0.4f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f}}, Vertex{{0.6f, -0.4f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 1.0f}}};
+        /*
+            The world: a flat mirror floor with neon tubes along its grid lines. Generated on the
+            CPU into one flat triangle list, which is exactly the form the Phase 2 BVH builder
+            wants — the rasteriser below is scaffolding, the geometry is not.
+        */
+        const GridFloorConfig floor_config{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
+        const NeonTubeConfig tube_config{};
 
-        const vk::BufferCreateInfo buffer_info{.size = sizeof(vertices), .usage = vk::BufferUsageFlagBits::eVertexBuffer, .sharingMode = vk::SharingMode::eExclusive};
+        const Mesh floor{generateGridFloor(floor_config)};
+        const NeonGrid neon{generateGridFloorNeon(floor_config, tube_config)};
+
+        // Kept as three ranges of one buffer so each can be drawn with its own tint until the
+        // compute tracer takes over and materials come from the storage buffer instead.
+        const uint32_t floor_vertex_count{static_cast<uint32_t>(floor.vertices.size())};
+        const uint32_t primary_vertex_count{static_cast<uint32_t>(neon.primary.vertices.size())};
+        const uint32_t accent_vertex_count{static_cast<uint32_t>(neon.accent.vertices.size())};
+
+        Mesh world{floor};
+        world.append(neon.primary);
+        world.append(neon.accent);
+
+        logger.logInfo("World generated: " + std::to_string(world.triangleCount()) + " triangles, bounding radius "
+            + std::to_string(static_cast<double>(world.boundingRadius())) + " m.");
+
+        const vk::DeviceSize vertex_bytes{static_cast<vk::DeviceSize>(world.vertices.size() * sizeof(Vertex))};
+
+        const vk::BufferCreateInfo buffer_info{.size = vertex_bytes, .usage = vk::BufferUsageFlagBits::eVertexBuffer, .sharingMode = vk::SharingMode::eExclusive};
         const vk::raii::Buffer vertex_buffer{device.get(), buffer_info};
 
         const vk::MemoryRequirements requirements{vertex_buffer.getMemoryRequirements()};
@@ -187,12 +212,19 @@ int main()
         const vk::raii::DeviceMemory vertex_memory{device.get(), allocate_info};
         vertex_buffer.bindMemory(*vertex_memory, 0);
 
-        void* mapped{vertex_memory.mapMemory(0, sizeof(vertices))};
-        std::memcpy(mapped, vertices.data(), sizeof(vertices));
+        void* mapped{vertex_memory.mapMemory(0, vertex_bytes)};
+        std::memcpy(mapped, world.vertices.data(), static_cast<size_t>(vertex_bytes));
         vertex_memory.unmapMemory();
 
+        // Matches TrianglePushConstants in triangle.slang: a 64-byte matrix followed by a 16-byte tint.
+        struct TrianglePushConstants {
+            MathLib::Mat4 model_view_projection{};
+            MathLib::Vec4 tint{};
+        };
+        static_assert(sizeof(TrianglePushConstants) == 80u, "Push constants must match the Slang struct layout exactly.");
+
         const vk::PushConstantRange push_range{
-            .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, .offset = 0, .size = sizeof(MathLib::Mat4)};
+            .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, .offset = 0, .size = sizeof(TrianglePushConstants)};
         const vk::PipelineLayoutCreateInfo layout_info{.setLayoutCount = 0, .pushConstantRangeCount = 1, .pPushConstantRanges = &push_range};
         const vk::raii::PipelineLayout pipeline_layout{device.get(), layout_info};
 
@@ -219,10 +251,17 @@ int main()
             render_finished.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
         }
 
-        logger.logInfo("Phase 0 initialised on " + device.name() + " — drawing the smoke-test triangle.");
+        GpuProfiler profiler{device, MAX_FRAMES_IN_FLIGHT, logger};
+
+        // The spectator: a free camera for the human observer. Creatures never use this.
+        Camera camera{MathLib::Vec3{0.0f, 12.0f, 45.0f}};
+        SpectatorController spectator;
+
+        logger.logInfo("Phase 1 initialised on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
 
         uint32_t frame_index{0};
         bool needs_recreate{false};
+        std::chrono::steady_clock::time_point previous_time{std::chrono::steady_clock::now()};
 
         while (!window->shouldClose()) {
             window->pumpEvents();
@@ -234,7 +273,15 @@ int main()
                 } else if (event.type == WindowLib::WindowEvent::Type::Close) {
                     window->requestClose();
                 }
+                spectator.processEvent(event);
             }
+
+            const std::chrono::steady_clock::time_point current_time{std::chrono::steady_clock::now()};
+            const float delta_seconds{std::chrono::duration<float>{current_time - previous_time}.count()};
+            previous_time = current_time;
+
+            window->setCursorCaptured(spectator.cursorCaptured());
+            spectator.update(camera, delta_seconds);
 
             // A minimised window has a zero-sized swapchain; there is nothing to render into.
             if ((window->width() == 0) || (window->height() == 0)) {
@@ -268,10 +315,14 @@ int main()
             }
 
             device.get().resetFences({*fence});
+            profiler.collect(frame_index);
+            profiler.logSummary();
 
             const vk::raii::CommandBuffer& command_buffer{command_buffers[frame_index]};
             command_buffer.reset();
             command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+            profiler.resetFrame(command_buffer, frame_index);
+            profiler.begin(command_buffer, frame_index, GpuPass::Frame);
 
             const vk::ImageMemoryBarrier2 to_colour_attachment{.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
                 .srcAccessMask = vk::AccessFlagBits2::eNone,
@@ -309,14 +360,32 @@ int main()
             command_buffer.setScissor(0, {vk::Rect2D{{0, 0}, swapchain.extent()}});
 
             const float aspect{static_cast<float>(swapchain.extent().width) / static_cast<float>(swapchain.extent().height)};
-            const MathLib::Mat4 projection{MathLib::perspective(MathLib::PI / 4.0f, aspect, 0.1f, 100.0f)};
-            const MathLib::Mat4 view{MathLib::Mat4::translate(MathLib::Vec3{0.0f, 0.0f, -2.0f})};
-            const MathLib::Mat4 model_view_projection{projection * view};
-            command_buffer.pushConstants<MathLib::Mat4>(*pipeline_layout, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0,
-                {model_view_projection});
-
+            const MathLib::Mat4 projection{MathLib::perspective(MathLib::PI / 4.0f, aspect, 0.1f, 500.0f)};
+            const MathLib::Mat4 model_view_projection{projection * camera.viewMatrix()};
             command_buffer.bindVertexBuffers(0, {*vertex_buffer}, {0});
-            command_buffer.draw(static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+
+            /*
+                Three draws, one per sub-mesh, each with its own flat tint: a near-black floor that
+                will become the mirror, and the two neon tube sets. Phase 2 replaces all of this
+                with a single compute dispatch that reads materials from a storage buffer.
+            */
+            const std::array<std::pair<uint32_t, MathLib::Vec4>, 3> draws{
+                std::pair<uint32_t, MathLib::Vec4>{floor_vertex_count, MathLib::Vec4{0.02f, 0.03f, 0.05f, 1.0f}},
+                std::pair<uint32_t, MathLib::Vec4>{primary_vertex_count, MathLib::Vec4{0.0f, 0.85f, 1.0f, 1.0f}},
+                std::pair<uint32_t, MathLib::Vec4>{accent_vertex_count, MathLib::Vec4{1.0f, 0.45f, 0.0f, 1.0f}}};
+
+            uint32_t first_vertex{0};
+            for (const std::pair<uint32_t, MathLib::Vec4>& draw : draws) {
+                if (draw.first == 0u) {
+                    continue;
+                }
+                const TrianglePushConstants push{.model_view_projection = model_view_projection, .tint = draw.second};
+                command_buffer.pushConstants<TrianglePushConstants>(*pipeline_layout,
+                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, {push});
+                command_buffer.draw(draw.first, 1, first_vertex, 0);
+                first_vertex += draw.first;
+            }
+
             command_buffer.endRendering();
 
             const vk::ImageMemoryBarrier2 to_present{.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
@@ -331,6 +400,7 @@ int main()
                 .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
             command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_present});
 
+            profiler.end(command_buffer, frame_index, GpuPass::Frame);
             command_buffer.end();
 
             const vk::PipelineStageFlags wait_stage{vk::PipelineStageFlagBits::eColorAttachmentOutput};

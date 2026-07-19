@@ -37,6 +37,7 @@
 struct TrianglePushConstants
 {
     float4x4 model_view_projection;
+    float4 tint; //!< Flat surface colour. Phase 1 has no lighting model: the host draws each sub-mesh with its own tint.
 };
 
 [[vk::push_constant]]
@@ -69,10 +70,11 @@ VSOutput vertMain(VSInput input)
     return output;
 }
 
-//! Visualises the interpolated normal as a colour so the triangle's orientation is obvious to the human observer.
+//! Emits the flat tint the host pushed for this sub-mesh, with a slight facing-based falloff so surface orientation stays readable.
 [shader("fragment")]
 float4 fragMain(VSOutput input) : SV_Target
 {
-    float3 colour = normalize(input.normal) * 0.5 + 0.5;
-    return float4(colour, 1.0);
+    // Not a lighting model — just enough shading that a flat floor does not read as a solid block of colour.
+    const float facing = abs(normalize(input.normal).y) * 0.35 + 0.65;
+    return float4(push.tint.rgb * facing, push.tint.a);
 }

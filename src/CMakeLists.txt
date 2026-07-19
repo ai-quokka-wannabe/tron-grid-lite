@@ -7,6 +7,9 @@ add_executable(${PROJECT_NAME}
     surface.cpp
     swapchain.cpp
     allocator.cpp
+    geometry.cpp
+    profiler.cpp
+    spectator.cpp
 )
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
