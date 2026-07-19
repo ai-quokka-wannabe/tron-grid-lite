@@ -42,7 +42,7 @@ jobs:
 
         steps:
             - name: Checkout Github repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@v7
 
             - name: Install X11 development headers (Linux)
               if: runner.os == 'Linux'
