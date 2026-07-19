@@ -45,7 +45,7 @@ DerivePointerAlignment: false
 # Constructor initializers
 BreakConstructorInitializers: AfterColon
 ConstructorInitializerIndentWidth: 4
-PackConstructorInitializers: NextLine
+PackConstructorInitializers: Never
 
 # No alignment of consecutive things
 AlignAfterOpenBracket: DontAlign
@@ -104,7 +104,7 @@ PenaltyBreakOpenParenthesis: 1000
 # Other
 BinPackArguments: true
 BinPackParameters: true
-BreakBeforeBinaryOperators: None
+BreakBeforeBinaryOperators: All
 BreakBeforeTernaryOperators: true
 BreakStringLiterals: true
 CompactNamespaces: false
@@ -112,7 +112,7 @@ EmptyLineAfterAccessModifier: Never
 EmptyLineBeforeAccessModifier: LogicalBlock
 FixNamespaceComments: false
 IndentWrappedFunctionNames: false
-InsertBraces: false
+InsertBraces: true
 InsertNewlineAtEOF: true
 KeepEmptyLinesAtTheStartOfBlocks: false
 LambdaBodyIndentation: Signature

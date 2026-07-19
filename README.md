@@ -1,11 +1,11 @@
-# TronGrid Lite
+﻿# TronGrid Lite
 
-A deliberately simple Vulkan renderer for the Tron aesthetic — clean geometry, emissive
+A deliberately simple Vulkan renderer for the Tron aesthetic â€” clean geometry, emissive
 materials, perfectly reflective surfaces, neon glow against infinite black.
 
 This is the little sibling of [TronGrid](https://github.com/MatejGomboc/tron_grid),
 stripped of the hardcore graphics programme (mesh shaders, hardware ray tracing,
-bindless everything). Same world, same soul, a fraction of the machinery — so it runs
+bindless everything). Same world, same soul, a fraction of the machinery â€” so it runs
 on modest GPUs and stays small enough to read in an afternoon. It is the reference
 world for the AI creature brains developed in this organisation: creatures perceive
 through rendered frames, never through scene graph access.
@@ -30,7 +30,7 @@ Early development. Currently proving the toolchain (Phase 0).
 
 ### Target Hardware
 
-Any Vulkan 1.3 GPU. **No ray tracing extensions required** — ray tracing is done in
+Any Vulkan 1.3 GPU. **No ray tracing extensions required** â€” ray tracing is done in
 plain compute shaders. Development machine is a GTX 1650 Ti laptop; if it runs well
 there, it runs well anywhere.
 
@@ -53,7 +53,7 @@ cmake --build build/windows-clang-cl --config Debug
 ### Linux (GCC)
 
 ```bash
-sudo apt-get install libx11-dev
+sudo apt-get install libxcb1-dev
 cmake --preset linux-x11-gcc
 cmake --build build/linux-x11-gcc --config Debug
 ```
@@ -61,24 +61,24 @@ cmake --build build/linux-x11-gcc --config Debug
 ### Linux (Clang)
 
 ```bash
-sudo apt-get install libx11-dev
+sudo apt-get install libxcb1-dev
 cmake --preset linux-x11-clang
 cmake --build build/linux-x11-clang --config Debug
 ```
 
 ## Design Principles
 
-1. **Simple over clever** — the whole renderer should fit in one head
-2. **Deterministic ray tracing** — perfect mirrors and emissive lighting need no
+1. **Simple over clever** â€” the whole renderer should fit in one head
+2. **Deterministic ray tracing** â€” perfect mirrors and emissive lighting need no
    Monte Carlo, no denoiser, no RT hardware: a fixed, shallow Whitted ray tree
-3. **Creature-first resolution** — animal eyes resolve far less than 800×600;
+3. **Creature-first resolution** â€” animal eyes resolve far less than 800Ă—600;
    creature vision renders tiny (sensor-sized), only the human spectator window
    renders big
-4. **One world, two senses** — a single BVH answers both visual rays and acoustic
+4. **One world, two senses** â€” a single BVH answers both visual rays and acoustic
    rays; surfaces carry optical and acoustic properties together
-5. **Portable brains** — the AI player interface stays compatible with big TronGrid,
+5. **Portable brains** â€” the AI player interface stays compatible with big TronGrid,
    so a brain developed here runs there unchanged
-6. **Incremental** — every phase produces something visible
+6. **Incremental** â€” every phase produces something visible
 
 ## Material Model
 
@@ -116,7 +116,7 @@ the algorithm: Whitted ray tracing, 1980 edition, running in compute.
 ## The Vision
 
 > A digital creature will wake up in this world.
-> It will see neon lines against infinite black —
+> It will see neon lines against infinite black â€”
 > through eyes that resolve less than an old CRT,
 > and that is enough, because it has always been enough
 > for every animal that ever chased, hid, and played.
@@ -128,7 +128,7 @@ the algorithm: Whitted ray tracing, 1980 edition, running in compute.
 
 ## Licence
 
-Copyright © 2026 Matej Gomboc <https://github.com/AiQuokkaWannabe/tron-grid-lite>.
+Copyright Â© 2026 Matej Gomboc <https://github.com/ai-quokka-wannabe/tron-grid-lite>.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
