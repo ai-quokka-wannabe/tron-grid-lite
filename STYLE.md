@@ -29,7 +29,8 @@ Avoid duplicating information across files. Each piece of information should hav
 | Build commands | `README.md` § Building |
 | Formatting rules | `.clang-format`, `.editorconfig` |
 | Security policy | `SECURITY.md` |
-| Roadmap & phases | `docs/VISION.md` § Phased Roadmap |
+| Roadmap & phases | `TODO.md` § Roadmap |
+| Creature sensor resolutions | `docs/PERCEPTION.md` |
 
 **Guidelines:**
 
@@ -281,13 +282,13 @@ vk::Image image = device.createImage(image_info);
 Non-RAII types (`vk::Image`, `vk::Device`, etc.) are acceptable only as transient parameters
 to API calls that don't transfer ownership.
 
-See `docs/ARCHITECTURE.md` § Vulkan Resource Management for the full ownership hierarchy.
+Non-RAII types are never stored as members.
 
 ### Resource Ownership
 
 RAII everywhere. Use `vk::raii` for Vulkan objects, `std::unique_ptr` for single-owner heap
 objects, and `std::shared_ptr` / `std::weak_ptr` only for signal ownership (see
-`docs/ARCHITECTURE.md` § Signal-Based Communication).
+`libs/signals/include/signal/signal.hpp`).
 
 ### Doxygen Comments
 

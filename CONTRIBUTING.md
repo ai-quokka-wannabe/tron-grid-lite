@@ -50,8 +50,9 @@ When submitting:
 
 We welcome feature suggestions! Before submitting:
 
-1. Check [existing issues](https://github.com/ai-quokka-wannabe/tron-grid-lite/issues) and [discussions](https://github.com/ai-quokka-wannabe/tron-grid-lite/discussions) for similar ideas
-2. Consider how the feature fits the project's [phased roadmap](docs/VISION.md#phased-roadmap)
+1. Check [existing issues](https://github.com/ai-quokka-wannabe/tron-grid-lite/issues) and
+   [discussions](https://github.com/ai-quokka-wannabe/tron-grid-lite/discussions) for similar ideas
+2. Consider how the feature fits the project's [roadmap](TODO.md#roadmap-phases)
 3. Think about backwards compatibility
 
 When submitting:
@@ -101,8 +102,8 @@ When submitting:
 
 ### Setup
 
-See [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) for complete setup instructions
-(Vulkan SDK, compilers, IDE, troubleshooting).
+Install the Vulkan SDK from [LunarG](https://vulkan.lunarg.com/), a C++20 compiler, CMake and Ninja.
+On Linux also install the XCB development headers (`sudo apt-get install libxcb1-dev`).
 
 Quick start (prerequisites already installed):
 
@@ -223,12 +224,8 @@ chore: update Vulkan SDK to 1.4.335.0
 | `SECURITY.md` | Security policy and vulnerability reporting |
 | `STYLE.md` | Code style conventions |
 | `CHANGELOG.md` | User-facing change history |
-| `docs/ARCHITECTURE.md` | Technical architecture |
-| `docs/VISION.md` | Project vision and roadmap |
-| `docs/AI_INTERFACE.md` | AI brain plugin interface specification |
-| `docs/PBR.md` | Physically-based rendering reference |
-| `docs/DEV_ENV_SETUP.md` | Development environment setup guide |
-| `TODO.md` | Active tasks and development journal |
+| `docs/PERCEPTION.md` | How creatures perceive: sensor resolutions and the biology behind them |
+| `TODO.md` | Active tasks, roadmap and development journal |
 
 ### Updating Documentation
 
