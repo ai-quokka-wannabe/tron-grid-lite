@@ -1,11 +1,21 @@
 # TronGrid Lite
 
 Deliberately simple Vulkan renderer for a Tron-style world perceived by AI creatures
-through rendered frames. Little sibling of the full
-[TronGrid](https://github.com/MatejGomboc/tron_grid) — same world rules, none of the
-hardcore graphics (no mesh shaders, no hardware RT, no bindless). The AI brains live
-in separate repos in the AiQuokkaWannabe organisation and plug in as players; this
-repo never contains brain internals.
+through rendered frames.
+
+**Two facts that govern every decision in this repo:**
+
+1. **This world is for AI agents only, and it is the stage rather than the actor.** There is no
+   human player, no controls, no gameplay — humans only spectate through a free-flight debug
+   camera. The repo's whole job is to render senses and apply motor intent; agents load as
+   shared-library plugins (DLL/SO) behind a plain C ABI, so the world stays agnostic about how
+   any agent works inside. **Never** add cognition, learning, behaviour models or brain
+   internals here, and never write features, docs or comments that assume a human player.
+   Creature minds belong to other repositories in the `ai-quokka-wannabe` organisation.
+2. **This is a fresh, independent project.** It reuses infrastructure and foundation code from
+   the author's earlier [TronGrid](https://github.com/MatejGomboc/tron_grid) renderer (same
+   author, same GPL v3 licence), but it is not a part, fork or component of any other project.
+   Describe the relationship as "reuses code from" and nothing stronger.
 
 ## Quick Orientation
 
