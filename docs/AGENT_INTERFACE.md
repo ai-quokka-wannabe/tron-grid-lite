@@ -21,9 +21,10 @@ simulation tick.
 
 The boundary between world and brain is deliberately narrow:
 
-- The brain receives **raw sensor buffers** — chiefly a small block of pixels rendered from the
-  creature's own eye. It receives no object identities, no positions, no orientations, no
-  distances, no health bars, no scene graph, and no privileged world state of any kind.
+- The brain receives **raw sensor buffers** — chiefly a small block of samples rendered from the
+  creature's own eyes, plus a handful of numbers about its own body. It receives no object
+  identities, no positions, no orientations, no distances, no health bars, no scene graph, and no
+  privileged world state of any kind.
 - The brain emits **physical motor intent** — desired movement and turn rates. It cannot issue
   high-level commands such as "go to the blue tower" or "attack".
 - The brain never links against the world binary and never calls world functions. All traffic
@@ -75,8 +76,8 @@ symbol and the world does exactly one symbol lookup.
        vtable->creature_create(&creature_desc)       -> opaque brain handle
 6. Per simulation tick, for each live creature:
        a. World advances physics for the tick.
-       b. World renders that creature's sensor view into its own tiny render target.
-       c. World reads the target back and fills TglSenses.
+       b. World renders each of that creature's eyes into its own tiny render target.
+       c. World reads the targets back and fills TglSenses, along with the body senses.
        d. vtable->creature_tick(handle, &senses, &actions)
        e. World clamps and applies TglActions to the body.
 7. On creature death or world shutdown:
@@ -116,7 +117,7 @@ exactly one `creature_destroy`.
 ### Vtable
 
 ```c
-#define TGL_BRAIN_ABI_VERSION 0u  /*!< Bumped on every breaking change until 1.0. */
+#define TGL_BRAIN_ABI_VERSION 1u  /*!< Bumped on every breaking change until 1.0. */
 
 /*! Opaque per-creature brain state. The world never dereferences this. */
 typedef struct TglBrain TglBrain;
@@ -156,6 +157,37 @@ typedef struct TglLibraryInfo
     uint32_t reserved0;
 } TglLibraryInfo;
 
+/*! How one eye's samples are arranged. */
+#define TGL_EYE_LAYOUT_RASTER      0u  /*!< A width x height grid, row-major, top row first. */
+#define TGL_EYE_LAYOUT_SAMPLE_LIST 1u  /*!< Arbitrary sample directions; height is 1. */
+
+/*! Geometry of one eye. Fixed for the creature's lifetime. */
+typedef struct TglEyeDesc
+{
+    uint32_t struct_size;
+    uint32_t layout;    /*!< One of TGL_EYE_LAYOUT_*. */
+
+    /*! Raster width and height, or sample count and 1 for a sample list. */
+    uint32_t width;
+    uint32_t height;
+
+    /*! Values per sample. 1 is a scalar; 3 is the usual three-band eye. What each band weights
+        is a property of this body and is documented per sensor preset in PERCEPTION.md — it is
+        emphatically not always RGB. */
+    uint32_t channels;
+    uint32_t reserved0;
+
+    /*! For TGL_EYE_LAYOUT_SAMPLE_LIST, three floats per sample giving the unit view direction in
+        body frame; NULL for a raster. A compound eye is a curved, non-uniform array rather than a
+        rectangle, so the directions are handed over explicitly. Borrowed for the call only. */
+    const float* sample_directions;
+
+    /*! Field of view in radians. Meaningful for a raster; for a sample list the directions above
+        are authoritative and these merely bound them. */
+    float fov_horizontal;
+    float fov_vertical;
+} TglEyeDesc;
+
 /*! Description of the body this brain will drive. Sensor geometry only — no world state. */
 typedef struct TglCreatureDesc
 {
@@ -168,21 +200,23 @@ typedef struct TglCreatureDesc
     /*! Deterministic seed the brain should use for any randomness it needs. */
     uint64_t random_seed;
 
-    /*! Sensor render target dimensions in pixels, decided by the world (see PERCEPTION.md). */
-    uint32_t eye_width;
-    uint32_t eye_height;
-
-    /*! Horizontal field of view of the eye, in radians. */
-    float eye_fov_horizontal;
+    /*! This body's eyes, in the order their views arrive each tick. May be zero — a creature with
+        no image-forming eye at all is a legitimate body, and the simplest preset is exactly that.
+        Borrowed for the duration of the call; copy anything worth keeping. */
+    const TglEyeDesc* eyes;
+    uint32_t eye_count;
+    uint32_t reserved1;
 
     /*! Nominal seconds per tick. The actual value is repeated each tick in TglSenses. */
     float nominal_dt_seconds;
+    uint32_t reserved2;
 } TglCreatureDesc;
 ```
 
-Note the direction of control: the **world** decides the sensor resolution and hands it to the
-brain. A brain does not request an eye. Sensor geometry is a property of the creature's body, not
-of its cognition, and bodies are the world's business.
+Note the direction of control: the **world** decides how many eyes a body has, how many samples
+each one takes, in which directions and in how many channels, and hands the lot to the brain. A
+brain does not request an eye. Sensor geometry is a property of the creature's body, not of its
+cognition, and bodies are the world's business.
 
 ---
 
@@ -196,6 +230,20 @@ simulate in numbers. See `docs/PERCEPTION.md` for the reasoning behind the sizes
 model.
 
 ```c
+/*! One eye's samples for this tick. */
+typedef struct TglEyeView
+{
+    /*! Linear-space sample values, `channels` floats per sample, in the order described by the
+        matching TglEyeDesc. Never NULL. */
+    const float* samples;
+
+    /*! Number of samples, not floats. Equals width * height of the matching TglEyeDesc. */
+    uint32_t sample_count;
+
+    /*! Values per sample, repeated from TglEyeDesc so a tick handler needs nothing else. */
+    uint32_t channels;
+} TglEyeView;
+
 /*! Everything a creature perceives this tick. All pointers are borrowed for the call only. */
 typedef struct TglSenses
 {
@@ -211,18 +259,30 @@ typedef struct TglSenses
 
     /* -- Vision ------------------------------------------------------------------- */
 
-    /*! Linear-space RGB pixels from this creature's eye, row-major, top row first.
-        Length is eye_width * eye_height * 3 floats. Never NULL. */
-    const float* vision_rgb;
-    uint32_t vision_width;
-    uint32_t vision_height;
+    /*! One view per eye, in the same order as TglCreatureDesc::eyes. NULL when eye_count is 0. */
+    const TglEyeView* eyes;
+    uint32_t eye_count;
+    uint32_t reserved2;
 
     /* -- Proprioception ----------------------------------------------------------- */
 
-    /*! Forward speed along the body axis, in metres per second, body frame. */
-    float body_forward_speed;
-    /*! Turn rate about the body's up axis, in radians per second, body frame. */
-    float body_turn_rate;
+    /*! What the body's own actuators report about themselves. */
+    float body_forward_speed;  /*!< Metres per second along the body axis. */
+    float body_turn_rate;      /*!< Radians per second about the body's up axis. */
+
+    /* -- Vestibular ---------------------------------------------------------------- */
+
+    /*! Specific force in body frame, in metres per second squared: linear acceleration with
+        gravity included, exactly what an otolith or an accelerometer senses. A creature at rest
+        reads roughly 9.81 along its up axis. Gravity and acceleration are deliberately conflated
+        in one number, because they are conflated in the animal too — which is precisely why a
+        creature can be fooled about which way is down. In a world of perfect mirrors it will be. */
+    float specific_force[3];
+
+    /*! Angular velocity about the body axes in radians per second — the semicircular-canal
+        analogue. Sensed inertially, which is not the same thing as the commanded turn rate above:
+        the two disagree whenever the body is pushed rather than driven. */
+    float angular_velocity[3];
 
     /* -- Touch -------------------------------------------------------------------- */
 
@@ -230,7 +290,15 @@ typedef struct TglSenses
     float touch_front;
     float touch_rear;
     float touch_lateral;
-    uint32_t reserved2;  /*!< Explicit padding before the 8-byte-aligned pointer below. */
+
+    /* -- Thermoreception ------------------------------------------------------------ */
+
+    /*! Irradiance at the creature's position in the renderer's linear units: incoming radiance
+        integrated over the whole sphere, with no directional resolution whatsoever. One number,
+        one extra ray. This is not a cheapened eye but a faithful one — a pit viper's infrared
+        organ is likewise a very low-resolution radiance sensor, and it is enough to tell warm
+        from cold long before it is enough to see. */
+    float irradiance;
 
     /* -- Reserved for future modalities -------------------------------------------- */
 
@@ -241,21 +309,63 @@ typedef struct TglSenses
 } TglSenses;
 ```
 
+### The senses at a glance
+
+| Sense | Field | What it physically is | Status |
+|-------|-------|----------------------|--------|
+| Vision | `eyes` | Rays traced from each eye through the shared BVH | Phase 6 |
+| Proprioception | `body_forward_speed`, `body_turn_rate` | The body's own actuator state | Phase 6 |
+| Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has | Phase 6 |
+| Touch | `touch_*` | Short contact queries against the same BVH | Phase 6 |
+| Thermoreception | `irradiance` | One unresolved radiance sample | Phase 6 |
+| Hearing | `hearing_samples` | Acoustic rays through the same BVH | Phase 5 onwards |
+
+Every one of them is a **consequence of the creature's position in the world**, computed by the
+same machinery that draws the picture. That is the test a modality has to pass to belong here.
+
 Points worth stating plainly, because they are the whole design:
 
-- `vision_rgb` is **pixels**. It is not a list of what is in front of the creature. Working out
+- An eye delivers **samples**. It is not a list of what is in front of the creature. Working out
   that a bright cyan band means a neon edge, and that a neon edge means a wall, is the brain's job.
-- Proprioception and touch describe the creature's **own body**, which an animal genuinely does
-  have access to. They describe nothing outside it.
+- Proprioception, vestibular sensing and touch describe the creature's **own body**, which an
+  animal genuinely does have access to. They describe nothing outside it.
 - There is deliberately no field for position, heading in world coordinates, distance to anything,
-  object identifiers, or other creatures' states. No such field will be added.
+  object identifiers, or other creatures' states. No such field will be added. A compass was
+  considered and rejected for exactly this reason: it would hand the brain the structure the world
+  exists to make it earn.
+- Nothing here is a valuation. The world reports contact intensity; whether that amounts to pain is
+  the brain's business, and pain is cognition wearing a sensory costume.
 - Reserved members are present so the struct can grow without changing its size in a way that
   silently breaks older brains. They are zero until they mean something.
 
-Acoustic sensing is the next modality planned. Surfaces in TronGrid Lite already carry acoustic
-properties alongside their optical ones, and the same hand-built BVH is intended to serve acoustic
-rays, so hearing will arrive as sample buffers filled through `hearing_samples` rather than as a
-new channel bolted on elsewhere.
+### Hearing, and the thing it still needs
+
+Acoustic sensing is the next modality planned. Surfaces already carry acoustic properties alongside
+their optical ones, and the same hand-built BVH is intended to serve acoustic rays, so hearing will
+arrive as sample buffers filled through `hearing_samples` rather than as a new channel bolted on
+elsewhere.
+
+One prerequisite is still open, and it is not a technical one: **nothing in this world currently
+makes a sound.** Surfaces emit light; none of them emit anything audible. Before `hearing_samples`
+can carry meaning the world needs sources, and there are two natural candidates — the creatures
+themselves, through movement and collision, and the neon itself, humming as gas-discharge tubes do.
+The second is appealing because it would make the world's light and its sound come from the very
+same geometry.
+
+A pleasant consequence follows once hearing exists: **echolocation needs no new sense at all.** A
+creature that can emit a sound and hear the reflections has it already, so the decision to add a
+vocalisation action belongs with the decision to add hearing.
+
+### Chemoreception: deliberately absent, and worth revisiting
+
+Smell has no place in the current world because there is no chemistry in it — only geometry, light
+and, soon, sound. Adding it would mean a diffusing scalar field, the first subsystem the BVH cannot
+help with at all.
+
+It is recorded here rather than dismissed because there is a real argument on the other side. The
+simplest sensor preset is named after an animal that navigates chiefly by chemotaxis, not by light,
+so the simplest possible creature is arguably specified with the wrong sense — and gradient
+following would be a far gentler first problem for a brain than interpreting an image.
 
 ---
 

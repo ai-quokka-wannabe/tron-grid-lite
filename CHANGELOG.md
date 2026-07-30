@@ -50,3 +50,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unified the material model: `MaterialKind` is gone and `Material` gained a continuous
   `transmission` parameter. Every surface reflects, transmits and emits simultaneously, so there
   is no shader branch and a glowing translucent surface is expressible.
+- Reworked the sensory half of the agent ABI, and bumped `TGL_BRAIN_ABI_VERSION` to 1. A body now
+  carries an array of `TglEyeDesc`, so a creature may have several eyes, none at all, a channel
+  count other than three, and a sample-direction list instead of a raster — all of which the
+  sensor presets required and the previous single-RGB-raster field could not express.
+- Added two modalities to `TglSenses`: **vestibular** sensing (`specific_force`,
+  `angular_velocity`) and **thermoreception** (`irradiance`). Both are nearly free — the numbers
+  already exist in the motion integrator and the ray tracer respectively — and the first matters
+  particularly in a world of perfect mirrors, where a reflected floor is indistinguishable from
+  real space to vision alone.
+- Documented that hearing still lacks a prerequisite: nothing in the world currently emits sound.
