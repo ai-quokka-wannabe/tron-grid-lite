@@ -225,6 +225,7 @@ chore: update Vulkan SDK to 1.4.335.0
 | `STYLE.md` | Code style conventions |
 | `CHANGELOG.md` | User-facing change history |
 | `docs/PERCEPTION.md` | How creatures perceive: sensor resolutions and the biology behind them |
+| `docs/RELATED_WORK.md` | Prior art: what research labs build in this area, and what is unusual here |
 | `TODO.md` | Active tasks, roadmap and development journal |
 
 ### Updating Documentation

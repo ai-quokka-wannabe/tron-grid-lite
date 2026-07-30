@@ -133,6 +133,7 @@ tracing, 1980 edition, running in compute.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the renderer is put together |
 | [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
 | [docs/AGENT_INTERFACE.md](docs/AGENT_INTERFACE.md) | The plugin contract between world and brain |
+| [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | What research labs build in this area, and what is genuinely unusual here |
 | [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) | Setting up a development environment |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [STYLE.md](STYLE.md) | Code style conventions |
