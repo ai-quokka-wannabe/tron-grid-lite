@@ -21,7 +21,8 @@ an afternoon.
 
 ## Status
 
-Early development. Currently proving the toolchain (Phase 0).
+Early development. Phases 0 and 1 are done: the neon grid renders in the spectator window and a
+free camera flies through it. Next is Phase 2 — the compute ray tracer.
 
 ## Platforms
 
@@ -92,14 +93,25 @@ cmake --build build/linux-x11-clang --config Debug
 
 The entire surface vocabulary of the world:
 
-| Material | Properties |
-|----------|------------|
-| Mirror   | Single colour (mostly black), perfectly specular |
-| Emissive | Mirror plus light emission (the neon) |
-| Glass    | Simple transparency with refraction |
+Every surface is one perfectly smooth material that is reflective, translucent and emissive at
+once — no types, no branches, just parameters:
 
-That is all. No roughness, no microfacets, no texture pipeline. The aesthetic *is* the
-algorithm: Whitted ray tracing, 1980 edition, running in compute.
+| Parameter | Meaning |
+|-----------|---------|
+| `colour` | Tint applied to reflected and transmitted light. Usually near-black |
+| `index_of_refraction` | Drives Fresnel everywhere, and Snell refraction where light passes through |
+| `emission` | Radiance the surface emits — this is the neon |
+| `transmission` | How much non-reflected light passes through rather than being absorbed |
+
+"Mirror", "neon" and "glass" are named points in that space rather than categories, so a glowing
+translucent surface is as ordinary as any of them.
+
+There is no roughness, no microfacet model and no textures. That is not a simplification of
+physically-based rendering but its smooth limit: as roughness goes to zero the microfacet
+distribution collapses and the BRDF reduces analytically to Fresnel-weighted mirror reflection
+plus refraction. Each bounce is therefore exactly one ray, the tree is shallow and deterministic,
+and there is no Monte Carlo variance to denoise. The aesthetic *is* the algorithm: Whitted ray
+tracing, 1980 edition, running in compute.
 
 ## Build Plan
 

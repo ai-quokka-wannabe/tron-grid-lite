@@ -111,7 +111,27 @@ jobs:
 
             - name: Setup MSVC environment
               if: matrix.msvc-setup-needed
-              uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+              shell: pwsh
+              run: |
+                  # Visual Studio ships on the Windows runners, so the developer environment is
+                  # imported directly rather than through a third-party action: the repository
+                  # policy allows GitHub-owned actions only.
+                  $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+                  $install_path = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+                  if (-not $install_path) { throw "No Visual Studio installation with the C++ toolset was found." }
+                  $vcvars = Join-Path $install_path "VC\Auxiliary\Build\vcvars64.bat"
+                  if (-not (Test-Path $vcvars)) { throw "vcvars64.bat not found at $vcvars." }
+                  # Run vcvars64 in cmd, then carry the resulting environment into later steps.
+                  cmd /c "call `"$vcvars`" && set" | ForEach-Object {
+                      if ($_ -match '^([^=]+)=(.*)$') {
+                          $name = $matches[1]
+                          $value = $matches[2]
+                          # GITHUB_* are owned by the runner and must not be overwritten.
+                          if ($name -notmatch '^(GITHUB_|RUNNER_)') {
+                              "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+                          }
+                      }
+                  }
 
             # No caching for release builds - they're one-off events triggered by
             # version tags, so caches would never be reused and just waste storage
