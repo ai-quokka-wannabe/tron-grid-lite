@@ -55,6 +55,9 @@ namespace
     //! Number of frames the host may record ahead of the GPU.
     constexpr uint32_t MAX_FRAMES_IN_FLIGHT{2};
 
+    //! Depth format used by the spectator window. D32 float is universally supported as a depth attachment.
+    constexpr vk::Format DEPTH_FORMAT{vk::Format::eD32Sfloat};
+
     //! Reads a compiled SPIR-V module from disk, next to the executable.
     [[nodiscard]] std::vector<uint32_t> readSpirv(const std::string& path)
     {
@@ -122,8 +125,14 @@ namespace
         const vk::PipelineDynamicStateCreateInfo dynamic_state{
             .dynamicStateCount = static_cast<uint32_t>(dynamic_states.size()), .pDynamicStates = dynamic_states.data()};
 
+        const vk::PipelineDepthStencilStateCreateInfo depth_stencil{.depthTestEnable = vk::True,
+            .depthWriteEnable = vk::True,
+            .depthCompareOp = vk::CompareOp::eLess,
+            .depthBoundsTestEnable = vk::False,
+            .stencilTestEnable = vk::False};
+
         // Dynamic rendering — no VkRenderPass, no VkFramebuffer.
-        const vk::PipelineRenderingCreateInfo rendering_info{.colorAttachmentCount = 1, .pColorAttachmentFormats = &colour_format};
+        const vk::PipelineRenderingCreateInfo rendering_info{.colorAttachmentCount = 1, .pColorAttachmentFormats = &colour_format, .depthAttachmentFormat = DEPTH_FORMAT};
 
         const vk::GraphicsPipelineCreateInfo pipeline_info{.pNext = &rendering_info,
             .stageCount = static_cast<uint32_t>(stages.size()),
@@ -133,6 +142,7 @@ namespace
             .pViewportState = &viewport_state,
             .pRasterizationState = &rasterisation,
             .pMultisampleState = &multisample,
+            .pDepthStencilState = &depth_stencil,
             .pColorBlendState = &colour_blend,
             .pDynamicState = &dynamic_state,
             .layout = *layout};
@@ -150,6 +160,50 @@ namespace
             }
         }
         throw std::runtime_error{"No suitable memory type for the vertex buffer."};
+    }
+
+    /*!
+        Depth attachment for the spectator window.
+
+        Recreated alongside the swapchain, because it must always match the colour attachment's
+        extent. It is deliberately plain vk::raii rather than a VMA allocation: exactly one of
+        these exists, and the compute tracer of Phase 2 will not need it at all.
+    */
+    struct DepthBuffer {
+        vk::raii::Image image{nullptr}; //!< Depth image.
+        vk::raii::DeviceMemory memory{nullptr}; //!< Backing memory.
+        vk::raii::ImageView view{nullptr}; //!< View used as the rendering attachment.
+    };
+
+    //! Creates a depth buffer of the given extent.
+    [[nodiscard]] DepthBuffer createDepthBuffer(const vk::raii::Device& device, const vk::raii::PhysicalDevice& physical_device, vk::Extent2D extent)
+    {
+        const vk::ImageCreateInfo image_info{.imageType = vk::ImageType::e2D,
+            .format = DEPTH_FORMAT,
+            .extent = vk::Extent3D{extent.width, extent.height, 1},
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = vk::SampleCountFlagBits::e1,
+            .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+            .sharingMode = vk::SharingMode::eExclusive,
+            .initialLayout = vk::ImageLayout::eUndefined};
+
+        vk::raii::Image image{device, image_info};
+
+        const vk::MemoryRequirements requirements{image.getMemoryRequirements()};
+        const vk::MemoryAllocateInfo allocate_info{.allocationSize = requirements.size,
+            .memoryTypeIndex = findMemoryType(physical_device, requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal)};
+        vk::raii::DeviceMemory memory{device, allocate_info};
+        image.bindMemory(*memory, 0);
+
+        const vk::ImageViewCreateInfo view_info{.image = *image,
+            .viewType = vk::ImageViewType::e2D,
+            .format = DEPTH_FORMAT,
+            .subresourceRange = vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1}};
+        vk::raii::ImageView view{device, view_info};
+
+        return DepthBuffer{.image = std::move(image), .memory = std::move(memory), .view = std::move(view)};
     }
 
 } // namespace
@@ -175,6 +229,7 @@ int main()
         const Device device{instance, *surface, logger};
 
         Swapchain swapchain{device, *surface, window->width(), window->height(), logger};
+        DepthBuffer depth{createDepthBuffer(device.get(), device.physicalDevice(), swapchain.extent())};
 
         /*
             The world: a flat mirror floor with neon tubes along its grid lines. Generated on the
@@ -182,7 +237,19 @@ int main()
             wants — the rasteriser below is scaffolding, the geometry is not.
         */
         const GridFloorConfig floor_config{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
-        const NeonTubeConfig tube_config{};
+
+        /*
+            Wide tubes lifted clear of the floor.
+
+            Two separate reasons, both about distance. The lift beats depth-buffer precision, which
+            is worst far from the camera — the generator's 5 mm default sits below the resolvable
+            difference at the far edge of a 90 m grid. The width beats sub-pixel aliasing: a 2 cm
+            strip covers well under one pixel out there, so a rasteriser samples it only where a
+            pixel centre happens to land inside and the line breaks into dashes. The compute tracer
+            of Phase 2 will filter properly and can afford thinner tubes; until then, geometry that
+            is comfortably wider than a pixel is the honest fix rather than an antialiasing plaster.
+        */
+        const NeonTubeConfig tube_config{.half_width = 0.06f, .surface_offset = 0.05f};
 
         const Mesh floor{generateGridFloor(floor_config)};
         const NeonGrid neon{generateGridFloorNeon(floor_config, tube_config)};
@@ -292,6 +359,7 @@ int main()
             if (needs_recreate) {
                 device.get().waitIdle();
                 swapchain.recreate(window->width(), window->height());
+                depth = createDepthBuffer(device.get(), device.physicalDevice(), swapchain.extent());
                 needs_recreate = false;
                 continue;
             }
@@ -334,7 +402,20 @@ int main()
                 .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
                 .image = swapchain.images()[image_index],
                 .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
-            command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_colour_attachment});
+            const vk::ImageMemoryBarrier2 to_depth_attachment{.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
+                .srcAccessMask = vk::AccessFlagBits2::eNone,
+                .dstStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+                .dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+                .oldLayout = vk::ImageLayout::eUndefined,
+                .newLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+                .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+                .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+                .image = *depth.image,
+                .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1}};
+
+            const std::array<vk::ImageMemoryBarrier2, 2> begin_barriers{to_colour_attachment, to_depth_attachment};
+            command_buffer.pipelineBarrier2(vk::DependencyInfo{
+                .imageMemoryBarrierCount = static_cast<uint32_t>(begin_barriers.size()), .pImageMemoryBarriers = begin_barriers.data()});
 
             // Infinite black — the world's default background, and the reason emissive geometry reads as neon.
             const vk::ClearValue clear_colour{vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}}};
@@ -344,8 +425,17 @@ int main()
                 .storeOp = vk::AttachmentStoreOp::eStore,
                 .clearValue = clear_colour};
 
-            const vk::RenderingInfo rendering{
-                .renderArea = vk::Rect2D{{0, 0}, swapchain.extent()}, .layerCount = 1, .colorAttachmentCount = 1, .pColorAttachments = &colour_attachment};
+            const vk::RenderingAttachmentInfo depth_attachment{.imageView = *depth.view,
+                .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+                .loadOp = vk::AttachmentLoadOp::eClear,
+                .storeOp = vk::AttachmentStoreOp::eDontCare,
+                .clearValue = vk::ClearValue{vk::ClearDepthStencilValue{1.0f, 0}}};
+
+            const vk::RenderingInfo rendering{.renderArea = vk::Rect2D{{0, 0}, swapchain.extent()},
+                .layerCount = 1,
+                .colorAttachmentCount = 1,
+                .pColorAttachments = &colour_attachment,
+                .pDepthAttachment = &depth_attachment};
 
             command_buffer.beginRendering(rendering);
             command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
@@ -360,7 +450,9 @@ int main()
             command_buffer.setScissor(0, {vk::Rect2D{{0, 0}, swapchain.extent()}});
 
             const float aspect{static_cast<float>(swapchain.extent().width) / static_cast<float>(swapchain.extent().height)};
-            const MathLib::Mat4 projection{MathLib::perspective(MathLib::PI / 4.0f, aspect, 0.1f, 500.0f)};
+            // A distant near plane buys depth precision cheaply, and a spectator camera never needs
+            // to clip at ten centimetres.
+            const MathLib::Mat4 projection{MathLib::perspective(MathLib::PI / 4.0f, aspect, 0.5f, 500.0f)};
             const MathLib::Mat4 model_view_projection{projection * camera.viewMatrix()};
             command_buffer.bindVertexBuffers(0, {*vertex_buffer}, {0});
 
@@ -380,8 +472,7 @@ int main()
                     continue;
                 }
                 const TrianglePushConstants push{.model_view_projection = model_view_projection, .tint = draw.second};
-                command_buffer.pushConstants<TrianglePushConstants>(*pipeline_layout,
-                    vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, {push});
+                command_buffer.pushConstants<TrianglePushConstants>(*pipeline_layout, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, {push});
                 command_buffer.draw(draw.first, 1, first_vertex, 0);
                 first_vertex += draw.first;
             }

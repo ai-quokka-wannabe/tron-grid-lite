@@ -8,7 +8,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 | Phase | Goal                          | Milestone                          | Status |
 |-------|-------------------------------|------------------------------------|--------|
 | 0     | Prove the toolchain           | Triangle on screen                 | **Done** |
-| 1     | Window, swapchain, frame loop | Fly through a wireframe grid       | Pending |
+| 1     | Window, swapchain, frame loop | Fly through a wireframe grid       | **Done** |
 | 2     | BVH + primary rays in compute | Mirror world, first bounce         | Pending |
 | 3     | Full ray tree                 | Reflections, emissives, glass      | Pending |
 | 4     | Post processing               | Bloom, tonemapping                 | Pending |
@@ -36,10 +36,10 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Etape 3 — Phase 1: window, swapchain and frame loop
 
-- [ ] Spectator camera wired to input (free flight, for the human observer only)
-- [ ] Wireframe grid geometry to fly through
-- [ ] Depth buffer
-- [ ] Frame timing and a simple statistics log
+- [x] Spectator camera wired to input (free flight, for the human observer only)
+- [x] Neon grid geometry to fly through
+- [x] Depth buffer, recreated with the swapchain
+- [x] Frame timing and GPU timestamp profiling with a once-per-second summary
 
 ## Etape 4 — Phase 2: the compute ray tracer
 
@@ -71,6 +71,17 @@ criteria are ticked when satisfied; the Journal records what actually happened.
   design rules. Scope sharpened across the docs at the same time: this repo is the stage, not
   the actor — it renders senses and applies motor intent, agents are DLL/SO plugins behind a
   plain C ABI, and no cognition, learning or behaviour model belongs here.
+- Etape 3 (Phase 1 milestone): **flying through the neon grid.** Ported the last of what
+  TronGrid could lend — procedural geometry, the GPU timestamp profiler and the spectator
+  controller — plus `docs/MATERIALS.md`. Wired them into a real frame loop with a depth buffer.
+  Two rendering bugs found and fixed by looking at the output rather than the code: neon tubes
+  z-fought the floor at distance (lifted 5 cm, near plane moved to 0.5 m), then still broke into
+  dashes because a 2 cm strip is sub-pixel at 90 m (widened to 12 cm — the compute tracer will
+  filter properly and can afford thinner tubes later).
+- Material model unified: the `MaterialKind` enum is gone. Every surface is one perfectly smooth
+  material that reflects, transmits and emits at once, so "mirror", "neon" and "glass" are named
+  points in a continuous space rather than types. No shader branch, and a glowing translucent
+  surface — a neon tube in a glass envelope — is now expressible, which the enum could not do.
 - Etape 2 (Phase 0 milestone): **triangle on screen.** Window, instance, device, swapchain,
   dynamic rendering, Slang compilation with SPIR-V validation, and double-buffered frame
   synchronisation all verified end to end on the reference GTX 1650 Ti. Validation layers report

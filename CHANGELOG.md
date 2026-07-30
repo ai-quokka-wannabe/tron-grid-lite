@@ -33,3 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   translation is flagged as a translation.
 - **Phase 0 milestone reached: a triangle renders in the spectator window** via dynamic
   rendering, verified on a GTX 1650 Ti with validation layers enabled and no errors reported.
+- Procedural geometry (`src/geometry.hpp`): flat mirror grid floor, terraced value-noise terrain,
+  neon tubes along grid lines with an accent colour on major lines, and a box primitive. Plain
+  `std::vector` output with no Vulkan dependency, flat-shaded per-face vertices ready for a BVH.
+- GPU timestamp profiler (`src/profiler.hpp`) with per-pass exponential moving averages and a
+  once-per-second summary. Self-disables on hardware without timestamp support.
+- Spectator controller (`src/spectator.hpp`) — free-flight camera for the human observer, the
+  only interactive element in the project.
+- `docs/MATERIALS.md` — Fresnel, Snell refraction, the HDR path and tonemapping, kept to what the
+  smooth-surface model actually uses.
+- **Phase 1 milestone reached: flying through the neon grid** — 24,832 triangles with a depth
+  buffer that is recreated alongside the swapchain.
+
+### Changed
+
+- Unified the material model: `MaterialKind` is gone and `Material` gained a continuous
+  `transmission` parameter. Every surface reflects, transmits and emits simultaneously, so there
+  is no shader branch and a glowing translucent surface is expressible.
