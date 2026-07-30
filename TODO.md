@@ -78,6 +78,26 @@ criteria are ticked when satisfied; the Journal records what actually happened.
   z-fought the floor at distance (lifted 5 cm, near plane moved to 0.5 m), then still broke into
   dashes because a 2 cm strip is sub-pixel at 90 m (widened to 12 cm — the compute tracer will
   filter properly and can afford thinner tubes later).
+- Stripped the compatibility machinery out of the ABI and the speculative fields out of the code,
+  on the principle that a pre-1.0 project with no users owes nobody compatibility. Gone:
+  `struct_size` everywhere, duplicated version members, hand-written padding, reserved fields for
+  modalities that do not exist, the unused acoustic fields in `Material` (which halves it to two
+  std430 rows), and the inherited terrain generators whose terraced look belongs to the parent
+  project rather than this flat mirror floor.
+- Fixed two real synchronisation defects that had been present since Phase 1 and that only
+  surfaced once validation was read carefully: the swapchain layout transition was not ordered
+  against the acquire semaphore's wait stage, and both frames in flight shared one depth image.
+  Each frame now owns a depth buffer. Validation runs clean, and the profiler reports **0.37 ms
+  per frame — 2.2% of a 60 fps budget** for 24,832 triangles on the reference GTX 1650 Ti.
+- Reviewed the full list of senses the world forwards to a brain, and fixed what the review found.
+  The eye fields could not express the sensor presets `PERCEPTION.md` already specifies — several
+  eyes, non-RGB channel counts, or a sample-direction list rather than a raster — so `TglEyeDesc`
+  and `TglEyeView` replace them and the ABI version went to 1 while breaking changes are still
+  free. Added vestibular sensing and thermoreception, both nearly free and both biologically
+  grounded; recorded that hearing has no sound sources yet, that echolocation falls out of hearing
+  plus a vocalisation action, and that chemoreception is deliberately absent but arguably the most
+  faithful sense for the smallest preset. A compass was considered and rejected: it would hand a
+  brain the structure the world exists to make it earn.
 - Material model unified: the `MaterialKind` enum is gone. Every surface is one perfectly smooth
   material that reflects, transmits and emits at once, so "mirror", "neon" and "glass" are named
   points in a continuous space rather than types. No shader branch, and a glowing translucent

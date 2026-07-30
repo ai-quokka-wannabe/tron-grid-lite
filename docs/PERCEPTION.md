@@ -261,6 +261,41 @@ One honest caveat in the other direction: an emitted acoustic ray is not a pixel
 through hundreds of reflections across a two-to-three-second impulse response, so a 30,000-ray
 solve is millions of ray-segments of work.
 
+## The senses that are not eyes
+
+Vision dominates this document because it dominates the render budget, but it is not the only
+modality the world hands over. The full list lives in
+[AGENT_INTERFACE.md](AGENT_INTERFACE.md#the-senses-at-a-glance); what follows is why the
+non-visual ones are shaped as they are.
+
+**Vestibular sensing costs three floats and prevents a specific failure.** Otolith organs sense
+linear acceleration, semicircular canals sense rotation, and crucially the otolith cannot separate
+gravity from acceleration — the two arrive as a single specific force, which is exactly why tilting
+a person in the dark feels like accelerating forwards. The world reports the same conflated
+quantity rather than a clean "down" vector, so a creature is fooled in the same way an animal is.
+
+That matters more here than in most worlds. **Every surface is a perfect mirror**, so the reflected
+floor is geometrically indistinguishable from real space below it. A creature navigating on vision
+alone has no way to know which of the two halves it can fall through. Animals resolve exactly this
+ambiguity with inertial sensing, and the numbers are already sitting in the motion integrator.
+
+**Thermoreception is one unresolved radiance sample, and that is biologically defensible rather
+than a shortcut.** The pit organs of crotaline snakes are pinhole structures with no lens, so the
+image falling on the membrane is severely blurred; the animal's much sharper behavioural
+performance is attributed to neural reconstruction rather than to the optics. Coarse radiance
+sensing is a real modality in real animals. No specific angular figure is quoted here, in keeping
+with the rest of this document — the point stands qualitatively, and it costs a single ray per
+creature because the tracer already computes incoming radiance for a living.
+
+It also gives the smallest presets something to do. A creature with two scalar photoreceptors and a
+warmth sense can perform genuine taxis long before it can resolve an edge, which is the correct
+order in which to climb the ladder.
+
+**Proprioception and vestibular sensing are deliberately separate fields.** The first is what the
+body's actuators report about themselves, the second is what inertia reports about the body. They
+agree while a creature drives itself and disagree the moment it is pushed, slides or falls — and
+that disagreement is information a brain can use.
+
 ## Design rules
 
 These follow from everything above. They are binding on the renderer.
@@ -366,6 +401,23 @@ These follow from everything above. They are binding on the renderer.
   <https://pubmed.ncbi.nlm.nih.gov/624923/>
 - Seidl R, Kaiser W (1981), "Visual field size, binocular domain and the ommatidial array of the
   compound eyes in worker honey bees", *Journal of Comparative Physiology* 143:17–26
+
+### Senses that are not eyes
+
+- Clark RW, Bakken GS, Reed EJ, Soni A (2022), "Pit viper thermography: the pit organ used by
+  crotaline snakes to detect thermal contrast has poor spatial resolution", *Journal of
+  Experimental Biology* 225(24):jeb244478 — the title is the claim —
+  <https://journals.biologists.com/jeb/article/225/24/jeb244478/286197/>
+- Sichert AB, Friedel P, van Hemmen JL (2006), "Snake's Perspective on Heat: Reconstruction of
+  Input Using an Imperfect Detection System", *Physical Review Letters* 97:068105 — the wide-
+  aperture pinhole optics of the pit organ, and the neural reconstruction that sharpens them —
+  <https://journals.aps.org/prl/abstract/10.1103/PhysRevLett.97.068105>
+- Angelaki DE, Cullen KE (2008), "Vestibular System: The Many Facets of a Multimodal Sense",
+  *Annual Review of Neuroscience* 31:125–150 — semicircular canal and otolith signals, and the
+  gravity versus acceleration ambiguity — <https://pubmed.ncbi.nlm.nih.gov/18338968/>
+- Bargmann CI (2006), "Chemosensation in C. elegans", *WormBook* — more than 5% of the animal's
+  genes are devoted to recognising environmental chemicals, which is why the simplest preset on
+  this ladder is named after a chemotactic animal — <https://www.ncbi.nlm.nih.gov/books/NBK19746/>
 
 ### Small mammals
 

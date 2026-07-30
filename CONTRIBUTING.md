@@ -53,7 +53,7 @@ We welcome feature suggestions! Before submitting:
 1. Check [existing issues](https://github.com/ai-quokka-wannabe/tron-grid-lite/issues) and
    [discussions](https://github.com/ai-quokka-wannabe/tron-grid-lite/discussions) for similar ideas
 2. Consider how the feature fits the project's [roadmap](TODO.md#roadmap-phases)
-3. Think about backwards compatibility
+3. Prefer the simplest thing that works — the project is pre-1.0 and owes nobody compatibility
 
 When submitting:
 
