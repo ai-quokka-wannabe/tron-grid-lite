@@ -105,14 +105,15 @@ exactly one `creature_destroy`.
 - **No memory ownership transfer.** Every pointer in a struct passed to the brain is owned by the
   world and is valid only for the duration of that call. The brain must copy anything it wishes to
   keep. Symmetrically, the world never frees anything a brain allocated.
-- **Explicit versioning.** Every struct that crosses the boundary carries a `struct_size` field as
-  its first member, and the whole ABI carries a monotonic `TGL_BRAIN_ABI_VERSION`. See
-  [Versioning](#versioning).
+- **One version number, checked once.** `TGL_BRAIN_ABI_VERSION` is the whole versioning mechanism.
+  There are no per-struct size fields and no compatibility shims — see [Versioning](#versioning).
 - **Fixed-width types only.** `uint32_t`, `int32_t`, `float`, `uint64_t`. No `int`, no `long`, no
   `size_t`, no `bool`, no enums with unspecified underlying type, no bitfields.
-- **Standard layout, explicit padding.** All structs are declared so that MSVC, GCC and Clang agree
-  on the layout on both supported platforms. Padding is written out as named reserved members
-  rather than left implicit.
+- **Standard layout, natural padding.** Every struct here is a plain C standard-layout type of
+  fixed-width members, so MSVC, GCC and Clang lay it out identically on both supported platforms.
+  Members are grouped by modality for legibility rather than shuffled to eliminate the odd padding
+  word, and no padding members are written by hand: the compiler's own padding is part of the ABI
+  and both sides are compiled from the same header.
 
 ### Vtable
 
@@ -125,9 +126,6 @@ typedef struct TglBrain TglBrain;
 /*! Function pointers a brain library provides to the world. */
 typedef struct TglBrainVTable
 {
-    uint32_t struct_size;  /*!< Must equal sizeof(TglBrainVTable). */
-    uint32_t abi_version;  /*!< Must equal TGL_BRAIN_ABI_VERSION. */
-
     /*! Called once after the library is loaded, before any creature is created. */
     void (*library_init)(const TglLibraryInfo* info);
 
@@ -151,10 +149,8 @@ typedef struct TglBrainVTable
 /*! World-side facts a brain library may want at load time. */
 typedef struct TglLibraryInfo
 {
-    uint32_t struct_size;
     uint32_t abi_version;    /*!< ABI version the world is running. */
     uint32_t tick_rate_hz;   /*!< Nominal simulation ticks per second. */
-    uint32_t reserved0;
 } TglLibraryInfo;
 
 /*! How one eye's samples are arranged. */
@@ -164,7 +160,6 @@ typedef struct TglLibraryInfo
 /*! Geometry of one eye. Fixed for the creature's lifetime. */
 typedef struct TglEyeDesc
 {
-    uint32_t struct_size;
     uint32_t layout;    /*!< One of TGL_EYE_LAYOUT_*. */
 
     /*! Raster width and height, or sample count and 1 for a sample list. */
@@ -175,7 +170,6 @@ typedef struct TglEyeDesc
         is a property of this body and is documented per sensor preset in PERCEPTION.md — it is
         emphatically not always RGB. */
     uint32_t channels;
-    uint32_t reserved0;
 
     /*! For TGL_EYE_LAYOUT_SAMPLE_LIST, three floats per sample giving the unit view direction in
         body frame; NULL for a raster. A compound eye is a curved, non-uniform array rather than a
@@ -191,9 +185,6 @@ typedef struct TglEyeDesc
 /*! Description of the body this brain will drive. Sensor geometry only — no world state. */
 typedef struct TglCreatureDesc
 {
-    uint32_t struct_size;
-    uint32_t reserved0;    /*!< Explicit padding before the 8-byte-aligned members below. */
-
     /*! Stable identifier for this creature within the run. Useful for the brain's own logging. */
     uint64_t creature_id;
 
@@ -205,11 +196,9 @@ typedef struct TglCreatureDesc
         Borrowed for the duration of the call; copy anything worth keeping. */
     const TglEyeDesc* eyes;
     uint32_t eye_count;
-    uint32_t reserved1;
 
     /*! Nominal seconds per tick. The actual value is repeated each tick in TglSenses. */
     float nominal_dt_seconds;
-    uint32_t reserved2;
 } TglCreatureDesc;
 ```
 
@@ -247,22 +236,17 @@ typedef struct TglEyeView
 /*! Everything a creature perceives this tick. All pointers are borrowed for the call only. */
 typedef struct TglSenses
 {
-    uint32_t struct_size;
-    uint32_t reserved0;
-
     /*! Monotonic simulation tick counter. */
     uint64_t tick;
 
     /*! Duration of this tick in seconds. */
     float dt_seconds;
-    uint32_t reserved1;
 
     /* -- Vision ------------------------------------------------------------------- */
 
     /*! One view per eye, in the same order as TglCreatureDesc::eyes. NULL when eye_count is 0. */
     const TglEyeView* eyes;
     uint32_t eye_count;
-    uint32_t reserved2;
 
     /* -- Proprioception ----------------------------------------------------------- */
 
@@ -299,13 +283,6 @@ typedef struct TglSenses
         organ is likewise a very low-resolution radiance sensor, and it is enough to tell warm
         from cold long before it is enough to see. */
     float irradiance;
-
-    /* -- Reserved for future modalities -------------------------------------------- */
-
-    /*! Hearing. Populated once acoustic rays share the BVH; NULL and zero until then. */
-    const float* hearing_samples;
-    uint32_t hearing_sample_count;
-    uint32_t reserved3;
 } TglSenses;
 ```
 
@@ -318,7 +295,7 @@ typedef struct TglSenses
 | Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has | Phase 6 |
 | Touch | `touch_*` | Short contact queries against the same BVH | Phase 6 |
 | Thermoreception | `irradiance` | One unresolved radiance sample | Phase 6 |
-| Hearing | `hearing_samples` | Acoustic rays through the same BVH | Phase 5 onwards |
+| Hearing | not yet in the struct | Acoustic rays through the same BVH | Phase 5 onwards |
 
 Every one of them is a **consequence of the creature's position in the world**, computed by the
 same machinery that draws the picture. That is the test a modality has to pass to belong here.
@@ -335,18 +312,17 @@ Points worth stating plainly, because they are the whole design:
   exists to make it earn.
 - Nothing here is a valuation. The world reports contact intensity; whether that amounts to pain is
   the brain's business, and pain is cognition wearing a sensory costume.
-- Reserved members are present so the struct can grow without changing its size in a way that
-  silently breaks older brains. They are zero until they mean something.
+- Every field is populated. A modality that does not exist yet has no field waiting for it — the
+  struct describes what the world can currently sense, and gains members when that changes.
 
 ### Hearing, and the thing it still needs
 
 Acoustic sensing is the next modality planned. Surfaces already carry acoustic properties alongside
 their optical ones, and the same hand-built BVH is intended to serve acoustic rays, so hearing will
-arrive as sample buffers filled through `hearing_samples` rather than as a new channel bolted on
-elsewhere.
+arrive as sample buffers rather than as a channel bolted on elsewhere.
 
 One prerequisite is still open, and it is not a technical one: **nothing in this world currently
-makes a sound.** Surfaces emit light; none of them emit anything audible. Before `hearing_samples`
+makes a sound.** Surfaces emit light; none of them emit anything audible. Before a hearing field
 can carry meaning the world needs sources, and there are two natural candidates — the creatures
 themselves, through movement and collision, and the neon itself, humming as gas-discharge tubes do.
 The second is appealing because it would make the world's light and its sound come from the very
@@ -377,9 +353,6 @@ Motor output is physical intent, expressed in the body frame, and nothing more.
 /*! What the creature attempts to do this tick. The world zeroes this before each call. */
 typedef struct TglActions
 {
-    uint32_t struct_size;
-    uint32_t reserved0;
-
     /*! Desired forward speed in metres per second. Negative reverses. Clamped by the world. */
     float desired_forward_speed;
 
@@ -389,8 +362,6 @@ typedef struct TglActions
 
     /*! Desired vertical speed in metres per second, body frame. Clamped by the world. */
     float desired_vertical_speed;
-
-    float reserved1;
 } TglActions;
 ```
 
@@ -455,20 +426,19 @@ non-deterministic internally, which is allowed but should be a deliberate choice
 
 ## Versioning
 
-Until 1.0.0 the rule is simple: **breaking changes only, no compatibility shims.**
+Until 1.0.0 the rule is simple: **breaking changes only, no compatibility machinery.**
 
 - `TGL_BRAIN_ABI_VERSION` increases by one on every change to any struct layout, function signature
   or semantic contract in this document.
 - `tglGetBrainVTable` returns `NULL` if it cannot serve the requested version. The world then
-  refuses to load that brain and says so.
-- Every boundary struct's first member is `struct_size`. Both sides check it. A mismatch is a hard
-  error, not something to paper over.
+  refuses to load that brain and says so. That single check is the entire mechanism.
 - The world's own release version and the ABI version are independent. Only the ABI version governs
   brain compatibility.
 
-After 1.0.0 the intention is: additive changes bump a minor version and remain loadable by older
-brains through the `struct_size` mechanism; layout or semantic changes bump the major version and
-do not. That policy is a statement of intent, not yet a promise.
+There is deliberately nothing else — no per-struct size fields, no reserved members held back for
+future growth, no negotiation. Those exist to let mismatched builds keep working, and while the
+interface has no users that is machinery bought at the price of clutter in every struct. Whatever
+policy replaces this at 1.0.0 can be designed then, against a real interface rather than a guess.
 
 Practical advice while the interface is pre-1.0: rebuild your brain whenever the world is rebuilt.
 

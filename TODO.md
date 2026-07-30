@@ -78,6 +78,17 @@ criteria are ticked when satisfied; the Journal records what actually happened.
   z-fought the floor at distance (lifted 5 cm, near plane moved to 0.5 m), then still broke into
   dashes because a 2 cm strip is sub-pixel at 90 m (widened to 12 cm — the compute tracer will
   filter properly and can afford thinner tubes later).
+- Stripped the compatibility machinery out of the ABI and the speculative fields out of the code,
+  on the principle that a pre-1.0 project with no users owes nobody compatibility. Gone:
+  `struct_size` everywhere, duplicated version members, hand-written padding, reserved fields for
+  modalities that do not exist, the unused acoustic fields in `Material` (which halves it to two
+  std430 rows), and the inherited terrain generators whose terraced look belongs to the parent
+  project rather than this flat mirror floor.
+- Fixed two real synchronisation defects that had been present since Phase 1 and that only
+  surfaced once validation was read carefully: the swapchain layout transition was not ordered
+  against the acquire semaphore's wait stage, and both frames in flight shared one depth image.
+  Each frame now owns a depth buffer. Validation runs clean, and the profiler reports **0.37 ms
+  per frame — 2.2% of a 60 fps budget** for 24,832 triangles on the reference GTX 1650 Ti.
 - Reviewed the full list of senses the world forwards to a brain, and fixed what the review found.
   The eye fields could not express the sensor presets `PERCEPTION.md` already specifies — several
   eyes, non-RGB channel counts, or a sample-direction list rather than a raster — so `TglEyeDesc`

@@ -126,23 +126,6 @@ struct GridFloorConfig {
 };
 
 /*!
-    Configuration for procedural heightmap terrain.
-
-    Terrain remains available for scenes that want relief, but the flat grid floor is the default
-    surface of the world. The heights are layered value noise quantised to discrete levels, which
-    is what produces the angular terracing rather than smooth rolling hills.
-*/
-struct TerrainConfig {
-    uint32_t cells{64u}; //!< Number of quads along each axis, so `cells` × `cells` quads in total.
-    float cell_size{1.0f}; //!< Edge length of one quad, in metres.
-    float height_scale{5.0f}; //!< Maximum vertical displacement, in metres.
-    float noise_frequency{0.08f}; //!< Base noise frequency. Lower values give broader, smoother features.
-    uint32_t noise_octaves{4u}; //!< Number of noise layers summed for detail. Zero yields a flat surface.
-    uint32_t quantise_levels{8u}; //!< Number of discrete height steps. Zero disables quantisation and gives smooth terrain.
-    uint32_t seed{42u}; //!< Seed for the noise hash. The same seed always yields the same terrain.
-};
-
-/*!
     Configuration for the neon tubes laid along grid edges.
 
     The tubes are thin quads rather than actual cylinders: at the widths involved a cylinder would
@@ -180,35 +163,6 @@ struct NeonGrid {
 [[nodiscard]] Mesh generateGridFloor(const GridFloorConfig& config);
 
 /*!
-    Generates heightmap terrain with quantised height levels.
-
-    The surface is a grid of vertices displaced in Y by layered value noise and then snapped to
-    `TerrainConfig::quantise_levels` discrete steps, which gives the terraced, crystalline look.
-    Normals are per-face, so each terrace facet shades and reflects as the flat plane it actually
-    is. Vertices carry a `uv` measured in grid cells from the centre, as the flat floor does.
-
-    \param config Terrain generation parameters.
-    \return Mesh with per-face vertices and trivial indices.
-*/
-[[nodiscard]] Mesh generateTerrain(const TerrainConfig& config);
-
-/*!
-    Samples the terrain surface height at a world-space position.
-
-    This is the same quantised heightmap function `generateTerrain` evaluates at its grid vertices,
-    exposed so that objects can be placed on the surface without searching the generated triangles.
-    Note that between grid vertices the generated mesh interpolates linearly across each triangle
-    while this function evaluates the noise continuously, so the two agree exactly only at grid
-    vertices.
-
-    \param config Terrain generation parameters — must match those the mesh was generated with.
-    \param world_x World-space X coordinate, in metres.
-    \param world_z World-space Z coordinate, in metres.
-    \return Surface height in metres.
-*/
-[[nodiscard]] float terrainHeight(const TerrainConfig& config, float world_x, float world_z);
-
-/*!
     Generates neon tubes along every grid line of a flat grid floor.
 
     One thin quad is emitted per grid edge, lifted slightly above the floor. Every edge whose row
@@ -221,18 +175,6 @@ struct NeonGrid {
     \return NeonGrid with the primary and accent sub-meshes.
 */
 [[nodiscard]] NeonGrid generateGridFloorNeon(const GridFloorConfig& floor_config, const NeonTubeConfig& tube_config = NeonTubeConfig{});
-
-/*!
-    Generates neon tubes along every grid line of a heightmap terrain.
-
-    Behaves exactly as generateGridFloorNeon, except that each tube's endpoints follow the terrain
-    height at the grid vertices they join, so the neon drapes over the terracing.
-
-    \param terrain_config Terrain the tubes are laid on — must match the one given to generateTerrain.
-    \param tube_config Tube dimensions and accent interval.
-    \return NeonGrid with the primary and accent sub-meshes.
-*/
-[[nodiscard]] NeonGrid generateTerrainNeon(const TerrainConfig& terrain_config, const NeonTubeConfig& tube_config = NeonTubeConfig{});
 
 /*!
     Generates a flat-shaded axis-aligned box — six quads, twelve triangles, thirty-six vertices.

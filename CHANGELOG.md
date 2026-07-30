@@ -60,3 +60,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   particularly in a world of perfect mirrors, where a reflected floor is indistinguishable from
   real space to vision alone.
 - Documented that hearing still lacks a prerequisite: nothing in the world currently emits sound.
+
+### Removed
+
+- Compatibility machinery from the agent ABI: per-struct `struct_size` fields, duplicated
+  `abi_version` members, hand-written padding members, and fields reserved for modalities that do
+  not exist yet. A single `TGL_BRAIN_ABI_VERSION` check at load time is now the whole mechanism.
+  Those devices exist to let mismatched builds keep working, and the interface has no users to
+  keep working — they were clutter in every struct.
+- The acoustic fields from `Material`. Nothing reads them, and reserving two std430 rows for them
+  doubled the material buffer; they arrive when hearing does. `Material` is now exactly two
+  16-byte rows with no padding at all, down from four.
+- The procedural terrain generators inherited from TronGrid, along with their value-noise
+  helpers. They were unused, and terraced heightmaps are the parent project's look rather than
+  this one's flat mirror floor. 124 lines of `src/geometry.*` went with them.
+
+### Fixed
+
+- Two genuine synchronisation defects that Vulkan's synchronisation validation caught, both
+  present since Phase 1. The swapchain layout transition claimed `eTopOfPipe` as its source stage
+  while the acquire semaphore is waited on at `eColorAttachmentOutput`, so nothing ordered the
+  transition after the acquire. And a single depth image was shared by both frames in flight,
+  which is a real race rather than a validation nicety — each frame in flight now owns one.

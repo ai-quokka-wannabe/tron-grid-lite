@@ -89,8 +89,8 @@ struct MaterialIndex {
     What is deliberately absent: roughness, microfacet distributions, diffuse lobes and textures.
 
     The layout is chosen so that this struct can be memcpy'd straight into an std430 storage buffer
-    with no repacking. It is four 16-byte rows, 64 bytes in total, and every member sits at an
-    offset that std430 would have picked anyway:
+    with no repacking. It is two 16-byte rows, 32 bytes in total, with no padding anywhere — every
+    member sits at the offset std430 would have picked anyway:
 
     | Offset | Size | Member                 | std430 equivalent |
     |-------:|-----:|------------------------|-------------------|
@@ -98,9 +98,11 @@ struct MaterialIndex {
     |     12 |    4 | `index_of_refraction`  | `float`           |
     |     16 |   12 | `emission`             | `float3`          |
     |     28 |    4 | `transmission`         | `float`           |
-    |     32 |   16 | `acoustic_absorption`  | `float4`          |
-    |     48 |    4 | `acoustic_scattering`  | `float`           |
-    |     52 |   12 | `padding`              | explicit tail pad |
+
+    Acoustic properties will be needed once the same BVH carries acoustic rays, but they are not
+    here yet: a field nothing reads is a field nothing maintains, and adding two rows to every
+    material to reserve space for them costs a real doubling of the material buffer. They arrive
+    when hearing does.
 
     No `bool` members appear anywhere, because the size and alignment of a GLSL/Slang `bool` in a
     storage buffer is not something worth betting on; anything switch-like must be a `uint32_t`.
@@ -117,37 +119,14 @@ struct alignas(16) Material {
         decides what happens to the remainder.
     */
     float transmission{0.0f};
-
-    /*!
-        Acoustic absorption coefficient per frequency band, in the range 0 (perfectly reflective) to
-        1 (perfectly absorbing). The four components are four octave bands, low to high.
-
-        Reserved: the very same BVH is intended to carry acoustic rays later, so that a creature's
-        ears can be traced against exactly the geometry its eyes see. Nothing reads this field yet,
-        and the band boundaries are not fixed — treat the values as placeholders.
-    */
-    MathLib::Vec4 acoustic_absorption{0.0f, 0.0f, 0.0f, 0.0f};
-
-    /*!
-        Acoustic scattering coefficient, in the range 0 (purely specular reflection) to 1 (fully
-        diffuse reflection).
-
-        Reserved alongside acoustic_absorption; likewise unused for now.
-    */
-    float acoustic_scattering{0.0f};
-
-    float padding[3]{0.0f, 0.0f, 0.0f}; //!< Explicit tail padding to a 16-byte boundary. Never read.
 };
 
 static_assert(sizeof(MathLib::Vec3) == 12u, "MathLib::Vec3 must be three tightly packed floats for the std430 material layout.");
-static_assert(sizeof(MathLib::Vec4) == 16u, "MathLib::Vec4 must be four tightly packed floats for the std430 material layout.");
-static_assert(sizeof(Material) == 64u, "Material must be exactly four 16-byte std430 rows.");
+static_assert(sizeof(Material) == 32u, "Material must be exactly two 16-byte std430 rows.");
 static_assert(alignof(Material) == 16u, "Material must be 16-byte aligned to match std430.");
 static_assert(offsetof(Material, index_of_refraction) == 12u, "Material::index_of_refraction must sit in the first std430 row.");
 static_assert(offsetof(Material, emission) == 16u, "Material::emission must start the second std430 row.");
 static_assert(offsetof(Material, transmission) == 28u, "Material::transmission must sit in the second std430 row.");
-static_assert(offsetof(Material, acoustic_absorption) == 32u, "Material::acoustic_absorption must start the third std430 row.");
-static_assert(offsetof(Material, acoustic_scattering) == 48u, "Material::acoustic_scattering must start the fourth std430 row.");
 
 /*
     Named points in the material space. These are conveniences, not categories: nothing downstream

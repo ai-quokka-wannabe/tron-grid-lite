@@ -229,7 +229,17 @@ int main()
         const Device device{instance, *surface, logger};
 
         Swapchain swapchain{device, *surface, window->width(), window->height(), logger};
-        DepthBuffer depth{createDepthBuffer(device.get(), device.physicalDevice(), swapchain.extent())};
+
+        /*
+            One depth buffer per frame in flight, not one shared between them. With two frames in
+            flight the host records frame N+1 while the GPU may still be running frame N, and a
+            single depth image would have both writing it at once — a real race, and one that
+            synchronisation validation reports as a write-after-write hazard.
+        */
+        std::vector<DepthBuffer> depth_buffers;
+        for (uint32_t frame{0}; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
+            depth_buffers.emplace_back(createDepthBuffer(device.get(), device.physicalDevice(), swapchain.extent()));
+        }
 
         /*
             The world: a flat mirror floor with neon tubes along its grid lines. Generated on the
@@ -359,7 +369,10 @@ int main()
             if (needs_recreate) {
                 device.get().waitIdle();
                 swapchain.recreate(window->width(), window->height());
-                depth = createDepthBuffer(device.get(), device.physicalDevice(), swapchain.extent());
+                depth_buffers.clear();
+                for (uint32_t frame{0}; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
+                    depth_buffers.emplace_back(createDepthBuffer(device.get(), device.physicalDevice(), swapchain.extent()));
+                }
                 needs_recreate = false;
                 continue;
             }
@@ -392,7 +405,14 @@ int main()
             profiler.resetFrame(command_buffer, frame_index);
             profiler.begin(command_buffer, frame_index, GpuPass::Frame);
 
-            const vk::ImageMemoryBarrier2 to_colour_attachment{.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
+            /*
+                The source stage must be the stage the acquire semaphore is waited on, not
+                eTopOfPipe. A semaphore wait at eColorAttachmentOutput orders nothing against a
+                barrier that claims to come from the top of the pipe, so the layout transition is
+                free to run before the image has actually been acquired — synchronisation
+                validation reports this as a write-after-read hazard against vkAcquireNextImageKHR.
+            */
+            const vk::ImageMemoryBarrier2 to_colour_attachment{.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                 .srcAccessMask = vk::AccessFlagBits2::eNone,
                 .dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                 .dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -402,7 +422,9 @@ int main()
                 .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
                 .image = swapchain.images()[image_index],
                 .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
-            const vk::ImageMemoryBarrier2 to_depth_attachment{.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe,
+            // Likewise ordered against the previous frame's depth writes rather than the top of pipe.
+            const vk::ImageMemoryBarrier2 to_depth_attachment{
+                .srcStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
                 .srcAccessMask = vk::AccessFlagBits2::eNone,
                 .dstStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
                 .dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
@@ -410,7 +432,7 @@ int main()
                 .newLayout = vk::ImageLayout::eDepthAttachmentOptimal,
                 .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
                 .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-                .image = *depth.image,
+                .image = *depth_buffers[frame_index].image,
                 .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1}};
 
             const std::array<vk::ImageMemoryBarrier2, 2> begin_barriers{to_colour_attachment, to_depth_attachment};
@@ -425,7 +447,7 @@ int main()
                 .storeOp = vk::AttachmentStoreOp::eStore,
                 .clearValue = clear_colour};
 
-            const vk::RenderingAttachmentInfo depth_attachment{.imageView = *depth.view,
+            const vk::RenderingAttachmentInfo depth_attachment{.imageView = *depth_buffers[frame_index].view,
                 .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
                 .loadOp = vk::AttachmentLoadOp::eClear,
                 .storeOp = vk::AttachmentStoreOp::eDontCare,
