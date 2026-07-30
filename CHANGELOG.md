@@ -61,10 +61,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   real space to vision alone.
 - Documented that hearing still lacks a prerequisite: nothing in the world currently emits sound.
 
-- `docs/RELATED_WORK.md` — the prior art. Peer-reviewed simulators doing parts of this better
-  (CompoundRay, I2Bot, NeuroMechFly v2, the virtual rodent, the Animal-AI Environment), what this
-  project borrows from them, the short list of what is genuinely unusual here, and a plain
-  statement of what it is not attempting.
+- `docs/RELATED_WORK.md` — the prior art, with credit to the projects this one stands on:
+  OpenWorm and c302 for the worm end of the ladder, CompoundRay and I2Bot for compound-eye
+  rendering, NeuroMechFly v2 and the virtual rodent for embodied bodies and brains, and the
+  Animal-AI Environment for cognitive testing. Also the short list of what is genuinely unusual
+  here, and a plain statement of what this project is not attempting.
 
 ### Removed
 

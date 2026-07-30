@@ -31,7 +31,40 @@ Royal Society Interface*, 2025) builds on that with a multi-modal embodied simul
 insect navigation, integrating compound-eye rendering into a full agent loop.
 
 Anyone seriously interested in insect vision should start with these rather than with this
-repository.
+repository, exactly as anyone interested in the worm should start with OpenWorm below.
+
+## OpenWorm, and the first rung of the ladder
+
+**[OpenWorm](https://royalsocietypublishing.org/doi/10.1098/rstb.2017.0382)** (*Philosophical
+Transactions of the Royal Society B*, 2018) deserves separate mention, because it is both the
+oldest and the most directly relevant of these projects to the bottom of this organisation's
+development ladder. It is an open-science effort to build a computational model of *C. elegans*
+constrained by biological data down to the individual cell, simulating the animal's behaviour as it
+interacts with a 3D environment — which is, stated plainly, a more thorough version of what a
+`brain-elegans` plugin in this organisation would be reaching for.
+
+Two of its components matter most here:
+
+- **[c302](https://royalsocietypublishing.org/rstb/article/373/1758/20170379/42135/)** — a
+  multiscale framework for the worm's nervous system, generating network instances at varying
+  levels of anatomical and physiological detail. It is a published, installable Python package.
+- **Sibernetic** — the fluid-dynamics body simulation that the c302 connectome can drive.
+
+The work continues: an [integrative data-driven model of *C. elegans* brain, body and environment
+interactions](https://www.nature.com/articles/s43588-024-00738-w) appeared in *Nature Computational
+Science* in 2024.
+
+**Anyone writing the worm brain for this organisation should start at OpenWorm rather than from
+scratch.** The `elegans` sensor preset in [PERCEPTION.md](PERCEPTION.md) is drawn from the primary
+photoreception literature rather than from OpenWorm directly, but the connectome, the cell-level
+data and the years of accumulated modelling are theirs, and the worm end of this ladder stands on
+their shoulders. Check the licence of any specific component before reusing its code — OpenWorm is
+a collection of repositories rather than a single one, and they do not all share terms.
+
+It is also worth being clear-eyed about the gap. OpenWorm's own authors have described the level of
+biological detail achieved so far as inadequate for biological research. Simulating even a
+302-neuron animal faithfully is *hard*, which is a useful thing to know before promising a
+convincing worm.
 
 ## Simulating bodies and the brains that drive them
 
