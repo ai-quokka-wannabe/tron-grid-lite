@@ -26,7 +26,7 @@
 //                                                                        average, which suppresses single-pixel fireflies.
 //     bloomDownsampleMain — [shader("compute")], [numthreads(8, 8, 1)] — 2x2 box-filter downsample of one mip into the next smaller mip.
 //     bloomUpsampleMain   — [shader("compute")], [numthreads(8, 8, 1)] — 3x3 tent-filter upsample of one mip, additively blended into the next
-//                                                                        larger mip.
+//                                                                        larger mip, sampled bilinearly so the glow does not step.
 //
 // Expected descriptor bindings (set 0, identical for all three entry points):
 //     binding 0 : RWTexture2D<float4> hdr_input — format rgba16f, full resolution. Read by bloomExtractMain only; the other two entry points
@@ -70,6 +70,27 @@ static const float3 LUMINANCE_WEIGHTS = float3(0.2126, 0.7152, 0.0722);
 float luminance(float3 colour)
 {
     return dot(colour, LUMINANCE_WEIGHTS);
+}
+
+/*!
+    Reads the source mip with bilinear filtering at a continuous texel coordinate.
+
+    A storage image has no sampler attached, so the four neighbouring texels are fetched and
+    weighted by hand. Coordinates are clamped rather than wrapped, which keeps the glow from
+    bleeding around the edges of the image.
+*/
+float3 sampleBilinear(float2 position, int2 max_coord)
+{
+    float2 corner = position - 0.5;
+    int2 base = int2(floor(corner));
+    float2 weight = corner - float2(base);
+
+    float3 c00 = bloom_src[clamp(base + int2(0, 0), int2(0, 0), max_coord)].rgb;
+    float3 c10 = bloom_src[clamp(base + int2(1, 0), int2(0, 0), max_coord)].rgb;
+    float3 c01 = bloom_src[clamp(base + int2(0, 1), int2(0, 0), max_coord)].rgb;
+    float3 c11 = bloom_src[clamp(base + int2(1, 1), int2(0, 0), max_coord)].rgb;
+
+    return lerp(lerp(c00, c10, weight.x), lerp(c01, c11, weight.x), weight.y);
 }
 
 //! Extracts the bright pixels of the HDR image at half resolution using a Karis average.
@@ -177,21 +198,27 @@ void bloomUpsampleMain(uint3 thread_id : SV_DispatchThreadID)
     uint src_height;
     bloom_src.GetDimensions(src_width, src_height);
 
-    int2 base = int2(thread_id.xy) / 2;
-    int2 min_coord = int2(0, 0);
     int2 max_coord = int2(int(src_width) - 1, int(src_height) - 1);
 
-    // 3x3 tent filter for smooth upsampling, the standard bloom upsample kernel. Weights: corners 1/16, edges 2/16, centre 4/16.
+    /*
+        Where this destination texel's centre falls in the source mip, in continuous texel
+        coordinates. Integer division would send all four texels of a 2x2 destination block to the
+        same source position, which upsamples the tent-filtered result by nearest neighbour and
+        makes the glow visibly blocky. Half the point of a mip pyramid is that the result is smooth.
+    */
+    float2 centre = (float2(thread_id.xy) + 0.5) * 0.5;
+
+    // 3x3 tent filter, corners 1/16, edges 2/16, centre 4/16, each tap read bilinearly.
     float3 sum = float3(0.0, 0.0, 0.0);
-    sum += (1.0 / 16.0) * bloom_src[clamp(base + int2(-1, -1), min_coord, max_coord)].rgb;
-    sum += (2.0 / 16.0) * bloom_src[clamp(base + int2( 0, -1), min_coord, max_coord)].rgb;
-    sum += (1.0 / 16.0) * bloom_src[clamp(base + int2( 1, -1), min_coord, max_coord)].rgb;
-    sum += (2.0 / 16.0) * bloom_src[clamp(base + int2(-1,  0), min_coord, max_coord)].rgb;
-    sum += (4.0 / 16.0) * bloom_src[clamp(base + int2( 0,  0), min_coord, max_coord)].rgb;
-    sum += (2.0 / 16.0) * bloom_src[clamp(base + int2( 1,  0), min_coord, max_coord)].rgb;
-    sum += (1.0 / 16.0) * bloom_src[clamp(base + int2(-1,  1), min_coord, max_coord)].rgb;
-    sum += (2.0 / 16.0) * bloom_src[clamp(base + int2( 0,  1), min_coord, max_coord)].rgb;
-    sum += (1.0 / 16.0) * bloom_src[clamp(base + int2( 1,  1), min_coord, max_coord)].rgb;
+    sum += (1.0 / 16.0) * sampleBilinear(centre + float2(-1.0, -1.0), max_coord);
+    sum += (2.0 / 16.0) * sampleBilinear(centre + float2( 0.0, -1.0), max_coord);
+    sum += (1.0 / 16.0) * sampleBilinear(centre + float2( 1.0, -1.0), max_coord);
+    sum += (2.0 / 16.0) * sampleBilinear(centre + float2(-1.0,  0.0), max_coord);
+    sum += (4.0 / 16.0) * sampleBilinear(centre + float2( 0.0,  0.0), max_coord);
+    sum += (2.0 / 16.0) * sampleBilinear(centre + float2( 1.0,  0.0), max_coord);
+    sum += (1.0 / 16.0) * sampleBilinear(centre + float2(-1.0,  1.0), max_coord);
+    sum += (2.0 / 16.0) * sampleBilinear(centre + float2( 0.0,  1.0), max_coord);
+    sum += (1.0 / 16.0) * sampleBilinear(centre + float2( 1.0,  1.0), max_coord);
 
     // Additive blend: accumulate the upsampled mip onto the current destination value.
     float3 existing = bloom_dst[thread_id.xy].rgb;

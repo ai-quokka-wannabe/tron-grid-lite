@@ -26,12 +26,12 @@
 //     traceMain — [shader("compute")], [numthreads(8, 8, 1)] — one thread per output pixel.
 //
 // Descriptor bindings (set 0):
-//     binding 0 : RWTexture2D<float4>       output_image — format rgba8, written once per thread.
+//     binding 0 : RWTexture2D<float4>       output_image — format rgba16f, linear radiance, written once per thread.
 //     binding 1 : StructuredBuffer<Node>     nodes       — 32 bytes each, element 0 is the root.
 //     binding 2 : StructuredBuffer<Triangle> triangles   — 48 bytes each, in leaf order.
 //     binding 3 : StructuredBuffer<Material> materials   — 32 bytes each, indexed per triangle.
 //
-// Push constants (96 bytes):
+// Push constants (80 bytes):
 //     offset  0, size 16 : camera_position   — xyz world space, w unused.
 //     offset 16, size 16 : top_left          — xyz direction through the centre of pixel (0, 0).
 //     offset 32, size 16 : pixel_delta_u     — xyz direction change per pixel step in x.
@@ -39,8 +39,9 @@
 //     offset 64, size  8 : resolution        — output image size in pixels.
 //     offset 72, size  4 : max_bounces       — total ray segments per pixel, at least 1.
 //     offset 76, size  4 : node_count        — zero means an empty world; the kernel writes black.
-//     offset 80, size  4 : exposure          — linear scale applied before the tone curve.
-//     offset 84, size 12 : padding.
+//
+//     The tracer writes linear radiance and nothing else: exposure, tone mapping and sRGB encoding
+//     all belong to postprocess.slang, which sees the bloom chain as well.
 
 // Must equal BvhLib::MAX_DEPTH on the host. The builder forces a leaf at that depth precisely so
 // that this fixed-size stack can never overflow.
@@ -84,20 +85,13 @@ struct TracePushConstants
     uint2 resolution;
     uint max_bounces;
     uint node_count;
-    float exposure;
-
-    // Three separate scalars rather than a float3: std430 would align a float3 to sixteen bytes
-    // and silently grow the struct past what the host declares.
-    float padding0;
-    float padding1;
-    float padding2;
 };
 
 [[vk::push_constant]]
 TracePushConstants push;
 
 [[vk::binding(0, 0)]]
-[[vk::image_format("rgba8")]]
+[[vk::image_format("rgba16f")]]
 RWTexture2D<float4> output_image;
 
 [[vk::binding(1, 0)]]
@@ -478,25 +472,6 @@ float3 radiance(float3 primary_origin, float3 primary_direction)
     return accumulated;
 }
 
-/*!
-    Reinhard tone curve and sRGB encoding.
-
-    Deliberately minimal. Phase 4 moves tone mapping into postprocess.slang, where the fitted ACES
-    curve and the bloom chain already live; until then this keeps the emissive values, which are
-    well above one, inside a displayable range.
-*/
-float3 tonemap(float3 colour)
-{
-    const float3 exposed = colour * push.exposure;
-    const float3 mapped = exposed / (exposed + 1.0);
-
-    // Exact sRGB transfer function rather than a 2.2 power, so the dark end of a mostly black
-    // image is right.
-    const float3 low = mapped * 12.92;
-    const float3 high = (1.055 * pow(max(mapped, 1e-5), 1.0 / 2.4)) - 0.055;
-    return select(mapped <= 0.0031308, low, high);
-}
-
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void traceMain(uint3 thread_id: SV_DispatchThreadID)
@@ -512,5 +487,6 @@ void traceMain(uint3 thread_id: SV_DispatchThreadID)
 
     const float3 colour = radiance(push.camera_position.xyz, direction);
 
-    output_image[int2(pixel)] = float4(tonemap(colour), 1.0);
+    // Linear radiance, unencoded. postprocess.slang applies exposure, the ACES curve and sRGB.
+    output_image[int2(pixel)] = float4(colour, 1.0);
 }

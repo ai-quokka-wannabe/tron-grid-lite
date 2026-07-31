@@ -95,6 +95,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   helpers. They were unused, and terraced heightmaps are the parent project's look rather than
   this one's flat mirror floor. 124 lines of `src/geometry.*` went with them.
 
+- **Phase 4 milestone reached: post processing.** The tracer writes linear radiance into an rgba16f
+  target; a new stage runs the bloom pyramid over it, applies the fitted ACES RRT+ODT curve,
+  encodes sRGB and optionally vignettes. `src/postprocess.hpp` owns the mip chain, the pipelines
+  and the descriptor sets. The whole chain costs 0.31 ms at 1280x720 on a GTX 1650 Ti.
+- Exposure moved from the tracer to the tone mapping pass, where it belongs.
+
 ### Fixed
 
 - The swapchain acquire path abandoned the frame on `VK_SUBOPTIMAL_KHR`, leaving the acquire
@@ -107,6 +113,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requires when it frees its sets at shutdown.
 - The surface-area heuristic's leaf guard had its traversal term on the wrong side of the
   comparison and could never fire.
+- The bloom upsample derived its source coordinate by integer division, so every texel of a
+  destination block sampled the same source position and the glow magnified as visible steps. It
+  now samples bilinearly.
+- `postprocess.slang` declared its output image format as `unknown`, which requires the optional
+  `shaderStorageImageWriteWithoutFormat` device feature. It declares `rgba8` instead, which is what
+  the host binds.
+- Bloom mip 0 is cleared when bloom is disabled. The tone mapping shader reads it unconditionally,
+  and an undefined half float multiplied by zero is only zero if it was not a NaN.
 
 - Two genuine synchronisation defects that Vulkan's synchronisation validation caught, both
   present since Phase 1. The swapchain layout transition claimed `eTopOfPipe` as its source stage

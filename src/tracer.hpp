@@ -39,8 +39,9 @@ class Device; // forward declaration
     ray, so the whole thing is deterministic: no sampling, no variance, no denoiser.
 
     Each frame in flight owns its own output image, because the host records the next frame while
-    the GPU may still be reading the previous one. The result is left in
-    `vk::ImageLayout::eTransferSrcOptimal`, ready to be blitted into the swapchain.
+    the GPU may still be reading the previous one. What it writes is linear radiance rather than a
+    picture: exposure, bloom, tone mapping and sRGB encoding all belong to the post-processing
+    stage, which sees the whole image and the bloom pyramid together.
 */
 class Tracer {
 public:
@@ -74,21 +75,31 @@ public:
     /*!
         Records one dispatch.
 
-        On return the output image for this slot is in `eTransferSrcOptimal` and holds a
-        tone-mapped, sRGB-encoded picture ready to be copied to the swapchain.
+        On return the output image for this slot is in `eGeneral` and holds linear radiance, ready
+        for the post-processing stage to tone map. It is not a picture yet.
 
         \param command_buffer Command buffer to record into.
         \param frame_slot Frame in flight, which selects the output image and descriptor set.
         \param camera Viewpoint to trace from.
-        \param max_bounces Ray segments per pixel, at least one.
-        \param exposure Linear scale applied before the tone curve.
+        \param max_bounces Depth of the ray tree, at least one.
     */
-    void record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces, float exposure) const;
+    void record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces) const;
 
-    //! Returns the output image for a frame slot, valid until the next resize().
+    //! Returns the linear HDR image for a frame slot, valid until the next resize().
     [[nodiscard]] vk::Image outputImage(uint32_t frame_slot) const
     {
         return *m_output_images[frame_slot];
+    }
+
+    //! Returns one HDR view per frame in flight, for the post-processing stage to read.
+    [[nodiscard]] std::vector<vk::ImageView> outputViews() const
+    {
+        std::vector<vk::ImageView> views;
+        views.reserve(m_output_views.size());
+        for (const vk::raii::ImageView& view : m_output_views) {
+            views.push_back(*view);
+        }
+        return views;
     }
 
     //! Returns the size the output images were last allocated at.

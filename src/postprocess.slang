@@ -30,22 +30,24 @@
 //
 // Expected descriptor bindings (set 0):
 //     binding 0 : RWTexture2D<float4> hdr_input      — format rgba16f,  full resolution, read only.
-//     binding 1 : RWTexture2D<float4> output_image   — format unknown (the C++ side binds a UNORM image), full resolution, write only.
+//     binding 1 : RWTexture2D<float4> output_image   — format rgba8, full resolution, write only.
 //     binding 2 : RWTexture2D<float4> bloom_texture  — format rgba16f,  half resolution mip 0 of the bloom chain, read only.
 //
 //     The output image must be a UNORM format, never an SRGB format: this shader performs the sRGB transfer function itself, and hardware
-//     conversion on top of it would apply gamma twice.
+//     conversion on top of it would apply gamma twice. The format is declared rather than left unknown so that writing to it needs no optional
+//     device feature — shaderStorageImageWriteWithoutFormat is not something a renderer aimed at modest hardware should require.
 //
-// Push-constant layout (stage compute, total 8 bytes):
+// Push-constant layout (stage compute, total 12 bytes):
 //     offset 0, size 4 : float bloom_strength    — linear multiplier on the bloom contribution. 0 disables bloom.
 //     offset 4, size 4 : float vignette_strength — radial darkening amount. 0 disables the vignette (use this for creature sensors).
+//     offset 8, size 4 : float exposure          — linear scale applied to the radiance before the tone curve.
 
 [[vk::binding(0, 0)]]
 [[vk::image_format("rgba16f")]]
 RWTexture2D<float4> hdr_input;
 
 [[vk::binding(1, 0)]]
-[[vk::image_format("unknown")]]
+[[vk::image_format("rgba8")]]
 RWTexture2D<float4> output_image;
 
 [[vk::binding(2, 0)]]
@@ -56,6 +58,10 @@ struct PostProcessPushConstants
 {
     float bloom_strength;
     float vignette_strength;
+
+    // Exposure belongs here rather than in the tracer: the tracer's business is radiance, and how
+    // much of it survives into a displayable range is a property of the tone mapping.
+    float exposure;
 };
 
 [[vk::push_constant]]
@@ -141,6 +147,10 @@ void postprocessMain(uint3 thread_id : SV_DispatchThreadID)
     bloom_texture.GetDimensions(bloom_width, bloom_height);
 
     float3 colour = sampleHdrWithBloom(thread_id.xy, uint2(width, height), uint2(bloom_width, bloom_height));
+
+    // Exposure scales the radiance into the range the tone curve is shaped for. Applied after the
+    // bloom composite so that raising it brightens the glow along with everything else.
+    colour *= push.exposure;
 
     // ACES fitted RRT+ODT: transforms into AP1 colour space, applies the tone curve, transforms back.
     colour = acesTonemap(colour);

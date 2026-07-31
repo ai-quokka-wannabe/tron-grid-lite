@@ -27,8 +27,14 @@ namespace
     //! Workgroup size, matching the [numthreads(8, 8, 1)] in trace.slang.
     constexpr uint32_t WORKGROUP_SIZE{8u};
 
-    //! Format of the traced picture. UNORM rather than sRGB because the shader encodes the transfer function itself.
-    constexpr vk::Format OUTPUT_FORMAT{vk::Format::eR8G8B8A8Unorm};
+    /*!
+        Linear radiance, not a picture.
+
+        Emissive surfaces in this world are far brighter than one, and the reflections of them
+        brighter still in places, so an eight-bit target would clip everything interesting before
+        the tone curve ever saw it. Half float keeps the range that bloom and tone mapping need.
+    */
+    constexpr vk::Format OUTPUT_FORMAT{vk::Format::eR16G16B16A16Sfloat};
 
     /*!
         Push constants for trace.slang. The layout must match the TracePushConstants struct there
@@ -43,16 +49,13 @@ namespace
         uint32_t resolution_y{0u};
         uint32_t max_bounces{0u};
         uint32_t node_count{0u};
-        float exposure{1.0f};
-        float padding[3]{0.0f, 0.0f, 0.0f};
     };
 
-    static_assert(sizeof(TracePushConstants) == 96u, "Push constants must match the Slang struct layout exactly.");
+    static_assert(sizeof(TracePushConstants) == 80u, "Push constants must match the Slang struct layout exactly.");
     static_assert(offsetof(TracePushConstants, top_left) == 16u, "top_left must sit at offset 16.");
     static_assert(offsetof(TracePushConstants, pixel_delta_u) == 32u, "pixel_delta_u must sit at offset 32.");
     static_assert(offsetof(TracePushConstants, pixel_delta_v) == 48u, "pixel_delta_v must sit at offset 48.");
     static_assert(offsetof(TracePushConstants, resolution_x) == 64u, "resolution must sit at offset 64.");
-    static_assert(offsetof(TracePushConstants, exposure) == 80u, "exposure must sit at offset 80.");
 
     // The shader declares each of these structures too, and reads the buffers as flat arrays of
     // them. A silent disagreement here is an out-of-bounds read on the GPU rather than a compile
@@ -230,7 +233,7 @@ void Tracer::createOutputImages()
                 .arrayLayers = 1u,
                 .samples = vk::SampleCountFlagBits::e1,
                 .tiling = vk::ImageTiling::eOptimal,
-                .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eTransferSrc,
+                .usage = vk::ImageUsageFlagBits::eStorage,
                 .sharingMode = vk::SharingMode::eExclusive,
                 .initialLayout = vk::ImageLayout::eUndefined}};
 
@@ -293,7 +296,7 @@ void Tracer::resize(vk::Extent2D extent)
     writeDescriptorSets();
 }
 
-void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces, float exposure) const
+void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces) const
 {
     // Undefined rather than the previous layout: every pixel is written unconditionally, so there
     // is nothing in the old contents worth preserving and discarding them is free.
@@ -344,8 +347,7 @@ void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t fram
         .resolution_x = m_extent.width,
         .resolution_y = m_extent.height,
         .max_bounces = max_bounces,
-        .node_count = m_node_count,
-        .exposure = exposure};
+        .node_count = m_node_count};
 
     command_buffer.pushConstants<TracePushConstants>(*m_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0u, {push});
 
@@ -353,15 +355,17 @@ void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t fram
     const uint32_t groups_y{(m_extent.height + WORKGROUP_SIZE - 1u) / WORKGROUP_SIZE};
     command_buffer.dispatch(groups_x, groups_y, 1u);
 
-    const vk::ImageMemoryBarrier2 to_transfer_src{.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+    // Left in eGeneral: the post-processing stage reads this as a storage image rather than
+    // copying it, so there is no transfer layout to move into.
+    const vk::ImageMemoryBarrier2 to_readable{.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
         .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
-        .dstStageMask = vk::PipelineStageFlagBits2::eBlit,
-        .dstAccessMask = vk::AccessFlagBits2::eTransferRead,
+        .dstStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+        .dstAccessMask = vk::AccessFlagBits2::eShaderStorageRead,
         .oldLayout = vk::ImageLayout::eGeneral,
-        .newLayout = vk::ImageLayout::eTransferSrcOptimal,
+        .newLayout = vk::ImageLayout::eGeneral,
         .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
         .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
         .image = *m_output_images[frame_slot],
         .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u}};
-    command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1u, .pImageMemoryBarriers = &to_transfer_src});
+    command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1u, .pImageMemoryBarriers = &to_readable});
 }
