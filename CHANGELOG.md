@@ -101,6 +101,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the descriptor sets. The whole chain costs 0.31 ms at 1280x720 on a GTX 1650 Ti.
 - Exposure moved from the tracer to the tone mapping pass, where it belongs.
 
+- A recording mode (`--record`) that flies a scripted camera loop and writes one image per frame,
+  plus `tools/record_flyby.py`, which drives it and encodes the result as a seamless looping GIF.
+  The animation at the top of the README is its output.
+- `tools/` gained a README, a requirements file and a `.venv` placeholder.
+
 ### Fixed
 
 - The swapchain acquire path abandoned the frame on `VK_SUBOPTIMAL_KHR`, leaving the acquire
@@ -119,6 +124,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `postprocess.slang` declared its output image format as `unknown`, which requires the optional
   `shaderStorageImageWriteWithoutFormat` device feature. It declares `rgba8` instead, which is what
   the host binds.
+- The post-processing stage declared `eBlit` as the destination stage of its final barrier, so a
+  consumer that copies rather than blits — which the recording mode does — was unordered against
+  the layout transition. It declares `eAllTransfer` now.
 - Bloom mip 0 is cleared when bloom is disabled. The tone mapping shader reads it unconditionally,
   and an undefined half float multiplied by zero is only zero if it was not a NaN.
 

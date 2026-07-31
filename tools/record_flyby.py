@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Records a looping flight through the Grid and encodes it as a GIF.
+
+Runs the renderer in its recording mode, which flies a closed camera path and writes one image per
+frame, then hands the sequence to ffmpeg. The clip loops seamlessly because the camera path does:
+every term of it is periodic, and the last frame stops one step short of the first.
+
+The GIF is generated in two passes. A single global palette of 256 colours is computed from the
+whole clip first, and only then are the frames quantised against it — a per-frame palette makes the
+background shimmer, which on a mostly black image is the one artefact you cannot miss.
+
+Rendering happens at a higher resolution than the output and is scaled down at encode time. That
+downscale is the only antialiasing this renderer has: it traces one ray per pixel by design, so
+supersampling in the recording is how the neon edges come out clean.
+
+Usage:
+    python tools/record_flyby.py --executable build/windows-msvc/src/Debug/TronGridLite.exe
+
+Requires ffmpeg on PATH.
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
+
+# Where the renderer is usually found, tried in order, relative to the repository root.
+DEFAULT_EXECUTABLES = (
+    "build/windows-msvc/src/Debug/TronGridLite.exe",
+    "build/windows-msvc/src/Release/TronGridLite.exe",
+    "build/windows-clang-cl/src/Debug/TronGridLite.exe",
+    "build/linux-x11-gcc/src/Debug/TronGridLite",
+    "build/linux-x11-clang/src/Debug/TronGridLite",
+)
+
+
+def find_executable(explicit: str | None) -> Path:
+    """Returns the renderer to run, or exits with an explanation."""
+    if explicit:
+        candidate = Path(explicit)
+        if not candidate.is_absolute():
+            candidate = REPOSITORY_ROOT / candidate
+        if not candidate.is_file():
+            sys.exit(f"No renderer at {candidate}")
+        return candidate
+
+    for relative in DEFAULT_EXECUTABLES:
+        candidate = REPOSITORY_ROOT / relative
+        if candidate.is_file():
+            return candidate
+
+    sys.exit(
+        "Could not find a built renderer. Build one first, or pass --executable.\n"
+        "Looked in:\n  " + "\n  ".join(DEFAULT_EXECUTABLES)
+    )
+
+
+def require_ffmpeg() -> str:
+    """Returns the ffmpeg command, or exits with installation advice."""
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        sys.exit(
+            "ffmpeg is not on PATH, and it does the encoding.\n"
+            "  Windows: winget install Gyan.FFmpeg\n"
+            "  Debian or Ubuntu: sudo apt install ffmpeg"
+        )
+    return ffmpeg
+
+
+def render_frames(executable: Path, directory: Path, width: int, height: int, frames: int) -> None:
+    """Runs the renderer in recording mode."""
+    command = [
+        str(executable),
+        "--record",
+        "--width", str(width),
+        "--height", str(height),
+        "--frames", str(frames),
+        "--output", str(directory),
+    ]
+    print(f"Rendering {frames} frames at {width}x{height} ...")
+
+    # Run from the executable's own directory: it loads its compiled shaders from beside itself.
+    result = subprocess.run(command, cwd=executable.parent)
+    if result.returncode != 0:
+        sys.exit(f"The renderer exited with code {result.returncode}")
+
+    produced = sorted(directory.glob("frame_*.ppm"))
+    if len(produced) != frames:
+        sys.exit(f"Expected {frames} frames but found {len(produced)} in {directory}")
+
+
+def encode_gif(ffmpeg: str, directory: Path, output: Path, fps: int, output_width: int, max_colors: int) -> None:
+    """Encodes the frame sequence into a looping GIF using a single global palette.
+
+    Three settings decide the file size, in descending order of effect: the number of frames, the
+    output width, and the palette size. Dithering matters too, but in the opposite direction to
+    intuition — it *adds* high-frequency noise that the GIF's run-length compression cannot pack, so
+    a heavier dither costs size rather than saving it. An ordered Bayer pattern at a coarse scale is
+    the compromise: it keeps the glows from banding without shimmering between frames the way error
+    diffusion does.
+    """
+    pattern = str(directory / "frame_%05d.ppm")
+    palette = directory / "palette.png"
+
+    scale = f"scale={output_width}:-1:flags=lanczos"
+
+    print("Computing a global palette ...")
+    subprocess.run(
+        [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", pattern,
+         "-vf", f"{scale},palettegen=max_colors={max_colors}:stats_mode=full", str(palette)],
+        check=True,
+    )
+
+    print(f"Encoding {output} ...")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", pattern, "-i", str(palette),
+         "-lavfi", f"{scale}[frames];[frames][1:v]paletteuse=dither=bayer:bayer_scale=4",
+         "-loop", "0", str(output)],
+        check=True,
+    )
+
+
+def encode_mp4(ffmpeg: str, directory: Path, output: Path, fps: int, output_width: int) -> None:
+    """Encodes the same frames as an MP4, which is far smaller and much better looking."""
+    pattern = str(directory / "frame_%05d.ppm")
+    print(f"Encoding {output} ...")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", pattern,
+         "-vf", f"scale={output_width}:-2:flags=lanczos", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+         "-crf", "20", "-movflags", "+faststart", str(output)],
+        check=True,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--executable", help="Renderer to run. Found automatically if omitted.")
+    parser.add_argument("--frames", type=int, default=100, help="Frames in the loop (default: 100).")
+    parser.add_argument("--fps", type=int, default=20, help="Playback rate (default: 20).")
+    parser.add_argument("--render-width", type=int, default=1280, help="Render width (default: 1280).")
+    parser.add_argument("--render-height", type=int, default=720, help="Render height (default: 720).")
+    parser.add_argument("--output-width", type=int, default=480, help="Width of the encoded clip (default: 480).")
+    parser.add_argument("--max-colors", type=int, default=128, help="Palette size, 2 to 256 (default: 128).")
+    parser.add_argument("--gif", default="images/flyby.gif", help="GIF path, relative to the repository root.")
+    parser.add_argument("--mp4", default=None, help="Also write an MP4 here, relative to the repository root.")
+    parser.add_argument("--keep-frames", action="store_true", help="Do not delete the rendered frames afterwards.")
+    arguments = parser.parse_args()
+
+    executable = find_executable(arguments.executable)
+    ffmpeg = require_ffmpeg()
+
+    gif_path = REPOSITORY_ROOT / arguments.gif
+
+    with tempfile.TemporaryDirectory(prefix="tron-grid-lite-frames-") as temporary:
+        directory = Path(temporary) if not arguments.keep_frames else (REPOSITORY_ROOT / "build" / "flyby-frames")
+        directory.mkdir(parents=True, exist_ok=True)
+
+        render_frames(executable, directory, arguments.render_width, arguments.render_height, arguments.frames)
+        encode_gif(ffmpeg, directory, gif_path, arguments.fps, arguments.output_width, arguments.max_colors)
+
+        if arguments.mp4:
+            encode_mp4(ffmpeg, directory, REPOSITORY_ROOT / arguments.mp4, arguments.fps, arguments.output_width)
+
+        if arguments.keep_frames:
+            print(f"Frames kept in {directory}")
+
+    size_mb = gif_path.stat().st_size / (1024 * 1024)
+    print(f"Done: {gif_path} ({size_mb:.1f} MiB)")
+    if size_mb > 6.0:
+        print("That is large for a README. Fewer --frames helps most, then --output-width, then --max-colors.")
+
+
+if __name__ == "__main__":
+    main()

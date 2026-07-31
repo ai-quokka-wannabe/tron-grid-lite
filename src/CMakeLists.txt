@@ -12,6 +12,7 @@ add_executable(${PROJECT_NAME}
     geometry.cpp
     profiler.cpp
     spectator.cpp
+    cinematic.cpp
 )
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)

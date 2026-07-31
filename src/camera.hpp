@@ -92,6 +92,19 @@ public:
         m_orientation = (yaw_quat * m_orientation * pitch_quat).normalised();
     }
 
+    /*!
+        Places the camera at an absolute pose.
+
+        The interactive controls above are all incremental, which is what a person flying a camera
+        wants. A scripted path is the opposite: it knows exactly where the camera belongs at a given
+        moment, including a roll that no keyboard control produces.
+    */
+    void setPose(const MathLib::Vec3& position, const MathLib::Quat& orientation)
+    {
+        m_position = position;
+        m_orientation = orientation.normalised();
+    }
+
     //! Camera position in world space, in metres.
     [[nodiscard]] const MathLib::Vec3& position() const
     {

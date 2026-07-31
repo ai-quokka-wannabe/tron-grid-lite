@@ -3,6 +3,13 @@
 A deliberately simple Vulkan renderer for the Tron aesthetic — clean geometry, emissive
 materials, perfectly reflective surfaces, neon glow against infinite black.
 
+![A camera banking through a neon grid of mirrored floor, glowing pillars and refracting glass](images/flyby.gif)
+
+Every pixel of that is a ray, traced in an ordinary compute shader against a bounding volume
+hierarchy this project builds itself. **The GPU it was recorded on exposes no ray-tracing
+extensions at all** — it is a laptop GTX 1650 Ti, and it renders that scene in about fourteen
+milliseconds a frame. Record your own with [`tools/record_flyby.py`](tools/record_flyby.py).
+
 **This world is built for AI agents, not for people.** There is no player, no controls and no
 gameplay. Humans watch through a spectator window — a free-flight debug camera for development
 and observation.
@@ -21,8 +28,11 @@ an afternoon.
 
 ## Status
 
-Early development. Phases 0 and 1 are done: the neon grid renders in the spectator window and a
-free camera flies through it. Next is Phase 2 — the compute ray tracer.
+Early development, and the picture above is the current output rather than a target. Phases 0 to 4
+are done: the world is traced in a compute shader against a hierarchy built on the host, surfaces
+reflect and refract, and a bloom chain and ACES tone curve turn radiance into a picture. What
+remains is what the whole thing is for — acoustic rays sharing the same hierarchy in Phase 5, and
+the interface a creature brain plugs into in Phase 6.
 
 ## Platforms
 
@@ -135,6 +145,7 @@ tracing, 1980 edition, running in compute.
 | [docs/AGENT_INTERFACE.md](docs/AGENT_INTERFACE.md) | The plugin contract between world and brain |
 | [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | What research labs build in this area, and what is genuinely unusual here |
 | [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) | Setting up a development environment |
+| [tools/README.md](tools/README.md) | Scripts that operate on the renderer, including the flyby recorder |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [STYLE.md](STYLE.md) | Code style conventions |
 | [TODO.md](TODO.md) | Roadmap, active tasks and development journal |

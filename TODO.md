@@ -71,6 +71,32 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Journal
 
+### 2026-07-31
+
+- Added a recording mode and `tools/record_flyby.py`, which flies a closed camera path and encodes
+  the result as the looping animation now at the top of the README.
+- The camera path is periodic by construction: every oscillation completes a whole number of cycles
+  over the loop, and the last frame stops one step short of the first rather than repeating it, so
+  the clip has no seam.
+- Recording deliberately does not use the swapchain, frames in flight or real time. Each frame is
+  submitted alone and waited on, which makes the output identical on every run — a recording that
+  flickers differently each time it is made is not a recording. The readback it needs is the same
+  operation a creature sensor will need in Phase 6.
+- Frames are written as binary PPM, which needs no library at all. The encoder in `tools/` reads
+  them and ffmpeg does the rest.
+- One real defect surfaced from actually running it: the post-processing stage ended by declaring
+  `eBlit` as the destination stage of its final barrier, because the only consumer at the time was
+  the swapchain blit. A copy is a different pipeline stage, so recording read the image unordered
+  against that transition and synchronisation validation reported a read-after-write hazard. The
+  stage has no business assuming how its output is consumed, and now says `eAllTransfer`.
+- GIF encoding is two-pass against a single global palette computed across the whole clip. A
+  per-frame palette makes a mostly black image shimmer, which is the one artefact nobody misses.
+  Frame count dominates the file size, then width, then palette size; dithering costs size rather
+  than saving it, because it adds noise the compression cannot pack.
+- `images/` sits at the repository root, and `tools/` carries its own README, a requirements file
+  that is honestly empty, and a `.venv` placeholder so the convention is visible without reading a
+  document to discover it.
+
 ### 2026-07-30 (evening)
 
 - Etape 6 (Phase 4 milestone): **post processing.** The tracer now writes linear radiance into an

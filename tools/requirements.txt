@@ -1,0 +1,18 @@
+# Python dependencies for the tools in this directory.
+#
+# There are none, and that is deliberate rather than an oversight: record_flyby.py uses only the
+# standard library. The file exists so that the answer to "what do I need to install?" is written
+# down where it is looked for, and so that a future tool has somewhere to declare itself.
+#
+# Install into the virtual environment beside this file:
+#
+#     python -m venv tools/.venv
+#     tools/.venv/Scripts/activate      (Windows)
+#     source tools/.venv/bin/activate   (Linux)
+#     pip install -r tools/requirements.txt
+#
+# What the tools DO need is ffmpeg, which is a program rather than a package and cannot be
+# installed by pip:
+#
+#     winget install Gyan.FFmpeg        (Windows)
+#     sudo apt install ffmpeg           (Debian or Ubuntu)
