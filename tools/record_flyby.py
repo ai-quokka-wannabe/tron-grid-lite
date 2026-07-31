@@ -13,6 +13,11 @@ Rendering happens at a higher resolution than the output and is scaled down at e
 downscale is the only antialiasing this renderer has: it traces one ray per pixel by design, so
 supersampling in the recording is how the neon edges come out clean.
 
+The frame rate is deliberately low. Twelve frames a second is animation-on-twos, and the faint
+stutter it leaves suits the subject: this is a slow drift through an empty world, not action
+footage. It is also the one setting that makes the clip longer and smaller at the same time, since
+the duration is the frame count divided by the rate.
+
 Usage:
     python tools/record_flyby.py --executable build/windows-msvc/src/Debug/TronGridLite.exe
 
@@ -104,6 +109,11 @@ def encode_gif(ffmpeg: str, directory: Path, output: Path, fps: int, output_widt
     a heavier dither costs size rather than saving it. An ordered Bayer pattern at a coarse scale is
     the compromise: it keeps the glows from banding without shimmering between frames the way error
     diffusion does.
+
+    How much the camera moves matters as well, though nothing here controls it. GIF stores each
+    frame as only the pixels that changed since the last one, so a calm path over a mostly black
+    world leaves most of the image untouched from frame to frame and costs very little to store.
+    A frantic one repaints everything, every frame.
     """
     pattern = str(directory / "frame_%05d.ppm")
     palette = directory / "palette.png"
@@ -143,8 +153,8 @@ def encode_mp4(ffmpeg: str, directory: Path, output: Path, fps: int, output_widt
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--executable", help="Renderer to run. Found automatically if omitted.")
-    parser.add_argument("--frames", type=int, default=100, help="Frames in the loop (default: 100).")
-    parser.add_argument("--fps", type=int, default=20, help="Playback rate (default: 20).")
+    parser.add_argument("--frames", type=int, default=84, help="Frames in the loop (default: 84).")
+    parser.add_argument("--fps", type=int, default=12, help="Playback rate (default: 12).")
     parser.add_argument("--render-width", type=int, default=1280, help="Render width (default: 1280).")
     parser.add_argument("--render-height", type=int, default=720, help="Render height (default: 720).")
     parser.add_argument("--output-width", type=int, default=480, help="Width of the encoded clip (default: 480).")

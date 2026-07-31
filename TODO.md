@@ -93,6 +93,14 @@ criteria are ticked when satisfied; the Journal records what actually happened.
   per-frame palette makes a mostly black image shimmer, which is the one artefact nobody misses.
   Frame count dominates the file size, then width, then palette size; dithering costs size rather
   than saving it, because it adds noise the compression cannot pack.
+- The first cut moved too much. It has been retuned to be slower, calmer and stuttery: the wobble
+  amplitudes are down by roughly two thirds, the height and radius modulation are gentler, and the
+  clip now runs 84 frames at 12 rather than 100 at 20. The three changes are not independent, which
+  is the pleasant part. A low frame rate lengthens the clip while *reducing* the frame count, since
+  duration is frames divided by rate; and GIF stores each frame as only the pixels that changed
+  since the last, so a calm camera over a mostly black world leaves most of the image untouched
+  between frames. Slower, calmer and smaller all at once: 5.1 MiB over five seconds became 4.2 MiB
+  over seven.
 - `images/` sits at the repository root, and `tools/` carries its own README, a requirements file
   that is honestly empty, and a `.venv` placeholder so the convention is visible without reading a
   document to discover it.

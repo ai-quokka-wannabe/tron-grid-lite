@@ -43,7 +43,7 @@ python tools/record_flyby.py
 It finds a built renderer on its own, or takes `--executable`. The renderer is run in its recording
 mode, which flies a closed camera path and writes one image per frame; ffmpeg then encodes them.
 
-Three things about it are deliberate:
+Four things about it are deliberate:
 
 - **The loop is seamless.** Every term of the camera path is periodic and every oscillation
   completes a whole number of cycles, so the pose at the end of the loop is the pose at its start.
@@ -54,17 +54,22 @@ Three things about it are deliberate:
 - **Rendering happens larger than the output.** The renderer traces one ray per pixel by design and
   has no antialiasing of its own, so the downscale at encode time is where the neon edges get
   cleaned up.
+- **The frame rate is low on purpose.** Twelve a second is animation-on-twos, and the slight stutter
+  suits a slow drift through an empty world.
 
 Useful options:
 
 | Option | Default | Purpose |
 |--------|---------|---------|
-| `--frames` | 180 | Length of the loop |
-| `--fps` | 30 | Playback rate |
+| `--frames` | 84 | Length of the loop |
+| `--fps` | 12 | Playback rate |
 | `--render-width`, `--render-height` | 1280x720 | What the renderer traces |
-| `--output-width` | 640 | Width of the encoded clip |
+| `--output-width` | 480 | Width of the encoded clip |
+| `--max-colors` | 128 | Palette size |
 | `--mp4 PATH` | off | Also write an MP4, which is far smaller and looks better |
 | `--keep-frames` | off | Leave the rendered frames in `build/flyby-frames` |
 
-If the resulting GIF is too large for a README, reduce `--output-width` or `--frames` before
-reaching for anything else; both cost far less quality than lowering the frame rate does.
+If the resulting GIF is too large for a README, `--frames` is the biggest lever, then
+`--output-width`, then `--max-colors`. Lowering `--fps` shrinks it too and lengthens the clip while
+doing so, which is why the default is already low — but there is not much room left below twelve
+before the motion stops reading as motion.

@@ -58,17 +58,21 @@ private:
 
         A closed orbit around the geometry rather than a straight run, because a loop is the only
         path that can end where it began. The radius breathes and the height rises and falls so the
-        orbit never reads as a turntable, and a slow bank plus a small wobble keep it from looking
-        like something on rails — which it entirely is.
+        orbit never reads as a turntable, and a slow bank keeps it from looking like something on
+        rails — which it entirely is.
+
+        The wobble is deliberately almost imperceptible. Enough of it reads as a hand on the
+        controls; any more reads as a fault, and this footage exists to show the world rather than
+        the camera work.
     */
     float m_orbit_radius{34.0f}; //!< Mean distance from the centre of the scene, in metres.
-    float m_radius_breathe{7.0f}; //!< How far the radius swells and shrinks over the loop, in metres.
+    float m_radius_breathe{5.0f}; //!< How far the radius swells and shrinks over the loop, in metres.
     float m_height_mean{7.0f}; //!< Mean height above the floor, in metres.
-    float m_height_swing{4.0f}; //!< How far the height rises and falls, in metres.
+    float m_height_swing{2.6f}; //!< How far the height rises and falls, in metres.
     float m_look_ahead{0.14f}; //!< Fraction of the loop the camera aims ahead of itself.
     float m_inward_bias{0.55f}; //!< How much the aim is pulled towards the centre, from 0 to 1.
-    float m_bank{0.20f}; //!< Roll amplitude through the turns, in radians.
-    float m_wobble_yaw{0.035f}; //!< Yaw wobble amplitude, in radians.
-    float m_wobble_pitch{0.028f}; //!< Pitch wobble amplitude, in radians.
-    float m_wobble_roll{0.045f}; //!< Roll wobble amplitude, in radians.
+    float m_bank{0.15f}; //!< Roll amplitude through the turns, in radians.
+    float m_wobble_yaw{0.010f}; //!< Yaw wobble amplitude, in radians.
+    float m_wobble_pitch{0.008f}; //!< Pitch wobble amplitude, in radians.
+    float m_wobble_roll{0.014f}; //!< Roll wobble amplitude, in radians.
 };
