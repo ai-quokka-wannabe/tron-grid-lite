@@ -13,15 +13,14 @@
 */
 
 /*
-    Phase 1 — window, swapchain and frame loop.
+    Phase 2 — the compute ray tracer.
 
-    Brings up the spectator window, a Vulkan instance, device and swapchain, generates the neon
-    grid world on the CPU, and rasterises it with dynamic rendering while a free-flight camera
-    moves through it. The rasteriser is scaffolding: from Phase 2 the world is traced in compute
-    shaders against a self-built BVH, and this geometry becomes that BVH's input.
+    Builds the world on the host, hands it to the GPU as a bounding volume hierarchy in storage
+    buffers, and traces it in a compute shader. There is no rasteriser and no ray-tracing hardware:
+    every pixel of the spectator window is a ray walked through the hierarchy by hand.
 
-    Nothing here is a game. The camera exists so a human can watch and debug; creatures are driven
-    by their own plugins and are not part of this loop yet.
+    The same tracer will render creature sensors, at a far smaller resolution, once bodies exist.
+    Nothing here is a game — the camera exists so that a human can watch and debug.
 */
 
 #include "camera.hpp"
@@ -33,19 +32,19 @@
 #include "spectator.hpp"
 #include "surface.hpp"
 #include "swapchain.hpp"
+#include "tracer.hpp"
+#include <bvh/bvh.hpp>
 #include <log/logger.hpp>
-#include <math/matrix.hpp>
-#include <math/projection.hpp>
 #include <math/vector.hpp>
 #include <window/window.hpp>
 #include <window/window_event.hpp>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <exception>
-#include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -53,157 +52,98 @@ namespace
 {
 
     //! Number of frames the host may record ahead of the GPU.
-    constexpr uint32_t MAX_FRAMES_IN_FLIGHT{2};
+    constexpr uint32_t MAX_FRAMES_IN_FLIGHT{2u};
 
-    //! Depth format used by the spectator window. D32 float is universally supported as a depth attachment.
-    constexpr vk::Format DEPTH_FORMAT{vk::Format::eD32Sfloat};
+    /*!
+        Ray segments per pixel.
 
-    //! Reads a compiled SPIR-V module from disk, next to the executable.
-    [[nodiscard]] std::vector<uint32_t> readSpirv(const std::string& path)
+        Two is the Phase 2 milestone: one primary ray, and one mirror bounce so that the neon
+        appears in the floor. Phase 3 raises this once transmission splits the ray tree.
+    */
+    constexpr uint32_t MAX_BOUNCES{2u};
+
+    //! Linear scale applied before the tone curve.
+    constexpr float EXPOSURE{1.0f};
+
+    //! Material slots in the world's material table.
+    enum MaterialSlot : uint32_t {
+        MATERIAL_FLOOR = 0u, //!< The mirror the whole world stands on.
+        MATERIAL_NEON_PRIMARY = 1u, //!< Cyan tubes along ordinary grid lines.
+        MATERIAL_NEON_ACCENT = 2u, //!< Orange tubes along major grid lines.
+        MATERIAL_PILLAR = 3u //!< Standing blocks, bright enough to light the floor around them.
+    };
+
+    //! Converts a mesh into hierarchy triangles, tagging each with the given material.
+    void appendTriangles(std::vector<BvhLib::Triangle>& out, const Mesh& mesh, uint32_t material)
     {
-        std::ifstream file{path, std::ios::binary | std::ios::ate};
-        if (!file.is_open()) {
-            throw std::runtime_error{"Failed to open SPIR-V module: " + path};
+        for (size_t index{0u}; (index + 2u) < mesh.indices.size(); index += 3u) {
+            const Vertex& a{mesh.vertices[mesh.indices[index]]};
+            const Vertex& b{mesh.vertices[mesh.indices[index + 1u]]};
+            const Vertex& c{mesh.vertices[mesh.indices[index + 2u]]};
+
+            const MathLib::Vec3 v0{a.position[0], a.position[1], a.position[2]};
+            const MathLib::Vec3 v1{b.position[0], b.position[1], b.position[2]};
+            const MathLib::Vec3 v2{c.position[0], c.position[1], c.position[2]};
+
+            out.push_back(BvhLib::Triangle{.v0 = v0, .material = material, .edge1 = v1 - v0, .padding0 = 0u, .edge2 = v2 - v0, .padding1 = 0u});
         }
-
-        const std::streamsize size_bytes{file.tellg()};
-        if ((size_bytes <= 0) || ((size_bytes % 4) != 0)) {
-            throw std::runtime_error{"SPIR-V module has an invalid size: " + path};
-        }
-
-        std::vector<uint32_t> words(static_cast<size_t>(size_bytes) / 4);
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(words.data()), size_bytes);
-        return words;
-    }
-
-    //! Creates the Phase 0 graphics pipeline: a descriptor-free triangle drawn with dynamic rendering.
-    [[nodiscard]] vk::raii::Pipeline createTrianglePipeline(const vk::raii::Device& device, const vk::raii::PipelineLayout& layout, vk::Format colour_format,
-        const std::string& shader_path)
-    {
-        const std::vector<uint32_t> code{readSpirv(shader_path)};
-
-        const vk::ShaderModuleCreateInfo module_info{.codeSize = code.size() * sizeof(uint32_t), .pCode = code.data()};
-        const vk::raii::ShaderModule shader_module{device, module_info};
-
-        const std::array<vk::PipelineShaderStageCreateInfo, 2> stages{
-            vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eVertex, .module = *shader_module, .pName = "vertMain"},
-            vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eFragment, .module = *shader_module, .pName = "fragMain"}};
-
-        const vk::VertexInputBindingDescription binding{.binding = 0, .stride = sizeof(Vertex), .inputRate = vk::VertexInputRate::eVertex};
-
-        const std::array<vk::VertexInputAttributeDescription, 3> attributes{
-            vk::VertexInputAttributeDescription{.location = 0, .binding = 0, .format = vk::Format::eR32G32B32Sfloat, .offset = offsetof(Vertex, position)},
-            vk::VertexInputAttributeDescription{.location = 1, .binding = 0, .format = vk::Format::eR32G32B32Sfloat, .offset = offsetof(Vertex, normal)},
-            vk::VertexInputAttributeDescription{.location = 2, .binding = 0, .format = vk::Format::eR32G32Sfloat, .offset = offsetof(Vertex, uv)}};
-
-        const vk::PipelineVertexInputStateCreateInfo vertex_input{.vertexBindingDescriptionCount = 1,
-            .pVertexBindingDescriptions = &binding,
-            .vertexAttributeDescriptionCount = static_cast<uint32_t>(attributes.size()),
-            .pVertexAttributeDescriptions = attributes.data()};
-
-        const vk::PipelineInputAssemblyStateCreateInfo input_assembly{.topology = vk::PrimitiveTopology::eTriangleList, .primitiveRestartEnable = vk::False};
-
-        const vk::PipelineViewportStateCreateInfo viewport_state{.viewportCount = 1, .scissorCount = 1};
-
-        const vk::PipelineRasterizationStateCreateInfo rasterisation{.depthClampEnable = vk::False,
-            .rasterizerDiscardEnable = vk::False,
-            .polygonMode = vk::PolygonMode::eFill,
-            .cullMode = vk::CullModeFlagBits::eNone,
-            .frontFace = vk::FrontFace::eCounterClockwise,
-            .depthBiasEnable = vk::False,
-            .lineWidth = 1.0f};
-
-        const vk::PipelineMultisampleStateCreateInfo multisample{.rasterizationSamples = vk::SampleCountFlagBits::e1, .sampleShadingEnable = vk::False};
-
-        const vk::PipelineColorBlendAttachmentState blend_attachment{.blendEnable = vk::False,
-            .colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA};
-
-        const vk::PipelineColorBlendStateCreateInfo colour_blend{.logicOpEnable = vk::False, .attachmentCount = 1, .pAttachments = &blend_attachment};
-
-        const std::array<vk::DynamicState, 2> dynamic_states{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-        const vk::PipelineDynamicStateCreateInfo dynamic_state{
-            .dynamicStateCount = static_cast<uint32_t>(dynamic_states.size()), .pDynamicStates = dynamic_states.data()};
-
-        const vk::PipelineDepthStencilStateCreateInfo depth_stencil{.depthTestEnable = vk::True,
-            .depthWriteEnable = vk::True,
-            .depthCompareOp = vk::CompareOp::eLess,
-            .depthBoundsTestEnable = vk::False,
-            .stencilTestEnable = vk::False};
-
-        // Dynamic rendering — no VkRenderPass, no VkFramebuffer.
-        const vk::PipelineRenderingCreateInfo rendering_info{.colorAttachmentCount = 1, .pColorAttachmentFormats = &colour_format, .depthAttachmentFormat = DEPTH_FORMAT};
-
-        const vk::GraphicsPipelineCreateInfo pipeline_info{.pNext = &rendering_info,
-            .stageCount = static_cast<uint32_t>(stages.size()),
-            .pStages = stages.data(),
-            .pVertexInputState = &vertex_input,
-            .pInputAssemblyState = &input_assembly,
-            .pViewportState = &viewport_state,
-            .pRasterizationState = &rasterisation,
-            .pMultisampleState = &multisample,
-            .pDepthStencilState = &depth_stencil,
-            .pColorBlendState = &colour_blend,
-            .pDynamicState = &dynamic_state,
-            .layout = *layout};
-
-        return vk::raii::Pipeline{device, nullptr, pipeline_info};
-    }
-
-    //! Finds a device-local, host-visible memory type for the small Phase 0 vertex buffer.
-    [[nodiscard]] uint32_t findMemoryType(const vk::raii::PhysicalDevice& physical_device, uint32_t type_bits, vk::MemoryPropertyFlags required)
-    {
-        const vk::PhysicalDeviceMemoryProperties properties{physical_device.getMemoryProperties()};
-        for (uint32_t index{0}; index < properties.memoryTypeCount; ++index) {
-            if (((type_bits & (1u << index)) != 0) && ((properties.memoryTypes[index].propertyFlags & required) == required)) {
-                return index;
-            }
-        }
-        throw std::runtime_error{"No suitable memory type for the vertex buffer."};
     }
 
     /*!
-        Depth attachment for the spectator window.
+        The world's material table.
 
-        Recreated alongside the swapchain, because it must always match the colour attachment's
-        extent. It is deliberately plain vk::raii rather than a VMA allocation: exactly one of
-        these exists, and the compute tracer of Phase 2 will not need it at all.
+        Three entries, all of them perfectly smooth. The floor carries no emission at all: every
+        photon in this world starts inside a neon tube, and the floor is only ever as bright as
+        what it reflects. Fresnel does the rest — barely anything head-on, everything at a grazing
+        angle, which is what draws the long streaks towards the horizon.
     */
-    struct DepthBuffer {
-        vk::raii::Image image{nullptr}; //!< Depth image.
-        vk::raii::DeviceMemory memory{nullptr}; //!< Backing memory.
-        vk::raii::ImageView view{nullptr}; //!< View used as the rendering attachment.
-    };
-
-    //! Creates a depth buffer of the given extent.
-    [[nodiscard]] DepthBuffer createDepthBuffer(const vk::raii::Device& device, const vk::raii::PhysicalDevice& physical_device, vk::Extent2D extent)
+    [[nodiscard]] std::vector<Material> makeMaterials()
     {
-        const vk::ImageCreateInfo image_info{.imageType = vk::ImageType::e2D,
-            .format = DEPTH_FORMAT,
-            .extent = vk::Extent3D{extent.width, extent.height, 1},
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = vk::SampleCountFlagBits::e1,
-            .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
-            .sharingMode = vk::SharingMode::eExclusive,
-            .initialLayout = vk::ImageLayout::eUndefined};
+        std::vector<Material> materials(4u);
+        materials[MATERIAL_FLOOR] = makeMirror(MathLib::Vec3{0.85f, 0.90f, 1.00f});
 
-        vk::raii::Image image{device, image_info};
+        /*
+            A high index of refraction, because it is the only reflectivity knob this material
+            model has. Fresnel derives the head-on reflectance entirely from it: ordinary glass at
+            1.5 returns four per cent, which is honest for a window and far too dim for a floor
+            that is meant to read as a mirror. At 2.4 it returns about seventeen per cent head-on
+            and still climbs to everything at a grazing angle, which is the effect the aesthetic
+            is after. Nothing else in the world uses this value while transmission stays at zero.
+        */
+        materials[MATERIAL_FLOOR].index_of_refraction = 2.4f;
+        materials[MATERIAL_NEON_PRIMARY] = makeEmissive(MathLib::Vec3{0.05f, 0.35f, 0.55f}, MathLib::Vec3{0.10f, 2.60f, 4.20f});
+        materials[MATERIAL_NEON_ACCENT] = makeEmissive(MathLib::Vec3{0.55f, 0.25f, 0.05f}, MathLib::Vec3{4.40f, 1.60f, 0.15f});
+        materials[MATERIAL_PILLAR] = makeEmissive(MathLib::Vec3{0.30f, 0.45f, 0.60f}, MathLib::Vec3{0.60f, 3.20f, 5.00f});
+        return materials;
+    }
 
-        const vk::MemoryRequirements requirements{image.getMemoryRequirements()};
-        const vk::MemoryAllocateInfo allocate_info{.allocationSize = requirements.size,
-            .memoryTypeIndex = findMemoryType(physical_device, requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal)};
-        vk::raii::DeviceMemory memory{device, allocate_info};
-        image.bindMemory(*memory, 0);
+    /*!
+        A few blocks standing off the floor.
 
-        const vk::ImageViewCreateInfo view_info{.image = *image,
-            .viewType = vk::ImageViewType::e2D,
-            .format = DEPTH_FORMAT,
-            .subresourceRange = vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1}};
-        vk::raii::ImageView view{device, view_info};
+        Their purpose is not decoration. A perfectly flat world has nothing to reflect: the tubes
+        lie a centimetre above the mirror, so their reflection sits a centimetre below and merges
+        with the tube itself. Geometry with height is what makes the second ray segment visible,
+        and it is the only way to see at a glance whether the mirror is working.
+    */
+    [[nodiscard]] Mesh makePillars()
+    {
+        constexpr float FLOOR_HALF_EXTENT{64.0f};
 
-        return DepthBuffer{.image = std::move(image), .memory = std::move(memory), .view = std::move(view)};
+        Mesh pillars{};
+        const std::array<MathLib::Vec3, 6u> positions{MathLib::Vec3{-24.0f, 0.0f, -18.0f}, MathLib::Vec3{18.0f, 0.0f, -30.0f}, MathLib::Vec3{34.0f, 0.0f, 6.0f},
+            MathLib::Vec3{-38.0f, 0.0f, 14.0f}, MathLib::Vec3{6.0f, 0.0f, -52.0f}, MathLib::Vec3{-8.0f, 0.0f, 22.0f}};
+
+        for (size_t index{0u}; index < positions.size(); ++index) {
+            const float height{6.0f + (static_cast<float>(index % 3u) * 4.0f)};
+            const MathLib::Vec3 half_extents{0.45f, height * 0.5f, 0.45f};
+            const MathLib::Vec3 centre{positions[index].x, half_extents.y, positions[index].z};
+
+            if ((std::abs(centre.x) < FLOOR_HALF_EXTENT) && (std::abs(centre.z) < FLOOR_HALF_EXTENT)) {
+                pillars.append(generateBox(centre, half_extents));
+            }
+        }
+
+        return pillars;
     }
 
 } // namespace
@@ -213,7 +153,7 @@ int main()
     LoggingLib::Logger logger;
 
     try {
-        logger.logInfo("TronGrid Lite - Phase 1 (a world for AI agents; this window is for the human observer only).");
+        logger.logInfo("TronGrid Lite - Phase 2 (a world for AI agents; this window is for the human observer only).");
 
         const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - spectator", .width = 1280, .height = 720, .resizable = true, .decorated = true};
         const std::unique_ptr<WindowLib::Window> window{WindowLib::create(window_config, logger)};
@@ -230,82 +170,40 @@ int main()
 
         Swapchain swapchain{device, *surface, window->width(), window->height(), logger};
 
-        /*
-            One depth buffer per frame in flight, not one shared between them. With two frames in
-            flight the host records frame N+1 while the GPU may still be running frame N, and a
-            single depth image would have both writing it at once — a real race, and one that
-            synchronisation validation reports as a write-after-write hazard.
-        */
-        std::vector<DepthBuffer> depth_buffers;
-        for (uint32_t frame{0}; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
-            depth_buffers.emplace_back(createDepthBuffer(device.get(), device.physicalDevice(), swapchain.extent()));
-        }
-
-        /*
-            The world: a flat mirror floor with neon tubes along its grid lines. Generated on the
-            CPU into one flat triangle list, which is exactly the form the Phase 2 BVH builder
-            wants — the rasteriser below is scaffolding, the geometry is not.
-        */
+        // The world: a flat mirror floor with neon tubes along its grid lines.
         const GridFloorConfig floor_config{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
 
         /*
-            Wide tubes lifted clear of the floor.
+            Thin tubes, sitting almost on the floor.
 
-            Two separate reasons, both about distance. The lift beats depth-buffer precision, which
-            is worst far from the camera — the generator's 5 mm default sits below the resolvable
-            difference at the far edge of a 90 m grid. The width beats sub-pixel aliasing: a 2 cm
-            strip covers well under one pixel out there, so a rasteriser samples it only where a
-            pixel centre happens to land inside and the line breaks into dashes. The compute tracer
-            of Phase 2 will filter properly and can afford thinner tubes; until then, geometry that
-            is comfortably wider than a pixel is the honest fix rather than an antialiasing plaster.
+            The rasteriser of Phase 1 needed them wide and lifted, because a strip narrower than a
+            pixel breaks into dashes and a coplanar strip fights the depth buffer. The tracer has
+            neither problem: it samples geometry analytically and has no depth buffer at all, so
+            the tubes can be the slender lines the aesthetic actually wants.
         */
-        const NeonTubeConfig tube_config{.half_width = 0.06f, .surface_offset = 0.05f};
+        const NeonTubeConfig tube_config{.half_width = 0.025f, .surface_offset = 0.01f};
 
         const Mesh floor{generateGridFloor(floor_config)};
         const NeonGrid neon{generateGridFloorNeon(floor_config, tube_config)};
 
-        // Kept as three ranges of one buffer so each can be drawn with its own tint until the
-        // compute tracer takes over and materials come from the storage buffer instead.
-        const uint32_t floor_vertex_count{static_cast<uint32_t>(floor.vertices.size())};
-        const uint32_t primary_vertex_count{static_cast<uint32_t>(neon.primary.vertices.size())};
-        const uint32_t accent_vertex_count{static_cast<uint32_t>(neon.accent.vertices.size())};
+        const Mesh pillars{makePillars()};
 
-        Mesh world{floor};
-        world.append(neon.primary);
-        world.append(neon.accent);
+        std::vector<BvhLib::Triangle> world_triangles;
+        world_triangles.reserve(floor.triangleCount() + neon.primary.triangleCount() + neon.accent.triangleCount() + pillars.triangleCount());
+        appendTriangles(world_triangles, floor, MATERIAL_FLOOR);
+        appendTriangles(world_triangles, neon.primary, MATERIAL_NEON_PRIMARY);
+        appendTriangles(world_triangles, neon.accent, MATERIAL_NEON_ACCENT);
+        appendTriangles(world_triangles, pillars, MATERIAL_PILLAR);
 
-        logger.logInfo("World generated: " + std::to_string(world.triangleCount()) + " triangles, bounding radius "
-            + std::to_string(static_cast<double>(world.boundingRadius())) + " m.");
+        const std::chrono::steady_clock::time_point build_start{std::chrono::steady_clock::now()};
+        const BvhLib::Bvh bvh{BvhLib::build(std::move(world_triangles))};
+        const float build_milliseconds{std::chrono::duration<float, std::milli>{std::chrono::steady_clock::now() - build_start}.count()};
 
-        const vk::DeviceSize vertex_bytes{static_cast<vk::DeviceSize>(world.vertices.size() * sizeof(Vertex))};
+        logger.logInfo("Hierarchy built in " + std::to_string(static_cast<double>(build_milliseconds)) + " ms: " + std::to_string(bvh.triangles.size()) + " triangles, "
+            + std::to_string(bvh.nodes.size()) + " nodes, depth " + std::to_string(bvh.depth()) + " of " + std::to_string(BvhLib::MAX_DEPTH) + ".");
 
-        const vk::BufferCreateInfo buffer_info{.size = vertex_bytes, .usage = vk::BufferUsageFlagBits::eVertexBuffer, .sharingMode = vk::SharingMode::eExclusive};
-        const vk::raii::Buffer vertex_buffer{device.get(), buffer_info};
-
-        const vk::MemoryRequirements requirements{vertex_buffer.getMemoryRequirements()};
-        const vk::MemoryAllocateInfo allocate_info{.allocationSize = requirements.size,
-            .memoryTypeIndex = findMemoryType(device.physicalDevice(), requirements.memoryTypeBits,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)};
-        const vk::raii::DeviceMemory vertex_memory{device.get(), allocate_info};
-        vertex_buffer.bindMemory(*vertex_memory, 0);
-
-        void* mapped{vertex_memory.mapMemory(0, vertex_bytes)};
-        std::memcpy(mapped, world.vertices.data(), static_cast<size_t>(vertex_bytes));
-        vertex_memory.unmapMemory();
-
-        // Matches TrianglePushConstants in triangle.slang: a 64-byte matrix followed by a 16-byte tint.
-        struct TrianglePushConstants {
-            MathLib::Mat4 model_view_projection{};
-            MathLib::Vec4 tint{};
-        };
-        static_assert(sizeof(TrianglePushConstants) == 80u, "Push constants must match the Slang struct layout exactly.");
-
-        const vk::PushConstantRange push_range{
-            .stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, .offset = 0, .size = sizeof(TrianglePushConstants)};
-        const vk::PipelineLayoutCreateInfo layout_info{.setLayoutCount = 0, .pushConstantRangeCount = 1, .pPushConstantRanges = &push_range};
-        const vk::raii::PipelineLayout pipeline_layout{device.get(), layout_info};
-
-        vk::raii::Pipeline pipeline{createTrianglePipeline(device.get(), pipeline_layout, swapchain.format().format, "triangle.spv")};
+        Tracer tracer{device, bvh, makeMaterials(), MAX_FRAMES_IN_FLIGHT, "trace.spv", logger};
+        tracer.resize(swapchain.extent());
 
         const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
         const vk::raii::CommandPool command_pool{device.get(), pool_info};
@@ -316,7 +214,7 @@ int main()
 
         std::vector<vk::raii::Semaphore> image_available;
         std::vector<vk::raii::Fence> in_flight;
-        for (uint32_t frame{0}; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
+        for (uint32_t frame{0u}; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
             image_available.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
             in_flight.emplace_back(device.get(), vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
         }
@@ -324,19 +222,19 @@ int main()
         // One present semaphore per swapchain image: a semaphore signalled for image N must not be
         // waited on while a different frame presents image M.
         std::vector<vk::raii::Semaphore> render_finished;
-        for (uint32_t image{0}; image < swapchain.imageCount(); ++image) {
+        for (uint32_t image{0u}; image < swapchain.imageCount(); ++image) {
             render_finished.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
         }
 
         GpuProfiler profiler{device, MAX_FRAMES_IN_FLIGHT, logger};
 
         // The spectator: a free camera for the human observer. Creatures never use this.
-        Camera camera{MathLib::Vec3{0.0f, 12.0f, 45.0f}};
+        Camera camera{MathLib::Vec3{0.0f, 6.0f, 40.0f}};
         SpectatorController spectator;
 
-        logger.logInfo("Phase 1 initialised on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
+        logger.logInfo("Phase 2 initialised on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
 
-        uint32_t frame_index{0};
+        uint32_t frame_index{0u};
         bool needs_recreate{false};
         std::chrono::steady_clock::time_point previous_time{std::chrono::steady_clock::now()};
 
@@ -361,7 +259,7 @@ int main()
             spectator.update(camera, delta_seconds);
 
             // A minimised window has a zero-sized swapchain; there is nothing to render into.
-            if ((window->width() == 0) || (window->height() == 0)) {
+            if ((window->width() == 0u) || (window->height() == 0u)) {
                 window->waitEvents();
                 continue;
             }
@@ -369,10 +267,7 @@ int main()
             if (needs_recreate) {
                 device.get().waitIdle();
                 swapchain.recreate(window->width(), window->height());
-                depth_buffers.clear();
-                for (uint32_t frame{0}; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
-                    depth_buffers.emplace_back(createDepthBuffer(device.get(), device.physicalDevice(), swapchain.extent()));
-                }
+                tracer.resize(swapchain.extent());
                 needs_recreate = false;
                 continue;
             }
@@ -382,7 +277,7 @@ int main()
                 // Retry — a timeout here is not an error.
             }
 
-            uint32_t image_index{0};
+            uint32_t image_index{0u};
             try {
                 const auto [acquire_result, acquired_index] = swapchain.get().acquireNextImage(UINT64_MAX, *image_available[frame_index], nullptr);
                 if ((acquire_result == vk::Result::eErrorOutOfDateKHR) || (acquire_result == vk::Result::eSuboptimalKHR)) {
@@ -405,131 +300,83 @@ int main()
             profiler.resetFrame(command_buffer, frame_index);
             profiler.begin(command_buffer, frame_index, GpuPass::Frame);
 
+            profiler.begin(command_buffer, frame_index, GpuPass::Trace);
+            tracer.record(command_buffer, frame_index, camera, MAX_BOUNCES, EXPOSURE);
+            profiler.end(command_buffer, frame_index, GpuPass::Trace);
+
+            profiler.begin(command_buffer, frame_index, GpuPass::Present);
+
             /*
                 The source stage must be the stage the acquire semaphore is waited on, not
-                eTopOfPipe. A semaphore wait at eColorAttachmentOutput orders nothing against a
-                barrier that claims to come from the top of the pipe, so the layout transition is
-                free to run before the image has actually been acquired — synchronisation
-                validation reports this as a write-after-read hazard against vkAcquireNextImageKHR.
+                eTopOfPipe. A semaphore wait at eTransfer orders nothing against a barrier claiming
+                to come from the top of the pipe, so the layout transition would be free to run
+                before the image has actually been acquired.
             */
-            const vk::ImageMemoryBarrier2 to_colour_attachment{.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            const vk::ImageMemoryBarrier2 to_transfer_dst{.srcStageMask = vk::PipelineStageFlagBits2::eBlit,
                 .srcAccessMask = vk::AccessFlagBits2::eNone,
-                .dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                .dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+                .dstStageMask = vk::PipelineStageFlagBits2::eBlit,
+                .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
                 .oldLayout = vk::ImageLayout::eUndefined,
-                .newLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .newLayout = vk::ImageLayout::eTransferDstOptimal,
                 .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
                 .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
                 .image = swapchain.images()[image_index],
-                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
-            // Likewise ordered against the previous frame's depth writes rather than the top of pipe.
-            const vk::ImageMemoryBarrier2 to_depth_attachment{
-                .srcStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-                .srcAccessMask = vk::AccessFlagBits2::eNone,
-                .dstStageMask = vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
-                .dstAccessMask = vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-                .oldLayout = vk::ImageLayout::eUndefined,
-                .newLayout = vk::ImageLayout::eDepthAttachmentOptimal,
-                .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-                .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-                .image = *depth_buffers[frame_index].image,
-                .subresourceRange = {vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1}};
-
-            const std::array<vk::ImageMemoryBarrier2, 2> begin_barriers{to_colour_attachment, to_depth_attachment};
-            command_buffer.pipelineBarrier2(vk::DependencyInfo{
-                .imageMemoryBarrierCount = static_cast<uint32_t>(begin_barriers.size()), .pImageMemoryBarriers = begin_barriers.data()});
-
-            // Infinite black — the world's default background, and the reason emissive geometry reads as neon.
-            const vk::ClearValue clear_colour{vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}}};
-            const vk::RenderingAttachmentInfo colour_attachment{.imageView = *swapchain.views()[image_index],
-                .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-                .loadOp = vk::AttachmentLoadOp::eClear,
-                .storeOp = vk::AttachmentStoreOp::eStore,
-                .clearValue = clear_colour};
-
-            const vk::RenderingAttachmentInfo depth_attachment{.imageView = *depth_buffers[frame_index].view,
-                .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
-                .loadOp = vk::AttachmentLoadOp::eClear,
-                .storeOp = vk::AttachmentStoreOp::eDontCare,
-                .clearValue = vk::ClearValue{vk::ClearDepthStencilValue{1.0f, 0}}};
-
-            const vk::RenderingInfo rendering{.renderArea = vk::Rect2D{{0, 0}, swapchain.extent()},
-                .layerCount = 1,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &colour_attachment,
-                .pDepthAttachment = &depth_attachment};
-
-            command_buffer.beginRendering(rendering);
-            command_buffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
-
-            const vk::Viewport viewport{.x = 0.0f,
-                .y = 0.0f,
-                .width = static_cast<float>(swapchain.extent().width),
-                .height = static_cast<float>(swapchain.extent().height),
-                .minDepth = 0.0f,
-                .maxDepth = 1.0f};
-            command_buffer.setViewport(0, {viewport});
-            command_buffer.setScissor(0, {vk::Rect2D{{0, 0}, swapchain.extent()}});
-
-            const float aspect{static_cast<float>(swapchain.extent().width) / static_cast<float>(swapchain.extent().height)};
-            // A distant near plane buys depth precision cheaply, and a spectator camera never needs
-            // to clip at ten centimetres.
-            const MathLib::Mat4 projection{MathLib::perspective(MathLib::PI / 4.0f, aspect, 0.5f, 500.0f)};
-            const MathLib::Mat4 model_view_projection{projection * camera.viewMatrix()};
-            command_buffer.bindVertexBuffers(0, {*vertex_buffer}, {0});
+                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u}};
+            command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1u, .pImageMemoryBarriers = &to_transfer_dst});
 
             /*
-                Three draws, one per sub-mesh, each with its own flat tint: a near-black floor that
-                will become the mirror, and the two neon tube sets. Phase 2 replaces all of this
-                with a single compute dispatch that reads materials from a storage buffer.
+                A one-to-one blit rather than a copy, because the traced image is RGBA and the
+                surface is BGRA. The blit performs that conversion; a copy would require identical
+                formats and would swap red and blue.
             */
-            const std::array<std::pair<uint32_t, MathLib::Vec4>, 3> draws{
-                std::pair<uint32_t, MathLib::Vec4>{floor_vertex_count, MathLib::Vec4{0.02f, 0.03f, 0.05f, 1.0f}},
-                std::pair<uint32_t, MathLib::Vec4>{primary_vertex_count, MathLib::Vec4{0.0f, 0.85f, 1.0f, 1.0f}},
-                std::pair<uint32_t, MathLib::Vec4>{accent_vertex_count, MathLib::Vec4{1.0f, 0.45f, 0.0f, 1.0f}}};
+            const std::array<vk::Offset3D, 2> source_bounds{
+                vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(tracer.extent().width), static_cast<int32_t>(tracer.extent().height), 1}};
+            const std::array<vk::Offset3D, 2> destination_bounds{
+                vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(swapchain.extent().width), static_cast<int32_t>(swapchain.extent().height), 1}};
 
-            uint32_t first_vertex{0};
-            for (const std::pair<uint32_t, MathLib::Vec4>& draw : draws) {
-                if (draw.first == 0u) {
-                    continue;
-                }
-                const TrianglePushConstants push{.model_view_projection = model_view_projection, .tint = draw.second};
-                command_buffer.pushConstants<TrianglePushConstants>(*pipeline_layout, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment, 0, {push});
-                command_buffer.draw(draw.first, 1, first_vertex, 0);
-                first_vertex += draw.first;
-            }
+            const vk::ImageBlit2 blit_region{.srcSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u},
+                .srcOffsets = source_bounds,
+                .dstSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u},
+                .dstOffsets = destination_bounds};
 
-            command_buffer.endRendering();
+            command_buffer.blitImage2(vk::BlitImageInfo2{.srcImage = tracer.outputImage(frame_index),
+                .srcImageLayout = vk::ImageLayout::eTransferSrcOptimal,
+                .dstImage = swapchain.images()[image_index],
+                .dstImageLayout = vk::ImageLayout::eTransferDstOptimal,
+                .regionCount = 1u,
+                .pRegions = &blit_region,
+                .filter = vk::Filter::eNearest});
 
-            const vk::ImageMemoryBarrier2 to_present{.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                .srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite,
+            const vk::ImageMemoryBarrier2 to_present{.srcStageMask = vk::PipelineStageFlagBits2::eBlit,
+                .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
                 .dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
                 .dstAccessMask = vk::AccessFlagBits2::eNone,
-                .oldLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .oldLayout = vk::ImageLayout::eTransferDstOptimal,
                 .newLayout = vk::ImageLayout::ePresentSrcKHR,
                 .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
                 .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
                 .image = swapchain.images()[image_index],
-                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}};
-            command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1, .pImageMemoryBarriers = &to_present});
+                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u}};
+            command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1u, .pImageMemoryBarriers = &to_present});
 
+            profiler.end(command_buffer, frame_index, GpuPass::Present);
             profiler.end(command_buffer, frame_index, GpuPass::Frame);
             command_buffer.end();
 
-            const vk::PipelineStageFlags wait_stage{vk::PipelineStageFlagBits::eColorAttachmentOutput};
-            const vk::SubmitInfo submit{.waitSemaphoreCount = 1,
+            const vk::PipelineStageFlags wait_stage{vk::PipelineStageFlagBits::eTransfer};
+            const vk::SubmitInfo submit{.waitSemaphoreCount = 1u,
                 .pWaitSemaphores = &*image_available[frame_index],
                 .pWaitDstStageMask = &wait_stage,
-                .commandBufferCount = 1,
+                .commandBufferCount = 1u,
                 .pCommandBuffers = &*command_buffer,
-                .signalSemaphoreCount = 1,
+                .signalSemaphoreCount = 1u,
                 .pSignalSemaphores = &*render_finished[image_index]};
             device.graphicsQueue().submit({submit}, *fence);
 
             try {
-                const vk::PresentInfoKHR present{.waitSemaphoreCount = 1,
+                const vk::PresentInfoKHR present{.waitSemaphoreCount = 1u,
                     .pWaitSemaphores = &*render_finished[image_index],
-                    .swapchainCount = 1,
+                    .swapchainCount = 1u,
                     .pSwapchains = &*swapchain.get(),
                     .pImageIndices = &image_index};
                 const vk::Result result{device.presentQueue().presentKHR(present)};
@@ -540,7 +387,7 @@ int main()
                 needs_recreate = true;
             }
 
-            frame_index = (frame_index + 1) % MAX_FRAMES_IN_FLIGHT;
+            frame_index = (frame_index + 1u) % MAX_FRAMES_IN_FLIGHT;
         }
 
         device.get().waitIdle();

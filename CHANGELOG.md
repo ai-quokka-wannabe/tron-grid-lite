@@ -22,9 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   swapchain with resize handling, VMA allocator wrapper, spectator camera, scene components.
 - Material model expressed in code: mirror, emissive and glass, with fields reserved for the
   acoustic properties the shared BVH will need.
-- Slang shaders: `triangle.slang` (Phase 0 smoke test), `postprocess.slang` (ACES tonemap and
-  sRGB encode) and `bloom_downsample.slang` (three bloom entry points), all compiled and
-  SPIR-V-validated at build time.
+- Slang shaders: `postprocess.slang` (ACES tonemap and sRGB encode) and `bloom_downsample.slang`
+  (three bloom entry points), compiled and SPIR-V-validated at build time.
 - Documentation: `docs/VISION.md`, `docs/ARCHITECTURE.md`, `docs/AGENT_INTERFACE.md` and
   `docs/DEV_ENV_SETUP.md`.
 - `docs/PERCEPTION.md` — the sensor presets the world renders (`elegans`, `insect-min`,
@@ -44,6 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   smooth-surface model actually uses.
 - **Phase 1 milestone reached: flying through the neon grid** — 24,832 triangles with a depth
   buffer that is recreated alongside the swapchain.
+
+- **Phase 2 milestone reached: the world is ray traced.** `libs/bvh` builds a binned
+  surface-area-heuristic hierarchy on the host; `src/trace.slang` walks it in an ordinary compute
+  shader with a fixed-size stack and shades every surface with Schlick Fresnel. Measured at
+  **4.0 ms per frame at 1280x720 on a GTX 1650 Ti**, a GPU with no ray-tracing extensions at all.
+- `libs/bvh` — the hierarchy, with eleven tests. The load-bearing one traces six thousand random
+  rays and requires the accelerated traversal to agree with a brute-force sweep exactly.
+- `src/tracer.hpp` — uploads the world to device-local storage buffers through a staging copy, owns
+  one output image per frame in flight, and records the dispatch.
 
 ### Changed
 
