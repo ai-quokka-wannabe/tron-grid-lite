@@ -115,7 +115,10 @@ def encode_gif(ffmpeg: str, directory: Path, output: Path, fps: int, output_widt
     world leaves most of the image untouched from frame to frame and costs very little to store.
     A frantic one repaints everything, every frame.
     """
-    pattern = str(directory / "frame_%05d.ppm")
+    # ffmpeg expands % sequences across the whole input path rather than just the filename, so a
+    # checkout or temporary directory containing one would break the encode. The directory is
+    # passed as the working directory instead of being baked into the pattern.
+    pattern = "frame_%05d.ppm"
     palette = directory / "palette.png"
 
     scale = f"scale={output_width}:-1:flags=lanczos"
@@ -124,6 +127,7 @@ def encode_gif(ffmpeg: str, directory: Path, output: Path, fps: int, output_widt
     subprocess.run(
         [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", pattern,
          "-vf", f"{scale},palettegen=max_colors={max_colors}:stats_mode=full", str(palette)],
+        cwd=directory,
         check=True,
     )
 
@@ -133,19 +137,22 @@ def encode_gif(ffmpeg: str, directory: Path, output: Path, fps: int, output_widt
         [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", pattern, "-i", str(palette),
          "-lavfi", f"{scale}[frames];[frames][1:v]paletteuse=dither=bayer:bayer_scale=4",
          "-loop", "0", str(output)],
+        cwd=directory,
         check=True,
     )
 
 
 def encode_mp4(ffmpeg: str, directory: Path, output: Path, fps: int, output_width: int) -> None:
     """Encodes the same frames as an MP4, which is far smaller and much better looking."""
-    pattern = str(directory / "frame_%05d.ppm")
+    # Same reason as encode_gif: the directory goes in cwd rather than into the pattern.
+    pattern = "frame_%05d.ppm"
     print(f"Encoding {output} ...")
     output.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         [ffmpeg, "-y", "-loglevel", "error", "-framerate", str(fps), "-i", pattern,
          "-vf", f"scale={output_width}:-2:flags=lanczos", "-c:v", "libx264", "-pix_fmt", "yuv420p",
          "-crf", "20", "-movflags", "+faststart", str(output)],
+        cwd=directory,
         check=True,
     )
 
@@ -172,6 +179,11 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="tron-grid-lite-frames-") as temporary:
         directory = Path(temporary) if not arguments.keep_frames else (REPOSITORY_ROOT / "build" / "flyby-frames")
         directory.mkdir(parents=True, exist_ok=True)
+
+        # --keep-frames reuses a fixed directory, so a shorter second run would still find the
+        # previous run's surplus frames and the count check would blame the renderer for them.
+        for stale in directory.glob("frame_*.ppm"):
+            stale.unlink()
 
         render_frames(executable, directory, arguments.render_width, arguments.render_height, arguments.frames)
         encode_gif(ffmpeg, directory, gif_path, arguments.fps, arguments.output_width, arguments.max_colors)

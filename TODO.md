@@ -104,6 +104,22 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 - `images/` sits at the repository root, and `tools/` carries its own README, a requirements file
   that is honestly empty, and a `.venv` placeholder so the convention is visible without reading a
   document to discover it.
+- A security review of the recording code turned up four small defects, none of them a
+  vulnerability and all of them the local user's own input coming back at them:
+    - `writePpm` left the stream to close itself, so the destructor flushed the tail of the buffer
+      *after* the error check had already passed. A disk filling in the last few kilobytes of the
+      last frame wrote a truncated PPM and reported success. It now closes explicitly and checks.
+    - `std::stoul` is specified in terms of `strtoul`, which negates a leading minus into the
+      unsigned result rather than failing, so `--frames -1` quietly became 4294967295 frames.
+      `std::from_chars` parsing straight into the `uint32_t` rejects the sign, trailing junk and
+      out-of-range values in one call.
+    - `--width 0` handed Vulkan a zero-extent image, a valid-usage violation with no validation
+      layers in a release build to catch it. Now bounded against the device's own
+      `maxImageDimension2D`, the same guard the swapchain already applies to a minimised window.
+    - ffmpeg expands `%` sequences across the whole input path rather than just the filename, so a
+      checkout under a directory containing one broke the encode. The frames directory is now passed
+      as the working directory instead of being baked into the pattern. Re-recording afterwards
+      produced a byte-identical GIF, which is the check that the change altered nothing else.
 
 ### 2026-07-30 (evening)
 

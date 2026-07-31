@@ -46,6 +46,7 @@
 #include <window/window_event.hpp>
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <cstring>
 #include <cmath>
@@ -237,6 +238,12 @@ namespace
             file.write(reinterpret_cast<const char*>(row.data()), static_cast<std::streamsize>(row.size()));
         }
 
+        /*
+            Closed here rather than left to the destructor: the destructor flushes whatever is still
+            buffered and then has nowhere to report that the flush failed, so a disk filling on the
+            last few kilobytes would truncate the frame and still look like success.
+        */
+        file.close();
         if (!file) {
             throw std::runtime_error{"Failed while writing frame file: " + path.string()};
         }
@@ -271,6 +278,14 @@ namespace
 int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, uint32_t width, uint32_t height, uint32_t frame_count,
     const std::filesystem::path& output_directory)
 {
+    // An extent of zero, or one past what the device can make, is a valid-usage violation the driver
+    // may do anything with — and a release build has no validation layers to say so. Same guard as
+    // the swapchain already applies for a minimised window.
+    const uint32_t max_extent{device.physicalDevice().getProperties().limits.maxImageDimension2D};
+    if ((width == 0u) || (height == 0u) || (width > max_extent) || (height > max_extent)) {
+        throw std::runtime_error{"Recording size must be between 1x1 and " + std::to_string(max_extent) + "x" + std::to_string(max_extent) + "."};
+    }
+
     const vk::Extent2D extent{width, height};
     tracer.resize(extent);
     post_process.resize(extent, tracer.outputViews());
@@ -374,8 +389,26 @@ int main(int argc, char** argv)
 
         for (int index{1}; index < argc; ++index) {
             const std::string argument{argv[index]};
-            const auto value = [&](uint32_t fallback) {
-                return ((index + 1) < argc) ? static_cast<uint32_t>(std::stoul(argv[++index])) : fallback;
+            /*
+                std::from_chars rather than std::stoul: stoul is specified in terms of strtoul,
+                which negates a leading minus into the unsigned result rather than failing, so
+                "--frames -1" would quietly become 4294967295 frames. Parsing straight into the
+                uint32_t makes a negative, a non-number and an out-of-range value the same error.
+            */
+            const auto value = [&](uint32_t fallback) -> uint32_t {
+                if ((index + 1) >= argc) {
+                    return fallback;
+                }
+
+                const char* const text{argv[++index]};
+                const char* const text_end{text + std::strlen(text)};
+                uint32_t parsed{0u};
+                const std::from_chars_result result{std::from_chars(text, text_end, parsed)};
+                if ((result.ec != std::errc{}) || (result.ptr != text_end)) {
+                    throw std::runtime_error{argument + " needs a whole number, not \"" + std::string{text} + "\"."};
+                }
+
+                return parsed;
             };
 
             if (argument == "--record") {
