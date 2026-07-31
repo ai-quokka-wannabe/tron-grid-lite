@@ -13,11 +13,15 @@
 */
 
 /*
-    Phase 2 — the compute ray tracer.
+    Phase 4 — the compute ray tracer and its post-processing.
 
     Builds the world on the host, hands it to the GPU as a bounding volume hierarchy in storage
     buffers, and traces it in a compute shader. There is no rasteriser and no ray-tracing hardware:
     every pixel of the spectator window is a ray walked through the hierarchy by hand.
+
+    The tracer writes linear radiance. Turning that into a picture — the bloom pyramid, the ACES
+    tone curve, sRGB encoding — is the post-processing stage's job, and only then is the result
+    blitted to the swapchain.
 
     The same tracer will render creature sensors, at a far smaller resolution, once bodies exist.
     Nothing here is a game — the camera exists so that a human can watch and debug.
@@ -28,6 +32,7 @@
 #include "device.hpp"
 #include "geometry.hpp"
 #include "instance.hpp"
+#include "postprocess.hpp"
 #include "profiler.hpp"
 #include "spectator.hpp"
 #include "surface.hpp"
@@ -63,8 +68,23 @@ namespace
     */
     constexpr uint32_t MAX_BOUNCES{6u};
 
-    //! Linear scale applied before the tone curve.
+    //! Linear scale applied to the traced radiance before the tone curve.
     constexpr float EXPOSURE{1.0f};
+
+    //! Luminance below which a texel contributes nothing to the bloom.
+    constexpr float BLOOM_THRESHOLD{1.0f};
+
+    //! Multiplier on the bloom contribution. Zero skips the whole chain.
+    constexpr float BLOOM_STRENGTH{0.5f};
+
+    /*!
+        Radial darkening of the corners.
+
+        Enabled for the spectator window, where it reads as photographic. It must stay at zero for
+        creature sensors: a synthetic brightness gradient is exactly the kind of artefact an agent
+        would learn to exploit instead of learning the world.
+    */
+    constexpr float VIGNETTE_STRENGTH{0.35f};
 
     //! Material slots in the world's material table.
     enum MaterialSlot : uint32_t {
@@ -191,7 +211,7 @@ int main()
     LoggingLib::Logger logger;
 
     try {
-        logger.logInfo("TronGrid Lite - Phase 2 (a world for AI agents; this window is for the human observer only).");
+        logger.logInfo("TronGrid Lite - Phase 4 (a world for AI agents; this window is for the human observer only).");
 
         const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - spectator", .width = 1280, .height = 720, .resizable = true, .decorated = true};
         const std::unique_ptr<WindowLib::Window> window{WindowLib::create(window_config, logger)};
@@ -248,6 +268,9 @@ int main()
         Tracer tracer{device, bvh, makeMaterials(), MAX_FRAMES_IN_FLIGHT, "trace.spv", logger};
         tracer.resize(swapchain.extent());
 
+        PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, "bloom.spv", "postprocess.spv", logger};
+        post_process.resize(swapchain.extent(), tracer.outputViews());
+
         const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
         const vk::raii::CommandPool command_pool{device.get(), pool_info};
 
@@ -275,7 +298,7 @@ int main()
         Camera camera{MathLib::Vec3{0.0f, 6.0f, 40.0f}};
         SpectatorController spectator;
 
-        logger.logInfo("Phase 2 initialised on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
+        logger.logInfo("Phase 4 initialised on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
 
         uint32_t frame_index{0u};
         bool needs_recreate{false};
@@ -311,6 +334,7 @@ int main()
                 device.get().waitIdle();
                 swapchain.recreate(window->width(), window->height());
                 tracer.resize(swapchain.extent());
+                post_process.resize(swapchain.extent(), tracer.outputViews());
                 needs_recreate = false;
                 continue;
             }
@@ -355,8 +379,12 @@ int main()
             profiler.begin(command_buffer, frame_index, GpuPass::Frame);
 
             profiler.begin(command_buffer, frame_index, GpuPass::Trace);
-            tracer.record(command_buffer, frame_index, camera, MAX_BOUNCES, EXPOSURE);
+            tracer.record(command_buffer, frame_index, camera, MAX_BOUNCES);
             profiler.end(command_buffer, frame_index, GpuPass::Trace);
+
+            profiler.begin(command_buffer, frame_index, GpuPass::Post);
+            post_process.record(command_buffer, frame_index, BLOOM_THRESHOLD, BLOOM_STRENGTH, VIGNETTE_STRENGTH, EXPOSURE);
+            profiler.end(command_buffer, frame_index, GpuPass::Post);
 
             profiler.begin(command_buffer, frame_index, GpuPass::Present);
 
@@ -384,7 +412,7 @@ int main()
                 formats and would swap red and blue.
             */
             const std::array<vk::Offset3D, 2> source_bounds{
-                vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(tracer.extent().width), static_cast<int32_t>(tracer.extent().height), 1}};
+                vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(post_process.extent().width), static_cast<int32_t>(post_process.extent().height), 1}};
             const std::array<vk::Offset3D, 2> destination_bounds{
                 vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(swapchain.extent().width), static_cast<int32_t>(swapchain.extent().height), 1}};
 
@@ -393,7 +421,7 @@ int main()
                 .dstSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u},
                 .dstOffsets = destination_bounds};
 
-            command_buffer.blitImage2(vk::BlitImageInfo2{.srcImage = tracer.outputImage(frame_index),
+            command_buffer.blitImage2(vk::BlitImageInfo2{.srcImage = post_process.outputImage(frame_index),
                 .srcImageLayout = vk::ImageLayout::eTransferSrcOptimal,
                 .dstImage = swapchain.images()[image_index],
                 .dstImageLayout = vk::ImageLayout::eTransferDstOptimal,

@@ -11,7 +11,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 | 1     | Window, swapchain, frame loop | Fly through a wireframe grid       | **Done** |
 | 2     | BVH + primary rays in compute | Mirror world, first bounce         | **Done** |
 | 3     | Full ray tree                 | Reflections, emissives, glass      | **Done** |
-| 4     | Post processing               | Bloom, tonemapping                 | Pending |
+| 4     | Post processing               | Bloom, tonemapping                 | **Done** |
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | Pending |
 | 6     | AI players                    | Creature sensor interface plugs in | Pending |
 
@@ -58,11 +58,46 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Etape 6 — Phase 4: post processing
 
-- [ ] Render to an HDR target instead of tone mapping inside the tracer
-- [ ] Wire up the bloom chain that is already compiled
-- [ ] Move tone mapping to postprocess.slang and its fitted ACES curve
+- [x] Render to an HDR target instead of tone mapping inside the tracer
+- [x] Wire up the bloom chain that is already compiled
+- [x] Move tone mapping to postprocess.slang and its fitted ACES curve
+
+## Etape 7 — Phase 5: acoustic rays
+
+- [ ] Give surfaces something to be heard: sound sources in the world
+- [ ] Acoustic ray traversal through the same hierarchy
+- [ ] Energy histogram per listener, banded by octave
+- [ ] Fill `hearing_samples` in the agent interface
 
 ## Journal
+
+### 2026-07-30 (evening)
+
+- Etape 6 (Phase 4 milestone): **post processing.** The tracer now writes linear radiance into an
+  rgba16f target and stops there. Everything that turns radiance into a picture — the bloom
+  pyramid, the fitted ACES curve, sRGB encoding, the vignette — belongs to a new stage in
+  `src/postprocess.*`. Exposure moved there too, since how much radiance survives into a
+  displayable range is a property of the tone mapping rather than of the tracer.
+- Both post-processing shaders had been compiled and SPIR-V-validated on every build since the
+  original infrastructure port, and never once dispatched. Three agents read their contracts in
+  parallel before any host code was written, which caught two things that would each have cost an
+  afternoon: the tone mapping shader declared its output format `unknown`, which requires the
+  optional `shaderStorageImageWriteWithoutFormat` device feature — declaring `rgba8`, which is
+  what the host actually binds, removes the dependency entirely, and a renderer aimed at modest
+  hardware should not demand optional features. And the shader reads the bloom image
+  *unconditionally*, scaling it by the strength afterwards, so a strength of zero does not excuse
+  leaving that image undefined: an uninitialised half float multiplied by zero is zero only if it
+  was not a NaN. Mip 0 is cleared when bloom is off.
+- The bloom upsample was stepping visibly. It computed its source coordinate with
+  `thread_id.xy / 2`, so all four texels of a destination block sampled the same source position —
+  a tent filter followed by nearest-neighbour magnification. It now samples bilinearly, which is
+  the difference between a glow and a staircase, for 0.08 ms.
+- The three bloom entry points were being compiled into three separate modules containing a third
+  of the same code each. They share a descriptor set layout and a pipeline layout, so they are now
+  one module and three pipelines.
+- Measured at 1280x720 on the reference GTX 1650 Ti: 14.4 ms in total, of which the entire
+  post-processing chain — six mip levels down and back up, tone mapping, sRGB — is **0.31 ms**.
+  The ray tracing is still essentially the whole cost.
 
 ### 2026-07-30 (afternoon)
 

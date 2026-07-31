@@ -8,6 +8,7 @@ add_executable(${PROJECT_NAME}
     swapchain.cpp
     allocator.cpp
     tracer.cpp
+    postprocess.cpp
     geometry.cpp
     profiler.cpp
     spectator.cpp
@@ -84,19 +85,18 @@ endfunction()
 # Phase 2 compute ray tracer — the renderer proper.
 add_slang_shader(trace trace.slang traceMain)
 
-# Phase 4 post-processing — compiled and validated now so the shaders cannot rot before the
-# host side that dispatches them exists.
+# Phase 4 post-processing.
 add_slang_shader(postprocess postprocess.slang postprocessMain)
-add_slang_shader(bloom_extract bloom_downsample.slang bloomExtractMain)
-add_slang_shader(bloom_downsample bloom_downsample.slang bloomDownsampleMain)
-add_slang_shader(bloom_upsample bloom_downsample.slang bloomUpsampleMain)
+
+# All three bloom entry points go into one module. They share a descriptor set layout and a
+# pipeline layout, so the host creates three pipelines from a single shader module rather than
+# loading three files that would each contain a third of the same code.
+add_slang_shader(bloom bloom_downsample.slang bloomExtractMain bloomDownsampleMain bloomUpsampleMain)
 
 set(SHADER_MODULES
     trace
     postprocess
-    bloom_extract
-    bloom_downsample
-    bloom_upsample
+    bloom
 )
 
 set(SHADER_SPV_FILES "")
