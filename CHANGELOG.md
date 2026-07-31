@@ -53,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `src/tracer.hpp` — uploads the world to device-local storage buffers through a staging copy, owns
   one output image per frame in flight, and records the dispatch.
 
+- **Phase 3 milestone reached: the full ray tree.** Transmissive surfaces split the ray instead of
+  only reflecting it, with Snell refraction, total internal reflection and a throughput cutoff.
+  The tree is walked with an explicit stack because compute shaders have no recursion, and the
+  whole thing remains deterministic. Glass slabs and a glowing translucent column now stand in the
+  scene. 13.7 ms at 1280x720 on a GTX 1650 Ti.
+
 ### Changed
 
 - Unified the material model: `MaterialKind` is gone and `Material` gained a continuous
@@ -90,6 +96,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   this one's flat mirror floor. 124 lines of `src/geometry.*` went with them.
 
 ### Fixed
+
+- The swapchain acquire path abandoned the frame on `VK_SUBOPTIMAL_KHR`, leaving the acquire
+  semaphore signalled with nothing to consume it and reusing it on the next acquire, which
+  VUID-vkAcquireNextImageKHR-semaphore-01779 forbids. Resizing the window triggered it routinely.
+- `0 * inf = NaN` in the bounding box slab test made axis-parallel rays launched from exact grid
+  coordinates miss boxes they pass through. Both the host reference and the shader are fixed, and
+  a regression test covers it.
+- The descriptor pool is created with `eFreeDescriptorSet`, which `vk::raii::DescriptorSets`
+  requires when it frees its sets at shutdown.
+- The surface-area heuristic's leaf guard had its traversal term on the wrong side of the
+  comparison and could never fire.
 
 - Two genuine synchronisation defects that Vulkan's synchronisation validation caught, both
   present since Phase 1. The swapchain layout transition claimed `eTopOfPipe` as its source stage

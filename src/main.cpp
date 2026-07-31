@@ -55,12 +55,13 @@ namespace
     constexpr uint32_t MAX_FRAMES_IN_FLIGHT{2u};
 
     /*!
-        Ray segments per pixel.
+        Depth of the ray tree.
 
-        Two is the Phase 2 milestone: one primary ray, and one mirror bounce so that the neon
-        appears in the floor. Phase 3 raises this once transmission splits the ray tree.
+        A transmissive surface splits the ray, so this is how far a branch may descend rather than
+        how many rays are traced: glass needs at least four to show what is behind it through both
+        of its faces, and the reflection of that glass in the floor needs one more still.
     */
-    constexpr uint32_t MAX_BOUNCES{2u};
+    constexpr uint32_t MAX_BOUNCES{6u};
 
     //! Linear scale applied before the tone curve.
     constexpr float EXPOSURE{1.0f};
@@ -70,7 +71,9 @@ namespace
         MATERIAL_FLOOR = 0u, //!< The mirror the whole world stands on.
         MATERIAL_NEON_PRIMARY = 1u, //!< Cyan tubes along ordinary grid lines.
         MATERIAL_NEON_ACCENT = 2u, //!< Orange tubes along major grid lines.
-        MATERIAL_PILLAR = 3u //!< Standing blocks, bright enough to light the floor around them.
+        MATERIAL_PILLAR = 3u, //!< Standing blocks, bright enough to light the floor around them.
+        MATERIAL_GLASS = 4u, //!< Clear slabs that refract what is behind them.
+        MATERIAL_GLOWING_GLASS = 5u //!< A tube that emits and transmits at once.
     };
 
     //! Converts a mesh into hierarchy triangles, tagging each with the given material.
@@ -99,7 +102,7 @@ namespace
     */
     [[nodiscard]] std::vector<Material> makeMaterials()
     {
-        std::vector<Material> materials(4u);
+        std::vector<Material> materials(6u);
         materials[MATERIAL_FLOOR] = makeMirror(MathLib::Vec3{0.85f, 0.90f, 1.00f});
 
         /*
@@ -114,6 +117,15 @@ namespace
         materials[MATERIAL_NEON_PRIMARY] = makeEmissive(MathLib::Vec3{0.05f, 0.35f, 0.55f}, MathLib::Vec3{0.10f, 2.60f, 4.20f});
         materials[MATERIAL_NEON_ACCENT] = makeEmissive(MathLib::Vec3{0.55f, 0.25f, 0.05f}, MathLib::Vec3{4.40f, 1.60f, 0.15f});
         materials[MATERIAL_PILLAR] = makeEmissive(MathLib::Vec3{0.30f, 0.45f, 0.60f}, MathLib::Vec3{0.60f, 3.20f, 5.00f});
+
+        // Ordinary glass. The faint tint is what the transmitted ray picks up crossing it, so a
+        // thicker slab does not darken more than a thin one — Beer-Lambert absorption would need
+        // the path length through the medium, which is a later refinement.
+        materials[MATERIAL_GLASS] = makeGlass(MathLib::Vec3{0.80f, 0.92f, 0.95f}, 1.52f);
+
+        // The case the old three-type material model could not express at all: a tube that emits
+        // and transmits at the same time, which is what a neon tube with a glass envelope is.
+        materials[MATERIAL_GLOWING_GLASS] = makeGlowingGlass(MathLib::Vec3{0.90f, 0.70f, 0.95f}, MathLib::Vec3{1.60f, 0.30f, 2.20f}, 1.46f, 0.85f);
         return materials;
     }
 
@@ -144,6 +156,32 @@ namespace
         }
 
         return pillars;
+    }
+
+    /*!
+        Glass standing in front of the emissive pillars.
+
+        Placed deliberately between the camera's opening view and the lit geometry, because a
+        refracting surface is only legible when there is something recognisable behind it to bend.
+        Each slab is a solid box rather than a plane: a ray must cross two interfaces to pass
+        through, which is what makes the refraction visible instead of merely a tint.
+    */
+    [[nodiscard]] Mesh makeGlassSlabs()
+    {
+        Mesh slabs{};
+
+        // Broad upright panes, thin front to back, spread across the near view.
+        slabs.append(generateBox(MathLib::Vec3{-9.0f, 3.0f, 8.0f}, MathLib::Vec3{3.0f, 3.0f, 0.35f}));
+        slabs.append(generateBox(MathLib::Vec3{2.0f, 2.4f, 2.0f}, MathLib::Vec3{2.2f, 2.4f, 0.35f}));
+        slabs.append(generateBox(MathLib::Vec3{13.0f, 3.6f, 10.0f}, MathLib::Vec3{2.6f, 3.6f, 0.35f}));
+
+        return slabs;
+    }
+
+    //! A glowing translucent column: emission and transmission in the same surface.
+    [[nodiscard]] Mesh makeGlowingColumn()
+    {
+        return generateBox(MathLib::Vec3{-2.0f, 5.0f, -12.0f}, MathLib::Vec3{0.7f, 5.0f, 0.7f});
     }
 
 } // namespace
@@ -187,13 +225,18 @@ int main()
         const NeonGrid neon{generateGridFloorNeon(floor_config, tube_config)};
 
         const Mesh pillars{makePillars()};
+        const Mesh glass{makeGlassSlabs()};
+        const Mesh glowing_column{makeGlowingColumn()};
 
         std::vector<BvhLib::Triangle> world_triangles;
-        world_triangles.reserve(floor.triangleCount() + neon.primary.triangleCount() + neon.accent.triangleCount() + pillars.triangleCount());
+        world_triangles.reserve(floor.triangleCount() + neon.primary.triangleCount() + neon.accent.triangleCount() + pillars.triangleCount() + glass.triangleCount()
+            + glowing_column.triangleCount());
         appendTriangles(world_triangles, floor, MATERIAL_FLOOR);
         appendTriangles(world_triangles, neon.primary, MATERIAL_NEON_PRIMARY);
         appendTriangles(world_triangles, neon.accent, MATERIAL_NEON_ACCENT);
         appendTriangles(world_triangles, pillars, MATERIAL_PILLAR);
+        appendTriangles(world_triangles, glass, MATERIAL_GLASS);
+        appendTriangles(world_triangles, glowing_column, MATERIAL_GLOWING_GLASS);
 
         const std::chrono::steady_clock::time_point build_start{std::chrono::steady_clock::now()};
         const BvhLib::Bvh bvh{BvhLib::build(std::move(world_triangles))};
@@ -278,14 +321,25 @@ int main()
             }
 
             uint32_t image_index{0u};
+            bool acquire_suboptimal{false};
             try {
+                /*
+                    vulkan-hpp throws for an out-of-date swapchain and treats a suboptimal one as
+                    success, so eSuboptimalKHR is the only non-success code that can reach here —
+                    and it means the image WAS acquired and this semaphore will be signalled.
+
+                    Abandoning the frame at that point would leave it signalled with nothing to
+                    consume it, and the same semaphore is handed to the next acquire for this slot,
+                    which VUID-vkAcquireNextImageKHR-semaphore-01779 forbids. A suboptimal image is
+                    still a perfectly usable image, so it is rendered and presented as normal and
+                    the swapchain is rebuilt afterwards. Dragging a window edge produces this
+                    constantly, because the size is sampled once when the swapchain is built.
+                */
                 const auto [acquire_result, acquired_index] = swapchain.get().acquireNextImage(UINT64_MAX, *image_available[frame_index], nullptr);
-                if ((acquire_result == vk::Result::eErrorOutOfDateKHR) || (acquire_result == vk::Result::eSuboptimalKHR)) {
-                    needs_recreate = true;
-                    continue;
-                }
+                acquire_suboptimal = (acquire_result == vk::Result::eSuboptimalKHR);
                 image_index = acquired_index;
             } catch (const vk::OutOfDateKHRError&) {
+                // A failed acquire signals nothing, so the semaphore may be reused unchanged.
                 needs_recreate = true;
                 continue;
             }
@@ -380,7 +434,7 @@ int main()
                     .pSwapchains = &*swapchain.get(),
                     .pImageIndices = &image_index};
                 const vk::Result result{device.presentQueue().presentKHR(present)};
-                if (result == vk::Result::eSuboptimalKHR) {
+                if ((result == vk::Result::eSuboptimalKHR) || acquire_suboptimal) {
                     needs_recreate = true;
                 }
             } catch (const vk::OutOfDateKHRError&) {

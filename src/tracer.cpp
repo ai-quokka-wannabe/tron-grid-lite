@@ -140,8 +140,14 @@ Tracer::Tracer(const Device& device, const BvhLib::Bvh& bvh, const std::vector<M
     const std::array<vk::DescriptorPoolSize, 2> pool_sizes{vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = m_frames_in_flight},
         vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 3u * m_frames_in_flight}};
 
+    // eFreeDescriptorSet is required rather than optional: vk::raii::DescriptorSets frees its sets
+    // when destroyed, and vkFreeDescriptorSets against a pool created without this flag is a
+    // validation error at shutdown.
     m_descriptor_pool = vk::raii::DescriptorPool{m_device->get(),
-        vk::DescriptorPoolCreateInfo{.maxSets = m_frames_in_flight, .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()), .pPoolSizes = pool_sizes.data()}};
+        vk::DescriptorPoolCreateInfo{.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+            .maxSets = m_frames_in_flight,
+            .poolSizeCount = static_cast<uint32_t>(pool_sizes.size()),
+            .pPoolSizes = pool_sizes.data()}};
 
     const std::vector<vk::DescriptorSetLayout> layouts(m_frames_in_flight, *m_set_layout);
     m_descriptor_sets = vk::raii::DescriptorSets{

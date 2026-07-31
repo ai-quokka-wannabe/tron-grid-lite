@@ -250,8 +250,14 @@ namespace BvhLib
             node_bounds.grow(node.bounds_max);
             const float leaf_cost{node_bounds.surfaceArea() * static_cast<float>(count)};
 
-            if (best_cost >= (leaf_cost + (TRAVERSAL_COST * node_bounds.surfaceArea()))) {
-                // Splitting would cost more traversal than it saves in triangle tests.
+            /*
+                Splitting only pays for itself when the triangle tests it saves outweigh the extra
+                interior node a ray must descend through. The traversal term therefore belongs on
+                the split's side of the comparison: written with a plus, as it was, the test could
+                never fire, because a split's cost is bounded above by the leaf's cost whenever the
+                bin bounds are subsets of the node's own.
+            */
+            if ((best_cost + (TRAVERSAL_COST * node_bounds.surfaceArea())) >= leaf_cost) {
                 makeLeaf(node_index, first, count);
                 return;
             }
@@ -420,7 +426,22 @@ namespace BvhLib
             return nearest;
         }
 
-        const MathLib::Vec3 inverse_direction{1.0f / direction.x, 1.0f / direction.y, 1.0f / direction.z};
+        /*
+            A direction component of exactly zero would make its reciprocal infinite, and an origin
+            lying exactly on that slab's plane then computes 0 * inf, which is NaN. std::min and
+            std::max propagate a NaN in their first argument through every later reduction, so both
+            tmin and tmax become NaN, the entry test fails, and a box the ray demonstrably passes
+            through reports a miss.
+
+            That is not a theoretical case here: the floor is axis-aligned on a two-metre grid, so a
+            ray travelling straight down from an exact grid coordinate hits it precisely. Substituting
+            a tiny magnitude keeps the reciprocal finite and leaves the comparisons unchanged.
+        */
+        constexpr float TINY{1e-30f};
+        const auto safeInverse = [](float value) {
+            return 1.0f / ((value == 0.0f) ? TINY : value);
+        };
+        const MathLib::Vec3 inverse_direction{safeInverse(direction.x), safeInverse(direction.y), safeInverse(direction.z)};
 
         std::array<uint32_t, MAX_DEPTH> stack{};
         uint32_t stack_size{0u};

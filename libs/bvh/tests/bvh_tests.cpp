@@ -194,7 +194,9 @@ TEST_CASE(bvh_structure_is_sound_and_every_triangle_is_owned_exactly_once)
 TEST_CASE(bvh_never_exceeds_the_depth_the_shader_stack_is_sized_for)
 {
     // The compute shader traverses with a fixed-size stack of exactly MAX_DEPTH entries, so a
-    // deeper tree would overflow it silently. Coincident centroids are the pathological case.
+    // deeper tree would overflow it silently. These triangles all share a corner and grow steadily,
+    // which packs their centroids into a short span along one diagonal — awkward for a binned split
+    // without being degenerate. The identical-triangle case is covered separately below.
     std::vector<BvhLib::Triangle> triangles;
     triangles.reserve(4000u);
     for (uint32_t index{0u}; index < 4000u; ++index) {
@@ -314,6 +316,74 @@ TEST_CASE(bvh_handles_a_flat_sheet_of_coplanar_triangles)
     // Just past the edge of the sheet, which must miss.
     const BvhLib::Hit miss{BvhLib::intersect(bvh, MathLib::Vec3{-5.0f, 10.0f, 32.5f}, MathLib::Vec3{0.0f, -1.0f, 0.0f}, 100.0f)};
     TEST_CHECK(!miss.valid);
+}
+
+TEST_CASE(bvh_axis_parallel_rays_from_exact_grid_coordinates_still_hit)
+{
+    /*
+        The regression that matters most for this world.
+
+        A ray straight down has two direction components of exactly zero, so their reciprocals are
+        infinite. Launch it from a coordinate that lies exactly on a node boundary — which every
+        integer coordinate does, on an axis-aligned grid — and the slab test computes 0 * inf,
+        which is NaN. Both std::min and std::max propagate a NaN from their first argument, so the
+        box reports a miss and the floor develops invisible holes at precisely the tidiest
+        coordinates in the scene.
+    */
+    std::vector<BvhLib::Triangle> triangles;
+    triangles.reserve(64u * 64u * 2u);
+    for (uint32_t z{0u}; z < 64u; ++z) {
+        for (uint32_t x{0u}; x < 64u; ++x) {
+            const float x0{static_cast<float>(x)};
+            const float z0{static_cast<float>(z)};
+            const MathLib::Vec3 a{x0, 0.0f, z0};
+            const MathLib::Vec3 b{x0 + 1.0f, 0.0f, z0};
+            const MathLib::Vec3 c{x0, 0.0f, z0 + 1.0f};
+            const MathLib::Vec3 d{x0 + 1.0f, 0.0f, z0 + 1.0f};
+            triangles.push_back(makeTriangle(a, c, b));
+            triangles.push_back(makeTriangle(b, c, d));
+        }
+    }
+
+    const BvhLib::Bvh bvh{BvhLib::build(triangles)};
+
+    // Sweep across every whole-metre line rather than testing one, since which coordinates land on
+    // a node boundary depends on how the builder happened to partition.
+    uint32_t hits{0u};
+    uint32_t tested{0u};
+    for (uint32_t x{1u}; x < 64u; ++x) {
+        for (const float z : {8.5f, 32.5f, 55.5f}) {
+            const MathLib::Vec3 origin{static_cast<float>(x), 10.0f, z};
+            const BvhLib::Hit hit{BvhLib::intersect(bvh, origin, MathLib::Vec3{0.0f, -1.0f, 0.0f}, 100.0f)};
+            ++tested;
+            if (hit.valid && (std::abs(hit.distance - 10.0f) < 1e-3f)) {
+                ++hits;
+            }
+        }
+    }
+
+    TEST_CHECK_EQUAL(hits, tested);
+}
+
+TEST_CASE(bvh_handles_triangles_whose_centroids_all_coincide)
+{
+    // No split plane can separate identical centroids, so the builder must give up and make one
+    // large leaf rather than recursing until it hits the depth cap.
+    std::vector<BvhLib::Triangle> triangles;
+    triangles.reserve(4000u);
+    for (uint32_t index{0u}; index < 4000u; ++index) {
+        triangles.push_back(makeTriangle(MathLib::Vec3{0.0f, 0.0f, 0.0f}, MathLib::Vec3{1.0f, 0.0f, 0.0f}, MathLib::Vec3{0.0f, 1.0f, 0.0f}));
+    }
+
+    const BvhLib::Bvh bvh{BvhLib::build(triangles)};
+
+    TEST_CHECK_EQUAL(bvh.nodes.size(), static_cast<size_t>(1u));
+    TEST_CHECK(bvh.nodes[0].isLeaf());
+    TEST_CHECK_EQUAL(bvh.depth(), 1u);
+
+    const BvhLib::Hit hit{BvhLib::intersect(bvh, MathLib::Vec3{0.2f, 0.2f, 5.0f}, MathLib::Vec3{0.0f, 0.0f, -1.0f}, 100.0f)};
+    TEST_CHECK(hit.valid);
+    TEST_CHECK(std::abs(hit.distance - 5.0f) < 1e-3f);
 }
 
 TEST_CASE(bvh_material_indices_survive_the_reordering)

@@ -10,7 +10,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 | 0     | Prove the toolchain           | Triangle on screen                 | **Done** |
 | 1     | Window, swapchain, frame loop | Fly through a wireframe grid       | **Done** |
 | 2     | BVH + primary rays in compute | Mirror world, first bounce         | **Done** |
-| 3     | Full ray tree                 | Reflections, emissives, glass      | Pending |
+| 3     | Full ray tree                 | Reflections, emissives, glass      | **Done** |
 | 4     | Post processing               | Bloom, tonemapping                 | Pending |
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | Pending |
 | 6     | AI players                    | Creature sensor interface plugs in | Pending |
@@ -51,12 +51,60 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Etape 5 — Phase 3: the full ray tree
 
-- [ ] Transmission: split the ray at a surface rather than reflecting only
-- [ ] Snell refraction with total internal reflection
-- [ ] Raise the bounce limit and add a throughput cutoff
-- [ ] Glass in the test scene
+- [x] Transmission: split the ray at a surface rather than reflecting only
+- [x] Snell refraction with total internal reflection
+- [x] Raise the bounce limit and add a throughput cutoff
+- [x] Glass in the test scene
+
+## Etape 6 — Phase 4: post processing
+
+- [ ] Render to an HDR target instead of tone mapping inside the tracer
+- [ ] Wire up the bloom chain that is already compiled
+- [ ] Move tone mapping to postprocess.slang and its fitted ACES curve
 
 ## Journal
+
+### 2026-07-30 (afternoon)
+
+- Etape 5 (Phase 3 milestone): **the full ray tree.** A surface now splits the ray rather than only
+  reflecting it. Recursion is unavailable in a compute shader, so the tree is walked with an
+  explicit stack: the reflected branch is followed immediately and the refracted one is set aside.
+  Snell refraction, total internal reflection, and a throughput cutoff all arrive with it. Still
+  entirely deterministic — no sampling anywhere, so still no denoiser.
+- Measured the two cost axes properly, and the first attempt was wrong in an instructive way. A
+  sweep run from the Bash shell reported that tree depth was free, which was an artefact: that
+  shell has no MSVC environment, so every C++ compile failed while the shader kept rebuilding, and
+  the build output had been redirected to /dev/null. Only the shader-side parameter was really
+  changing. Repeated with the environment set, both axes cost roughly a doubling across their
+  range and the two multiply. The table now in trace.slang is the corrected data.
+- Settled on a stack of three and a depth of six: 13.7 ms at 1280x720 on the reference GTX 1650 Ti,
+  inside a sixty-frame budget. Worth keeping in proportion — the spectator window is the most
+  expensive consumer this renderer will ever have, and a creature sensor is a fourteenth of it at
+  most.
+
+**Pre-merge review of Phase 2, run before this work landed.** Five reviewers across separate
+dimensions, every finding then attacked by a skeptic instructed to refute it: sixteen raised, eight
+verified, three survived. All three were real.
+
+- A descriptor pool created without `eFreeDescriptorSet` while `vk::raii::DescriptorSets` frees its
+  sets on destruction — a validation error on every clean shutdown. Found independently by running
+  the thing; fixed.
+- The acquire path treated `eSuboptimalKHR` as a reason to abandon the frame. But vulkan-hpp throws
+  for out-of-date and returns suboptimal as success, so that branch fired only when the image *had*
+  been acquired and its semaphore *would* be signalled — leaving it signalled with nothing to
+  consume it, and handing it to the next acquire in violation of
+  VUID-vkAcquireNextImageKHR-semaphore-01779. Dragging a window edge produces this constantly. A
+  suboptimal image is a usable image, so it is now rendered and presented and the swapchain rebuilt
+  afterwards.
+- `0 * inf = NaN` in the slab test. A ray straight down has two zero direction components, so their
+  reciprocals are infinite; launch it from a coordinate lying exactly on a node boundary — which
+  every integer coordinate does on an axis-aligned grid — and the multiplication is NaN, which both
+  `std::min` and `std::max` propagate, turning a box the ray passes through into a miss. The
+  reviewer reproduced it numerically: 49 of 641 swept positions, every one an exact integer. The
+  new regression test was checked by reverting the fix and confirming it fails.
+- Two honesty fixes the review turned up without them being defects: the surface-area-heuristic's
+  leaf guard had its traversal term on the wrong side of the comparison and could never fire, and
+  the depth-cap test's comment described an input it does not actually build.
 
 ### 2026-07-30
 
