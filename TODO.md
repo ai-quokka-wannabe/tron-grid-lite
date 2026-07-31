@@ -120,6 +120,27 @@ criteria are ticked when satisfied; the Journal records what actually happened.
       checkout under a directory containing one broke the encode. The frames directory is now passed
       as the working directory instead of being baked into the pattern. Re-recording afterwards
       produced a byte-identical GIF, which is the check that the change altered nothing else.
+- CodeQL raised one high-severity alert, `cpp/path-injection`, for `--output` reaching
+  `std::ofstream`. Dismissed as a false positive. The dataflow it reports is real; the security
+  conclusion is not. The query treats `argv` as attacker-controlled, which is correct for setuid
+  binaries, CGI programs and services, and wrong for a desktop renderer the user launches
+  themselves: the only party who can set `--output` is the person who already owns the process and
+  could do the same with a shell redirect. The write is not even a general primitive, since the
+  filename is always `frame_%05d.ppm` from a loop counter and the contents are a render of a fixed
+  scene. It fires only because code scanning runs with the `remote_and_local` threat model, whose
+  whole purpose is to treat the command line as tainted.
+- Two tempting responses to that alert were both rejected. Validating the path would restrict the
+  only legitimate user — `--output D:/renders/tonight` is perfectly reasonable — and probably
+  would not clear the alert anyway, because the query recognises only particular
+  normalise-plus-contain barriers rather than hand-rolled checks. A `query-filters` exclusion would
+  have been worse: there is no CodeQL workflow in this repository at all, scanning runs under
+  GitHub's default setup, which never reads that file, so the change would have been silently
+  inert. Making it work would mean owning a hand-maintained workflow forever and disarming the
+  query repo-wide.
+- **Revisit this in Phase 6.** Once the creature roster resolves brain library paths out of a
+  config file (`docs/AGENT_INTERFACE.md`), the path stops coming from the command line and starts
+  coming from a file that a downloaded creature pack could write. At that point the query is right
+  and confinement becomes a real requirement rather than theatre.
 
 ### 2026-07-30 (evening)
 
