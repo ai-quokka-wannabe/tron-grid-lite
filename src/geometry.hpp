@@ -25,9 +25,8 @@
     Procedural geometry generators.
 
     Every generator here returns plain standard-library containers and this header deliberately
-    pulls in no Vulkan header at all — geometry is produced on the CPU long before anybody decides
-    whether it becomes a vertex buffer for the rasteriser or a triangle soup for the hand-built BVH
-    the compute ray tracer walks.
+    pulls in no Vulkan header at all — geometry is produced on the CPU, and only later becomes the
+    triangle soup that the hand-built bounding volume hierarchy indexes for the compute ray tracer.
 
     All generators emit per-face (flat-shaded) vertices: three distinct vertices per triangle
     sharing one face normal, with no shared-vertex indexing. That is what the angular look wants
@@ -39,20 +38,22 @@
 */
 
 /*!
-    A single vertex, exactly as the graphics pipeline and the triangle storage buffer see it.
+    A single vertex of a generated mesh.
 
-    The layout is fixed and must not be reordered — it is mirrored by the vertex input declaration
-    at the top of `triangle.slang`:
+    | Offset | Size | Member     |
+    |-------:|-----:|------------|
+    |      0 |   12 | `position` |
+    |     12 |   12 | `normal`   |
+    |     24 |    8 | `uv`       |
 
-    | Offset | Size | Member     | Slang equivalent |
-    |-------:|-----:|------------|------------------|
-    |      0 |   12 | `position` | `float3`         |
-    |     12 |   12 | `normal`   | `float3`         |
-    |     24 |    8 | `uv`       | `float2`         |
+    Thirty-two bytes with no padding anywhere. Plain `std::array<float, N>` members are used rather
+    than `MathLib::Vec3` so that the struct stays trivially copyable, aggregate-initialisable, and
+    obviously free of any hidden alignment.
 
-    Total size and vertex-buffer stride are therefore 32 bytes with no padding anywhere. Plain
-    `std::array<float, N>` members are used rather than `MathLib::Vec3` so that the struct stays
-    trivially copyable, aggregate-initialisable, and obviously free of any hidden alignment.
+    Only `position` reaches the GPU today: the tracer derives its shading normal from the triangle's
+    own edges, and nothing samples a texture. The other two members are what the generators
+    naturally produce while building faces, and they are kept because a mesh without them is not a
+    mesh anybody else can reuse.
 */
 struct Vertex {
     std::array<float, 3> position{}; //!< Object-space position, in metres.
@@ -60,7 +61,7 @@ struct Vertex {
     std::array<float, 2> uv{}; //!< Parametric surface coordinates. See each generator for what it puts here.
 };
 
-static_assert(sizeof(Vertex) == 32u, "Vertex must be exactly 32 bytes — the vertex buffer stride declared in triangle.slang.");
+static_assert(sizeof(Vertex) == 32u, "Vertex must be exactly 32 bytes with no padding.");
 static_assert(alignof(Vertex) == 4u, "Vertex must be 4-byte aligned so the array is tightly packed.");
 static_assert(offsetof(Vertex, position) == 0u, "Vertex::position must sit at offset 0.");
 static_assert(offsetof(Vertex, normal) == 12u, "Vertex::normal must sit at offset 12.");

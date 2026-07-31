@@ -7,6 +7,7 @@ add_executable(${PROJECT_NAME}
     surface.cpp
     swapchain.cpp
     allocator.cpp
+    tracer.cpp
     geometry.cpp
     profiler.cpp
     spectator.cpp
@@ -38,6 +39,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     signals
     logging
     math
+    bvh
     ${CMAKE_DL_LIBS}
 )
 
@@ -79,8 +81,8 @@ function(add_slang_shader name source)
     )
 endfunction()
 
-# Phase 0 rasterised triangle — proves the toolchain end to end.
-add_slang_shader(triangle triangle.slang vertMain fragMain)
+# Phase 2 compute ray tracer — the renderer proper.
+add_slang_shader(trace trace.slang traceMain)
 
 # Phase 4 post-processing — compiled and validated now so the shaders cannot rot before the
 # host side that dispatches them exists.
@@ -90,7 +92,7 @@ add_slang_shader(bloom_downsample bloom_downsample.slang bloomDownsampleMain)
 add_slang_shader(bloom_upsample bloom_downsample.slang bloomUpsampleMain)
 
 set(SHADER_MODULES
-    triangle
+    trace
     postprocess
     bloom_extract
     bloom_downsample

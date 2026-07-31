@@ -9,7 +9,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 |-------|-------------------------------|------------------------------------|--------|
 | 0     | Prove the toolchain           | Triangle on screen                 | **Done** |
 | 1     | Window, swapchain, frame loop | Fly through a wireframe grid       | **Done** |
-| 2     | BVH + primary rays in compute | Mirror world, first bounce         | Pending |
+| 2     | BVH + primary rays in compute | Mirror world, first bounce         | **Done** |
 | 3     | Full ray tree                 | Reflections, emissives, glass      | Pending |
 | 4     | Post processing               | Bloom, tonemapping                 | Pending |
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | Pending |
@@ -43,13 +43,47 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Etape 4 — Phase 2: the compute ray tracer
 
-- [ ] Triangle and material storage buffers
-- [ ] BVH builder on the host, uploaded as a storage buffer
-- [ ] Compute traversal kernel: primary rays only, mirror surfaces
-- [ ] Write results into the swapchain image (or an offscreen image plus blit when the
-      swapchain does not support storage writes)
+- [x] Triangle and material storage buffers
+- [x] BVH builder on the host, uploaded as a storage buffer
+- [x] Compute traversal kernel: primary rays only, mirror surfaces
+- [x] Write results into an offscreen image, blitted into the swapchain
+- [x] Retire the rasteriser: no graphics pipeline, no depth buffer, no vertex buffer
+
+## Etape 5 — Phase 3: the full ray tree
+
+- [ ] Transmission: split the ray at a surface rather than reflecting only
+- [ ] Snell refraction with total internal reflection
+- [ ] Raise the bounce limit and add a throughput cutoff
+- [ ] Glass in the test scene
 
 ## Journal
+
+### 2026-07-30
+
+- Etape 4 (Phase 2 milestone): **the world is ray traced.** The rasteriser is gone — no graphics
+  pipeline, no depth buffer, no vertex buffer, and `triangle.slang` deleted with them. Every pixel
+  is now a ray walked through a hand-built hierarchy in a compute shader.
+- `libs/bvh` holds the builder: a binned surface-area-heuristic split over twelve buckets, with a
+  depth cap that exists because the shader traverses with a fixed-size stack. The cap and the
+  stack are the same constant, and a test builds pathological geometry to prove the tree never
+  exceeds it. Eleven tests in total; the important one traces six thousand random rays and
+  requires the accelerated traversal to agree with a brute-force sweep on every single one.
+- Two bugs worth recording. The traversal originally used a negative sentinel for a missed
+  bounding box, which sorted a missed child *in front of* a hit one and silently discarded the
+  hit; it is positive infinity now, in both the host and the shader. And a sanity check on the
+  brute-force comparison — that at least a twentieth of the rays actually strike something —
+  failed on the first run, revealing that the test cloud was so sparse the comparison was
+  agreeing on four thousand mutual misses and proving nothing.
+- GPU-assisted validation earned its keep: it reported an out-of-bounds read on the material
+  buffer, which turned out to be the shader still declaring the acoustic fields that the ABI
+  de-bloating had removed from the host struct. The sizes are now asserted on the C++ side.
+- Measured on the reference GTX 1650 Ti at 1280x720: **4.0 ms per frame, around 250 fps**, of
+  which the trace is 3.97 ms and the blit 0.04 ms. The claim that this renderer runs comfortably
+  on modest hardware is no longer a claim.
+- Neon tubes are now thin (25 mm) and sit a centimetre off the floor. Phase 1 needed them wide and
+  lifted to survive a depth buffer and sub-pixel rasterisation; the tracer has neither problem.
+- Added standing pillars to the scene, because a flat world has nothing to reflect: a tube lying a
+  centimetre above a mirror casts a reflection a centimetre below it, which merges with the tube.
 
 ### 2026-07-19
 
