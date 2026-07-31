@@ -108,6 +108,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The CI cache cleanup never deleted CodeQL overlay-base caches: any key outside the two families
+  it knew about became a group of one, and the keep-newest-delete-rest loop cannot fire on a group
+  of one. Fifteen dead caches (~260 MB) had accumulated, one per push to main. The cleanup script
+  now knows the CodeQL family, reports any unknown family loudly instead of silently keeping it
+  forever, and the drifted inline copy of the logic in `ci_main.yml` is gone — both the every-push
+  step and the manual workflow now run the same module.
 - The swapchain acquire path abandoned the frame on `VK_SUBOPTIMAL_KHR`, leaving the acquire
   semaphore signalled with nothing to consume it and reusing it on the next acquire, which
   VUID-vkAcquireNextImageKHR-semaphore-01779 forbids. Resizing the window triggered it routinely.

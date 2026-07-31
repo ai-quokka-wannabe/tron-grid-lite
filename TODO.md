@@ -141,6 +141,24 @@ criteria are ticked when satisfied; the Journal records what actually happened.
   config file (`docs/AGENT_INTERFACE.md`), the path stops coming from the command line and starts
   coming from a file that a downloaded creature pack could write. At that point the query is right
   and confinement becomes a real requirement rather than theatre.
+- Merging the first Python file taught code scanning a new language, and it promptly raised four
+  more path-injection alerts against `tools/record_flyby.py` (plus one command-line-injection).
+  All dismissed for the reason above: the flagged values are `--executable`, `--gif` and `--mp4`,
+  typed by the operator into a script that runs as the operator. Expect a repeat whenever a new
+  language first lands on main — default setup adds analysers automatically.
+- The CI cache cleanup had never deleted a single CodeQL cache. Its grouping used the whole key as
+  the group name for any family it did not recognise, every CodeQL overlay-base key is unique
+  (commit SHA, run ID and attempt are baked in), and a group of one has nothing older than its
+  newest member to delete. Fifteen caches, about 260 MB, one more per push. The fix names the
+  family and groups it by its stable prefix — cache version, config hash and language, deliberately
+  excluding the CLI version so a CodeQL upgrade does not leave a permanent orphan; the corpus held
+  nine dead 2.26.1 entries proving the point. Unknown families are now reported as a workflow
+  warning instead of being silently kept, since silence is exactly how this went unnoticed. The
+  second copy of the cleanup logic inlined in `ci_main.yml` — which had already drifted (no
+  pagination past 100 caches, no dry run) — is deleted in favour of the shared script both
+  workflows now `require()`. Verified by running the real module against the repository's real
+  cache list with the API mocked: 16 CodeQL caches collapse to one family, keep-newest holds the
+  current HEAD's base, both Vulkan SDK caches and the npm cache survive untouched.
 
 ### 2026-07-30 (evening)
 
