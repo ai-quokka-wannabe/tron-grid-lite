@@ -28,6 +28,7 @@
 */
 
 #include "camera.hpp"
+#include "cinematic.hpp"
 #include "components.hpp"
 #include "device.hpp"
 #include "geometry.hpp"
@@ -43,12 +44,17 @@
 #include <math/vector.hpp>
 #include <window/window.hpp>
 #include <window/window_event.hpp>
+#include <algorithm>
 #include <array>
+#include <charconv>
 #include <chrono>
+#include <cstring>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <vector>
@@ -204,14 +210,219 @@ namespace
         return generateBox(MathLib::Vec3{-2.0f, 5.0f, -12.0f}, MathLib::Vec3{0.7f, 5.0f, 0.7f});
     }
 
+    /*!
+        Writes one frame to a binary PPM file.
+
+        PPM because it needs no library at all: a nine-byte header and then the pixels. This
+        project writes its own subsystems rather than taking dependencies, and an image format the
+        encoder in tools/ can read is not worth making an exception for. The alpha channel is
+        dropped on the way out.
+    */
+    void writePpm(const std::filesystem::path& path, const uint8_t* rgba, uint32_t width, uint32_t height)
+    {
+        std::ofstream file{path, std::ios::binary};
+        if (!file.is_open()) {
+            throw std::runtime_error{"Cannot open frame file for writing: " + path.string()};
+        }
+
+        file << "P6\n" << width << " " << height << "\n255\n";
+
+        std::vector<uint8_t> row(static_cast<size_t>(width) * 3u);
+        for (uint32_t y{0u}; y < height; ++y) {
+            const uint8_t* source{rgba + (static_cast<size_t>(y) * width * 4u)};
+            for (uint32_t x{0u}; x < width; ++x) {
+                row[(static_cast<size_t>(x) * 3u) + 0u] = source[(static_cast<size_t>(x) * 4u) + 0u];
+                row[(static_cast<size_t>(x) * 3u) + 1u] = source[(static_cast<size_t>(x) * 4u) + 1u];
+                row[(static_cast<size_t>(x) * 3u) + 2u] = source[(static_cast<size_t>(x) * 4u) + 2u];
+            }
+            file.write(reinterpret_cast<const char*>(row.data()), static_cast<std::streamsize>(row.size()));
+        }
+
+        /*
+            Closed here rather than left to the destructor: the destructor flushes whatever is still
+            buffered and then has nowhere to report that the flush failed, so a disk filling on the
+            last few kilobytes would truncate the frame and still look like success.
+        */
+        file.close();
+        if (!file) {
+            throw std::runtime_error{"Failed while writing frame file: " + path.string()};
+        }
+    }
+
+    //! Finds a host-visible memory type for the frame readback buffer.
+    [[nodiscard]] uint32_t findHostVisibleMemoryType(const vk::raii::PhysicalDevice& physical_device, uint32_t type_bits)
+    {
+        const vk::PhysicalDeviceMemoryProperties properties{physical_device.getMemoryProperties()};
+        const vk::MemoryPropertyFlags required{vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent};
+        for (uint32_t index{0u}; index < properties.memoryTypeCount; ++index) {
+            if (((type_bits & (1u << index)) != 0u) && ((properties.memoryTypes[index].propertyFlags & required) == required)) {
+                return index;
+            }
+        }
+        throw std::runtime_error{"No host-visible memory type for the frame readback buffer."};
+    }
+
 } // namespace
 
-int main()
+/*!
+    Renders a closed camera loop to a sequence of image files and returns.
+
+    Deliberately unlike the interactive loop: no swapchain, no presentation, no frames in flight
+    and no attempt at real time. Each frame is submitted on its own and waited on before the next,
+    which makes the output identical on every run and on every machine — a recording that flickers
+    differently each time it is made is not a recording.
+
+    The readback here is the same operation a creature sensor will need in Phase 6: render into an
+    image the size of an eye, then copy it back so that something outside the GPU can read it.
+*/
+int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, uint32_t width, uint32_t height, uint32_t frame_count,
+    const std::filesystem::path& output_directory)
+{
+    // An extent of zero, or one past what the device can make, is a valid-usage violation the driver
+    // may do anything with — and a release build has no validation layers to say so. Same guard as
+    // the swapchain already applies for a minimised window.
+    const uint32_t max_extent{device.physicalDevice().getProperties().limits.maxImageDimension2D};
+    if ((width == 0u) || (height == 0u) || (width > max_extent) || (height > max_extent)) {
+        throw std::runtime_error{"Recording size must be between 1x1 and " + std::to_string(max_extent) + "x" + std::to_string(max_extent) + "."};
+    }
+
+    const vk::Extent2D extent{width, height};
+    tracer.resize(extent);
+    post_process.resize(extent, tracer.outputViews());
+
+    std::filesystem::create_directories(output_directory);
+
+    const vk::DeviceSize frame_bytes{static_cast<vk::DeviceSize>(width) * height * 4u};
+
+    const vk::raii::Buffer readback{
+        device.get(), vk::BufferCreateInfo{.size = frame_bytes, .usage = vk::BufferUsageFlagBits::eTransferDst, .sharingMode = vk::SharingMode::eExclusive}};
+    const vk::MemoryRequirements requirements{readback.getMemoryRequirements()};
+    const vk::raii::DeviceMemory readback_memory{device.get(),
+        vk::MemoryAllocateInfo{.allocationSize = requirements.size, .memoryTypeIndex = findHostVisibleMemoryType(device.physicalDevice(), requirements.memoryTypeBits)}};
+    readback.bindMemory(*readback_memory, 0u);
+
+    const vk::raii::CommandPool command_pool{
+        device.get(), vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()}};
+    vk::raii::CommandBuffers command_buffers{
+        device.get(), vk::CommandBufferAllocateInfo{.commandPool = *command_pool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1u}};
+    const vk::raii::CommandBuffer& command_buffer{command_buffers.front()};
+
+    const vk::raii::Fence fence{device.get(), vk::FenceCreateInfo{}};
+
+    const CinematicPath path;
+    Camera camera{};
+
+    logger.logInfo("Recording " + std::to_string(frame_count) + " frames at " + std::to_string(width) + "x" + std::to_string(height) + " into "
+        + output_directory.string() + ".");
+
+    for (uint32_t frame{0u}; frame < frame_count; ++frame) {
+        // The loop closes on itself, so the last frame must stop just short of the first rather
+        // than repeating it — dividing by the count, not by the count less one, does that.
+        path.apply(camera, static_cast<float>(frame) / static_cast<float>(frame_count));
+
+        command_buffer.reset();
+        command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+        tracer.record(command_buffer, 0u, camera, MAX_BOUNCES);
+        post_process.record(command_buffer, 0u, BLOOM_THRESHOLD, BLOOM_STRENGTH, VIGNETTE_STRENGTH, EXPOSURE);
+
+        // The post-processing stage leaves its output in eTransferSrcOptimal, which is exactly what
+        // a copy to a buffer wants.
+        const vk::BufferImageCopy2 region{.bufferOffset = 0u,
+            .bufferRowLength = 0u,
+            .bufferImageHeight = 0u,
+            .imageSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u},
+            .imageOffset = vk::Offset3D{0, 0, 0},
+            .imageExtent = vk::Extent3D{width, height, 1u}};
+        command_buffer.copyImageToBuffer2(vk::CopyImageToBufferInfo2{.srcImage = post_process.outputImage(0u),
+            .srcImageLayout = vk::ImageLayout::eTransferSrcOptimal,
+            .dstBuffer = *readback,
+            .regionCount = 1u,
+            .pRegions = &region});
+
+        const vk::MemoryBarrier2 copy_visible{.srcStageMask = vk::PipelineStageFlagBits2::eCopy,
+            .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .dstStageMask = vk::PipelineStageFlagBits2::eHost,
+            .dstAccessMask = vk::AccessFlagBits2::eHostRead};
+        command_buffer.pipelineBarrier2(vk::DependencyInfo{.memoryBarrierCount = 1u, .pMemoryBarriers = &copy_visible});
+
+        command_buffer.end();
+
+        device.get().resetFences({*fence});
+        device.graphicsQueue().submit({vk::SubmitInfo{.commandBufferCount = 1u, .pCommandBuffers = &*command_buffer}}, *fence);
+        while (device.get().waitForFences({*fence}, vk::True, UINT64_MAX) == vk::Result::eTimeout) {
+            // Retry — a timeout here is not an error.
+        }
+
+        const void* mapped{readback_memory.mapMemory(0u, frame_bytes)};
+        std::string name{std::to_string(frame)};
+        name.insert(0u, 5u - std::min<size_t>(name.size(), 5u), '0');
+        writePpm(output_directory / ("frame_" + name + ".ppm"), static_cast<const uint8_t*>(mapped), width, height);
+        readback_memory.unmapMemory();
+
+        if (((frame + 1u) % 25u) == 0u) {
+            logger.logInfo("Recorded " + std::to_string(frame + 1u) + " of " + std::to_string(frame_count) + " frames.");
+        }
+    }
+
+    device.get().waitIdle();
+    logger.logInfo("Recording complete.");
+    return EXIT_SUCCESS;
+}
+
+int main(int argc, char** argv)
 {
     LoggingLib::Logger logger;
 
     try {
         logger.logInfo("TronGrid Lite - Phase 4 (a world for AI agents; this window is for the human observer only).");
+
+        /*
+            Recording mode. The window is still created because the device picks its present queue
+            against a surface, but nothing is ever presented to it.
+        */
+        bool recording{false};
+        uint32_t record_width{1280u};
+        uint32_t record_height{720u};
+        uint32_t record_frames{240u};
+        std::filesystem::path record_directory{"frames"};
+
+        for (int index{1}; index < argc; ++index) {
+            const std::string argument{argv[index]};
+            /*
+                std::from_chars rather than std::stoul: stoul is specified in terms of strtoul,
+                which negates a leading minus into the unsigned result rather than failing, so
+                "--frames -1" would quietly become 4294967295 frames. Parsing straight into the
+                uint32_t makes a negative, a non-number and an out-of-range value the same error.
+            */
+            const auto value = [&](uint32_t fallback) -> uint32_t {
+                if ((index + 1) >= argc) {
+                    return fallback;
+                }
+
+                const char* const text{argv[++index]};
+                const char* const text_end{text + std::strlen(text)};
+                uint32_t parsed{0u};
+                const std::from_chars_result result{std::from_chars(text, text_end, parsed)};
+                if ((result.ec != std::errc{}) || (result.ptr != text_end)) {
+                    throw std::runtime_error{argument + " needs a whole number, not \"" + std::string{text} + "\"."};
+                }
+
+                return parsed;
+            };
+
+            if (argument == "--record") {
+                recording = true;
+            } else if (argument == "--width") {
+                record_width = value(record_width);
+            } else if (argument == "--height") {
+                record_height = value(record_height);
+            } else if (argument == "--frames") {
+                record_frames = value(record_frames);
+            } else if ((argument == "--output") && ((index + 1) < argc)) {
+                record_directory = argv[++index];
+            }
+        }
 
         const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - spectator", .width = 1280, .height = 720, .resizable = true, .decorated = true};
         const std::unique_ptr<WindowLib::Window> window{WindowLib::create(window_config, logger)};
@@ -270,6 +481,10 @@ int main()
 
         PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, "bloom.spv", "postprocess.spv", logger};
         post_process.resize(swapchain.extent(), tracer.outputViews());
+
+        if (recording) {
+            return recordCinematic(device, tracer, post_process, logger, record_width, record_height, record_frames, record_directory);
+        }
 
         const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
         const vk::raii::CommandPool command_pool{device.get(), pool_info};

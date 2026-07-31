@@ -1,0 +1,7 @@
+Create the virtual environment for the tools in this directory:
+
+    python -m venv tools/.venv
+
+Everything inside it is ignored by git except this file, which exists so that the
+directory is part of the checkout and the convention is obvious without having to
+read a document to discover it.

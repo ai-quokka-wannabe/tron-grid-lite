@@ -71,6 +71,77 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Journal
 
+### 2026-07-31
+
+- Added a recording mode and `tools/record_flyby.py`, which flies a closed camera path and encodes
+  the result as the looping animation now at the top of the README.
+- The camera path is periodic by construction: every oscillation completes a whole number of cycles
+  over the loop, and the last frame stops one step short of the first rather than repeating it, so
+  the clip has no seam.
+- Recording deliberately does not use the swapchain, frames in flight or real time. Each frame is
+  submitted alone and waited on, which makes the output identical on every run — a recording that
+  flickers differently each time it is made is not a recording. The readback it needs is the same
+  operation a creature sensor will need in Phase 6.
+- Frames are written as binary PPM, which needs no library at all. The encoder in `tools/` reads
+  them and ffmpeg does the rest.
+- One real defect surfaced from actually running it: the post-processing stage ended by declaring
+  `eBlit` as the destination stage of its final barrier, because the only consumer at the time was
+  the swapchain blit. A copy is a different pipeline stage, so recording read the image unordered
+  against that transition and synchronisation validation reported a read-after-write hazard. The
+  stage has no business assuming how its output is consumed, and now says `eAllTransfer`.
+- GIF encoding is two-pass against a single global palette computed across the whole clip. A
+  per-frame palette makes a mostly black image shimmer, which is the one artefact nobody misses.
+  Frame count dominates the file size, then width, then palette size; dithering costs size rather
+  than saving it, because it adds noise the compression cannot pack.
+- The first cut moved too much. It has been retuned to be slower, calmer and stuttery: the wobble
+  amplitudes are down by roughly two thirds, the height and radius modulation are gentler, and the
+  clip now runs 84 frames at 12 rather than 100 at 20. The three changes are not independent, which
+  is the pleasant part. A low frame rate lengthens the clip while *reducing* the frame count, since
+  duration is frames divided by rate; and GIF stores each frame as only the pixels that changed
+  since the last, so a calm camera over a mostly black world leaves most of the image untouched
+  between frames. Slower, calmer and smaller all at once: 5.1 MiB over five seconds became 4.2 MiB
+  over seven.
+- `images/` sits at the repository root, and `tools/` carries its own README, a requirements file
+  that is honestly empty, and a `.venv` placeholder so the convention is visible without reading a
+  document to discover it.
+- A security review of the recording code turned up four small defects, none of them a
+  vulnerability and all of them the local user's own input coming back at them:
+    - `writePpm` left the stream to close itself, so the destructor flushed the tail of the buffer
+      *after* the error check had already passed. A disk filling in the last few kilobytes of the
+      last frame wrote a truncated PPM and reported success. It now closes explicitly and checks.
+    - `std::stoul` is specified in terms of `strtoul`, which negates a leading minus into the
+      unsigned result rather than failing, so `--frames -1` quietly became 4294967295 frames.
+      `std::from_chars` parsing straight into the `uint32_t` rejects the sign, trailing junk and
+      out-of-range values in one call.
+    - `--width 0` handed Vulkan a zero-extent image, a valid-usage violation with no validation
+      layers in a release build to catch it. Now bounded against the device's own
+      `maxImageDimension2D`, the same guard the swapchain already applies to a minimised window.
+    - ffmpeg expands `%` sequences across the whole input path rather than just the filename, so a
+      checkout under a directory containing one broke the encode. The frames directory is now passed
+      as the working directory instead of being baked into the pattern. Re-recording afterwards
+      produced a byte-identical GIF, which is the check that the change altered nothing else.
+- CodeQL raised one high-severity alert, `cpp/path-injection`, for `--output` reaching
+  `std::ofstream`. Dismissed as a false positive. The dataflow it reports is real; the security
+  conclusion is not. The query treats `argv` as attacker-controlled, which is correct for setuid
+  binaries, CGI programs and services, and wrong for a desktop renderer the user launches
+  themselves: the only party who can set `--output` is the person who already owns the process and
+  could do the same with a shell redirect. The write is not even a general primitive, since the
+  filename is always `frame_%05d.ppm` from a loop counter and the contents are a render of a fixed
+  scene. It fires only because code scanning runs with the `remote_and_local` threat model, whose
+  whole purpose is to treat the command line as tainted.
+- Two tempting responses to that alert were both rejected. Validating the path would restrict the
+  only legitimate user — `--output D:/renders/tonight` is perfectly reasonable — and probably
+  would not clear the alert anyway, because the query recognises only particular
+  normalise-plus-contain barriers rather than hand-rolled checks. A `query-filters` exclusion would
+  have been worse: there is no CodeQL workflow in this repository at all, scanning runs under
+  GitHub's default setup, which never reads that file, so the change would have been silently
+  inert. Making it work would mean owning a hand-maintained workflow forever and disarming the
+  query repo-wide.
+- **Revisit this in Phase 6.** Once the creature roster resolves brain library paths out of a
+  config file (`docs/AGENT_INTERFACE.md`), the path stops coming from the command line and starts
+  coming from a file that a downloaded creature pack could write. At that point the query is right
+  and confinement becomes a real requirement rather than theatre.
+
 ### 2026-07-30 (evening)
 
 - Etape 6 (Phase 4 milestone): **post processing.** The tracer now writes linear radiance into an

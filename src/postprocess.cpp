@@ -447,9 +447,16 @@ void PostProcess::record(const vk::raii::CommandBuffer& command_buffer, uint32_t
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *m_postprocess_pipeline_layout, 0u, {m_postprocess_sets[frame_slot]}, {});
     command_buffer.dispatch(groupsFor(m_extent.width), groupsFor(m_extent.height), 1u);
 
+    /*
+        eAllTransfer rather than eBlit: this stage hands over an image in eTransferSrcOptimal and
+        has no business assuming how the consumer reads it. The interactive path blits it to the
+        swapchain, the recording path copies it into a buffer, and a copy is a different pipeline
+        stage — naming only the blit leaves the copy unordered against this transition, which
+        synchronisation validation reports as a read-after-write hazard.
+    */
     const vk::ImageMemoryBarrier2 to_transfer_src{.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
         .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
-        .dstStageMask = vk::PipelineStageFlagBits2::eBlit,
+        .dstStageMask = vk::PipelineStageFlagBits2::eAllTransfer,
         .dstAccessMask = vk::AccessFlagBits2::eTransferRead,
         .oldLayout = vk::ImageLayout::eGeneral,
         .newLayout = vk::ImageLayout::eTransferSrcOptimal,

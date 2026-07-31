@@ -3,3 +3,8 @@
 /.vs
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Tool virtual environment. The directory is tracked so the convention is visible;
+# its contents are not.
+/tools/.venv/*
+!/tools/.venv/.gitkeep
