@@ -182,6 +182,17 @@ TEST_CASE(bvh_structure_is_sound_and_every_triangle_is_owned_exactly_once)
 
     TEST_CHECK_EQUAL(bvh.triangles.size(), static_cast<size_t>(2000u));
 
+    /*
+        A hierarchy that never split would satisfy every other assertion in this file: a lone root
+        leaf is structurally sound, owns every triangle exactly once, sits within the depth cap, and
+        agrees with brute force perfectly — because it tests every triangle, which is what brute
+        force does. Without this, a builder regression to "one big leaf" is invisible.
+
+        2000 triangles at four per leaf force a depth of at least nine, so the bounds are generous.
+    */
+    TEST_CHECK(bvh.nodes.size() > 1u);
+    TEST_CHECK(bvh.depth() > 4u);
+
     std::vector<uint32_t> visits(bvh.triangles.size(), 0u);
     checkNode(bvh, 0u, visits);
 
@@ -217,6 +228,11 @@ TEST_CASE(bvh_traversal_agrees_with_brute_force_on_random_rays)
     // does, it must return exactly what testing every triangle in turn would have returned.
     const std::vector<BvhLib::Triangle> triangles{randomCloud(1500u, 99u)};
     const BvhLib::Bvh bvh{BvhLib::build(triangles)};
+
+    // Brute-force agreement is trivially satisfied by a hierarchy that never split, since it would
+    // then be testing every triangle exactly as brute force does. Prove it actually built a tree.
+    TEST_CHECK(bvh.nodes.size() > 1u);
+    TEST_CHECK(bvh.depth() > 4u);
 
     Rng rng{424242u};
     uint32_t hits{0u};
@@ -307,6 +323,10 @@ TEST_CASE(bvh_handles_a_flat_sheet_of_coplanar_triangles)
 
     const BvhLib::Bvh bvh{BvhLib::build(triangles)};
     TEST_CHECK(bvh.depth() <= BvhLib::MAX_DEPTH);
+
+    // The depth cap is satisfied trivially by a hierarchy of depth one.
+    TEST_CHECK(bvh.nodes.size() > 1u);
+    TEST_CHECK(bvh.depth() > 4u);
 
     // Straight down onto the middle of the sheet.
     const BvhLib::Hit hit{BvhLib::intersect(bvh, MathLib::Vec3{32.5f, 10.0f, 32.5f}, MathLib::Vec3{0.0f, -1.0f, 0.0f}, 100.0f)};
