@@ -163,7 +163,34 @@ namespace
         with the tube itself. Geometry with height is what makes the second ray segment visible,
         and it is the only way to see at a glance whether the mirror is working.
     */
-    [[nodiscard]] Mesh makePillars()
+    /*!
+        Plants a box on the floor: returns the centre that puts its base on the ground beneath it.
+
+        Everything standing in the world goes through this. The floor is no longer a plane, so a
+        fixed height would leave objects buried in a terrace or hovering over a hollow, and the
+        error is worst exactly where the relief is most interesting.
+    */
+    [[nodiscard]] MathLib::Vec3 plantOnFloor(float world_x, float world_z, const MathLib::Vec3& half_extents, const GridFloorConfig& floor_config)
+    {
+        /*
+            The ground under a box is not one height: a terrace step can run straight through its
+            footprint, and the wider the box the likelier that is. Sitting the base on the LOWEST
+            corner buries part of the box rather than leaving the rest of it hovering — something
+            set into the ground reads as deliberate, whereas something floating above it reads as
+            broken, which is what the first attempt at this looked like.
+        */
+        float ground{gridSurfaceHeight(world_x, world_z, floor_config)};
+
+        for (const float sample_x : {world_x - half_extents.x, world_x + half_extents.x}) {
+            for (const float sample_z : {world_z - half_extents.z, world_z + half_extents.z}) {
+                ground = std::min(ground, gridSurfaceHeight(sample_x, sample_z, floor_config));
+            }
+        }
+
+        return MathLib::Vec3{world_x, ground + half_extents.y, world_z};
+    }
+
+    [[nodiscard]] Mesh makePillars(const GridFloorConfig& floor_config)
     {
         constexpr float FLOOR_HALF_EXTENT{64.0f};
 
@@ -174,7 +201,7 @@ namespace
         for (size_t index{0u}; index < positions.size(); ++index) {
             const float height{6.0f + (static_cast<float>(index % 3u) * 4.0f)};
             const MathLib::Vec3 half_extents{0.45f, height * 0.5f, 0.45f};
-            const MathLib::Vec3 centre{positions[index].x, half_extents.y, positions[index].z};
+            const MathLib::Vec3 centre{plantOnFloor(positions[index].x, positions[index].z, half_extents, floor_config)};
 
             if ((std::abs(centre.x) < FLOOR_HALF_EXTENT) && (std::abs(centre.z) < FLOOR_HALF_EXTENT)) {
                 pillars.append(generateBox(centre, half_extents));
@@ -192,22 +219,26 @@ namespace
         Each slab is a solid box rather than a plane: a ray must cross two interfaces to pass
         through, which is what makes the refraction visible instead of merely a tint.
     */
-    [[nodiscard]] Mesh makeGlassSlabs()
+    [[nodiscard]] Mesh makeGlassSlabs(const GridFloorConfig& floor_config)
     {
         Mesh slabs{};
 
         // Broad upright panes, thin front to back, spread across the near view.
-        slabs.append(generateBox(MathLib::Vec3{-9.0f, 3.0f, 8.0f}, MathLib::Vec3{3.0f, 3.0f, 0.35f}));
-        slabs.append(generateBox(MathLib::Vec3{2.0f, 2.4f, 2.0f}, MathLib::Vec3{2.2f, 2.4f, 0.35f}));
-        slabs.append(generateBox(MathLib::Vec3{13.0f, 3.6f, 10.0f}, MathLib::Vec3{2.6f, 3.6f, 0.35f}));
+        const MathLib::Vec3 wide_slab{3.0f, 3.0f, 0.35f};
+        slabs.append(generateBox(plantOnFloor(-9.0f, 8.0f, wide_slab, floor_config), wide_slab));
+        const MathLib::Vec3 mid_slab{2.2f, 2.4f, 0.35f};
+        slabs.append(generateBox(plantOnFloor(2.0f, 2.0f, mid_slab, floor_config), mid_slab));
+        const MathLib::Vec3 tall_slab{2.6f, 3.6f, 0.35f};
+        slabs.append(generateBox(plantOnFloor(13.0f, 10.0f, tall_slab, floor_config), tall_slab));
 
         return slabs;
     }
 
     //! A glowing translucent column: emission and transmission in the same surface.
-    [[nodiscard]] Mesh makeGlowingColumn()
+    [[nodiscard]] Mesh makeGlowingColumn(const GridFloorConfig& floor_config)
     {
-        return generateBox(MathLib::Vec3{-2.0f, 5.0f, -12.0f}, MathLib::Vec3{0.7f, 5.0f, 0.7f});
+        const MathLib::Vec3 column{0.7f, 5.0f, 0.7f};
+        return generateBox(plantOnFloor(-2.0f, -12.0f, column, floor_config), column);
     }
 
     /*!
@@ -455,9 +486,9 @@ int main(int argc, char** argv)
         const Mesh floor{generateGridFloor(floor_config)};
         const NeonGrid neon{generateGridFloorNeon(floor_config, tube_config)};
 
-        const Mesh pillars{makePillars()};
-        const Mesh glass{makeGlassSlabs()};
-        const Mesh glowing_column{makeGlowingColumn()};
+        const Mesh pillars{makePillars(floor_config)};
+        const Mesh glass{makeGlassSlabs(floor_config)};
+        const Mesh glowing_column{makeGlowingColumn(floor_config)};
 
         std::vector<BvhLib::Triangle> world_triangles;
         world_triangles.reserve(floor.triangleCount() + neon.primary.triangleCount() + neon.accent.triangleCount() + pillars.triangleCount() + glass.triangleCount()

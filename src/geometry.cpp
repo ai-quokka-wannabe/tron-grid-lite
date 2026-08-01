@@ -103,6 +103,77 @@ namespace
         normal (v1 - v0) x (v2 - v0) is the stored face normal, so the stored normal and the
         winding always agree and a front-face-anticlockwise pipeline never culls the surface.
     */
+    /*!
+        Hashes an integer lattice point to a value in [-1, 1).
+
+        An integer hash rather than a seeded generator, because the relief must be identical on
+        every machine and every run: a recording that renders a different landscape each time it
+        is made is not a recording. This has no state to seed and no library implementation to
+        vary — the same coordinates give the same bits everywhere.
+    */
+    [[nodiscard]] float latticeValue(int32_t lattice_x, int32_t lattice_z, uint32_t seed)
+    {
+        uint32_t hash{(static_cast<uint32_t>(lattice_x) * 374761393u) + (static_cast<uint32_t>(lattice_z) * 668265263u) + (seed * 1274126177u)};
+        hash = (hash ^ (hash >> 13u)) * 1103515245u;
+        hash ^= (hash >> 16u);
+
+        return static_cast<float>(hash & 0x7FFFFFFFu) * (1.0f / 2147483647.0f);
+    }
+
+    //! Smoothly interpolated value noise over the unit lattice, in [0, 1].
+    [[nodiscard]] float valueNoise(float x, float z, uint32_t seed)
+    {
+        const float cell_x{std::floor(x)};
+        const float cell_z{std::floor(z)};
+        const int32_t lattice_x{static_cast<int32_t>(cell_x)};
+        const int32_t lattice_z{static_cast<int32_t>(cell_z)};
+
+        /*
+            Smoothstep rather than a linear blend. Linear interpolation is continuous but its
+            derivative is not, so the surface creases along every integer lattice line — invisible
+            on a diffuse surface and glaringly obvious on a mirror, which is what this floor is.
+        */
+        const float fraction_x{x - cell_x};
+        const float fraction_z{z - cell_z};
+        const float weight_x{fraction_x * fraction_x * (3.0f - (2.0f * fraction_x))};
+        const float weight_z{fraction_z * fraction_z * (3.0f - (2.0f * fraction_z))};
+
+        const float corner_00{latticeValue(lattice_x, lattice_z, seed)};
+        const float corner_10{latticeValue(lattice_x + 1, lattice_z, seed)};
+        const float corner_01{latticeValue(lattice_x, lattice_z + 1, seed)};
+        const float corner_11{latticeValue(lattice_x + 1, lattice_z + 1, seed)};
+
+        const float near_edge{corner_00 + ((corner_10 - corner_00) * weight_x)};
+        const float far_edge{corner_01 + ((corner_11 - corner_01) * weight_x)};
+
+        return near_edge + ((far_edge - near_edge) * weight_z);
+    }
+
+    /*!
+        Sums octaves of value noise into a single figure in [0, 1].
+
+        Each octave halves the amplitude and doubles the frequency of the one before, so the first
+        gives the landforms and the rest roughen them. Dividing by the total amplitude keeps the
+        result in [0, 1] whatever the octave count, which is what lets the terrace step below be
+        expressed as a plain fraction of the amplitude.
+    */
+    [[nodiscard]] float layeredNoise(float x, float z, uint32_t octaves, float frequency, uint32_t seed)
+    {
+        float value{0.0f};
+        float amplitude{1.0f};
+        float total_amplitude{0.0f};
+        float octave_frequency{frequency};
+
+        for (uint32_t octave{0u}; octave < octaves; ++octave) {
+            value += amplitude * valueNoise(x * octave_frequency, z * octave_frequency, seed + octave);
+            total_amplitude += amplitude;
+            amplitude *= 0.5f;
+            octave_frequency *= 2.0f;
+        }
+
+        return (total_amplitude > 0.0f) ? (value / total_amplitude) : 0.0f;
+    }
+
     void emitSurfaceQuad(Mesh& mesh, const MathLib::Vec3& p00, const MathLib::Vec3& p10, const MathLib::Vec3& p01, const MathLib::Vec3& p11, float u0, float u1, float v0,
         float v1)
     {
@@ -142,6 +213,32 @@ void Mesh::append(const Mesh& other)
     }
 }
 
+float gridSurfaceHeight(float world_x, float world_z, const GridFloorConfig& config)
+{
+    if ((config.relief_amplitude <= 0.0f) || (config.relief_wavelength <= 0.0f) || (config.relief_octaves == 0u)) {
+        return config.height;
+    }
+
+    float relief{layeredNoise(world_x, world_z, config.relief_octaves, 1.0f / config.relief_wavelength, config.relief_seed)};
+
+    /*
+        Snapping the height to discrete levels is what makes this landscape Tron rather than
+        countryside: it turns smooth swells into terraces with near-vertical risers between them,
+        which reads as something built rather than grown.
+
+        The risers earn their place acoustically as well. A gently curved slope deflects a
+        reflection away at a shallow angle and it is never heard again, whereas a riser standing
+        square to the ground throws sound back across the world. Echoes come from the steps, not
+        from the swells.
+    */
+    if (config.relief_terraces > 0u) {
+        const float levels{static_cast<float>(config.relief_terraces)};
+        relief = std::floor(relief * levels) / levels;
+    }
+
+    return config.height + (relief * config.relief_amplitude);
+}
+
 Mesh generateGridFloor(const GridFloorConfig& config)
 {
     Mesh floor{};
@@ -160,10 +257,10 @@ Mesh generateGridFloor(const GridFloorConfig& config)
             const float z0{(static_cast<float>(z) * config.cell_size) - half_size};
             const float z1{(static_cast<float>(z + 1u) * config.cell_size) - half_size};
 
-            const MathLib::Vec3 p00{x0, config.height, z0};
-            const MathLib::Vec3 p10{x1, config.height, z0};
-            const MathLib::Vec3 p01{x0, config.height, z1};
-            const MathLib::Vec3 p11{x1, config.height, z1};
+            const MathLib::Vec3 p00{x0, gridSurfaceHeight(x0, z0, config), z0};
+            const MathLib::Vec3 p10{x1, gridSurfaceHeight(x1, z0, config), z0};
+            const MathLib::Vec3 p01{x0, gridSurfaceHeight(x0, z1, config), z1};
+            const MathLib::Vec3 p11{x1, gridSurfaceHeight(x1, z1, config), z1};
 
             // Surface coordinates in grid cells from the centre of the floor.
             const float u0{static_cast<float>(x) - half_cells};
@@ -185,10 +282,16 @@ NeonGrid generateGridFloorNeon(const GridFloorConfig& floor_config, const NeonTu
     const uint32_t verts_per_side{floor_config.cells + 1u};
     const float half_size{(static_cast<float>(floor_config.cells) * floor_config.cell_size) * 0.5f};
 
+    /*
+        The tubes must sit on the floor, not float above where it used to be, so this samples the
+        same surface function the floor mesh does. The two agree exactly because they pass
+        coordinates computed by the same expression from the same integer grid, not because the
+        heights are copied from one to the other.
+    */
     const auto gridVertex = [&](uint32_t gx, uint32_t gz) -> MathLib::Vec3 {
         const float world_x{(static_cast<float>(gx) * floor_config.cell_size) - half_size};
         const float world_z{(static_cast<float>(gz) * floor_config.cell_size) - half_size};
-        return MathLib::Vec3{world_x, floor_config.height, world_z};
+        return MathLib::Vec3{world_x, gridSurfaceHeight(world_x, world_z, floor_config), world_z};
     };
 
     // Lines running along X, one per Z row.

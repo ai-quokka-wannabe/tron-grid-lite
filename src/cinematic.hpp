@@ -67,7 +67,14 @@ private:
     */
     float m_orbit_radius{34.0f}; //!< Mean distance from the centre of the scene, in metres.
     float m_radius_breathe{5.0f}; //!< How far the radius swells and shrinks over the loop, in metres.
-    float m_height_mean{7.0f}; //!< Mean height above the floor, in metres.
+    /*
+        Height is measured from the floor's base level, not from the ground beneath the camera,
+        and the ground is no longer flat: the relief rises several metres. The mean sits high
+        enough that the bottom of the swing still clears the highest terrace with room to spare,
+        because a camera that clips through a hill mid-orbit ruins the one shot this path exists
+        to take.
+    */
+    float m_height_mean{10.0f}; //!< Mean height above the floor's base level, in metres.
     float m_height_swing{2.6f}; //!< How far the height rises and falls, in metres.
     float m_look_ahead{0.14f}; //!< Fraction of the loop the camera aims ahead of itself.
     float m_inward_bias{0.55f}; //!< How much the aim is pulled towards the centre, from 0 to 1.

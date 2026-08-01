@@ -114,16 +114,43 @@ struct Mesh {
 };
 
 /*!
-    Configuration for the flat grid floor — the default world surface.
+    Configuration for the grid floor — the default world surface.
 
-    The floor is a plain subdivided plane at a constant height with no noise at all. It is a
-    perfect mirror in practice, so its flatness is the whole point: an unbroken horizontal mirror
-    under an infinite black sky, with the neon grid lines the only thing to reflect.
+    The floor is a subdivided plane displaced by a low relief, so it rolls gently rather than
+    lying dead flat. The relief costs nothing: it moves vertices that already exist, so the
+    triangle count and the hierarchy built over it are unchanged.
+
+    It earns its place twice over. Optically, a curved mirror bends what it reflects, so the neon
+    lines draw as arcs across the swells instead of as a ruled lattice. Acoustically, it matters
+    far more: a flat plane sends every reflection away at the mirror angle and none of it ever
+    returns, whereas a rolling surface aims some reflections back into the scene, which is where
+    echoes come from. A perfectly flat world would be acoustically almost silent.
 */
 struct GridFloorConfig {
     uint32_t cells{64u}; //!< Number of quads along each axis, so `cells` × `cells` quads in total.
     float cell_size{1.0f}; //!< Edge length of one quad, in metres.
-    float height{0.0f}; //!< Constant world-space Y of the whole floor, in metres.
+    float height{0.0f}; //!< World-space Y of the lowest ground, in metres. The relief rises from it.
+    float relief_amplitude{5.0f}; //!< How far the highest ground stands above `height`, in metres. Zero gives a flat plane.
+    float relief_wavelength{46.0f}; //!< Approximate distance between one landform and the next, in metres.
+
+    /*!
+        Layers of noise. Each halves the amplitude and doubles the frequency of the one before.
+
+        Three, not more: the fourth octave's features would be a quarter of `relief_wavelength`
+        across, which at the default cell size is barely wider than a single quad. Detail finer
+        than the mesh can carry does not appear — it aliases, and on a mirror that reads as noise.
+    */
+    uint32_t relief_octaves{3u};
+
+    /*!
+        Discrete height levels the relief snaps to. Zero leaves it smooth.
+
+        Six over five metres gives steps a little under a metre — tall enough to read as terraces
+        from the spectator camera rather than as ripples, and tall enough to be worth reflecting
+        sound off.
+    */
+    uint32_t relief_terraces{6u};
+    uint32_t relief_seed{42u}; //!< Chooses which landscape. Fixed rather than random, so a recording is reproducible.
 };
 
 /*!
@@ -152,13 +179,33 @@ struct NeonGrid {
 };
 
 /*!
-    Generates the flat grid floor: a subdivided plane at a constant height, no noise.
+    Returns the height of the floor surface at a world-space position.
 
-    This is the default world surface and the first thing the BVH indexes. Vertices carry an
-    upward face normal and a `uv` measured in grid cells from the centre of the floor, so a shader
-    can derive grid-line coordinates from `uv` alone without knowing the floor's world extent.
+    Deterministic, stateless and continuous: the same coordinates always give the same height, on
+    every machine and every run, which is what a reproducible recording requires. Anything that
+    must sit on the floor calls this rather than assuming zero — the floor mesh, the neon tubes
+    laid along its grid lines, and every object planted on it.
 
-    \param config Floor dimensions.
+    Sampling by world position rather than by grid index is what lets an object standing at an
+    arbitrary place find its own ground; the floor and the tubes agree exactly because they pass
+    the same coordinates, computed the same way, from the same integer grid.
+
+    \param world_x World-space X, in metres.
+    \param world_z World-space Z, in metres.
+    \param config Floor dimensions and relief.
+    \return World-space Y of the surface at that point, in metres.
+*/
+[[nodiscard]] float gridSurfaceHeight(float world_x, float world_z, const GridFloorConfig& config);
+
+/*!
+    Generates the grid floor: a subdivided plane displaced by `gridSurfaceHeight`.
+
+    This is the default world surface and the first thing the BVH indexes. Face normals are
+    derived from the displaced triangles rather than assumed upward, so the relief shades and
+    reflects correctly. Vertices carry a `uv` measured in grid cells from the centre of the floor,
+    so a shader can derive grid-line coordinates from `uv` alone without knowing the world extent.
+
+    \param config Floor dimensions and relief.
     \return Mesh with per-face vertices and trivial indices.
 */
 [[nodiscard]] Mesh generateGridFloor(const GridFloorConfig& config);

@@ -80,6 +80,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rendering, NeuroMechFly v2 and the virtual rodent for embodied bodies and brains, and the
   Animal-AI Environment for cognitive testing. Also the short list of what is genuinely unusual
   here, and a plain statement of what this project is not attempting.
+- The grid floor is no longer flat. It is displaced by terraced relief — value noise in three
+  octaves, quantised to six discrete levels, rising up to five metres over the 128 m extent — ported
+  from the original TronGrid's terrain generator. It costs no triangles at all, because it moves
+  vertices that already existed, so the hierarchy built over it is unchanged. Optically a curved
+  mirror bends what it reflects, so the neon lines draw as arcs and pillar reflections shatter into
+  facets across the steps. Acoustically it is the point: a flat plane sends every reflection away at
+  the mirror angle and none of it returns, whereas terrace risers standing square to the ground
+  throw sound back across the world, which is where Phase 5's echoes will come from.
+- Everything standing in the world is now planted on the surface beneath it rather than at y = 0.
+- The cinematic camera's mean height rose from 7 m to 10 m so the bottom of its swing clears the
+  highest terrace.
 
 ### Removed
 
