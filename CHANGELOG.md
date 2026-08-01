@@ -119,6 +119,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The renderer had no DPI awareness, so on any scaled display Windows created a virtual-pixel window
+  and DWM upscaled the result — every traced pixel reaching the panel through a bilinear stretch.
+- A pointer warp that did not move the pointer swallowed the user's next real mouse movement, and a
+  failed pointer grab on X11 was treated as a successful capture.
+- Several tests could not fail. The testing library's own self-tests passed with `TEST_CHECK`
+  redefined as a no-op, which would have made all ninety-two tests in the repository vacuous; every
+  BVH test passed if the builder never split; the quaternion product was only ever tested with
+  rotations that commute; and `Mat4::inversed()` — sixteen hand-transcribed cofactors called by
+  production code — had no test at all.
+- UBSan findings could not fail CI: it defaults to reporting and continuing, so the job went green
+  with undefined behaviour in the log. clang-tidy was documented as an error gate and executed by
+  nothing.
+- Undefined behaviour in the BVH builder: a denormal centroid extent made the bin scale infinite,
+  and a centroid at the axis minimum then computed `0 * inf`, casting NaN to `int32_t` inside a
+  `std::partition` predicate.
+- `lookAt` returned a silently singular matrix whenever the view direction was parallel to up —
+  looking straight down being the commonest way to reach it.
+- Sixteen abort sites discarded the queued diagnostics that explain them, because `std::abort`
+  joins no threads and flushes no streams.
 - Glass carried a hard-edged ring where the reflection snapped on. Schlick's approximation is
   defined for the angle measured on the air side of an interface, but on the exit path the tracer
   fed it the shallower angle inside the glass — so reflectance read 0.04 where the true value had
