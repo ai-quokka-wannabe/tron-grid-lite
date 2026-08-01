@@ -69,6 +69,35 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 - [ ] Energy histogram per listener, banded by octave
 - [ ] Add ears to the agent interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md` — and bump `TGL_BRAIN_ABI_VERSION` to 2
 
+## Etape 8 — Phase 6 prerequisite: sub-allocate device memory
+
+Deferred deliberately, and this entry exists so that deferral does not become forgetting.
+
+Every allocation in this renderer is its own `vkAllocateMemory`, and the validation layer objects
+fifteen times on every single run: *"the required size of the allocation is 578400, but smaller
+buffers like this should be sub-allocated from larger memory blocks"*. The threshold it complains
+below is 1 MiB, and most of this world's buffers are well under it.
+
+Today that is untidy rather than harmful. **Phase 6 is where it stops being untidy**, because
+creature sensors are exactly the wrong shape for one-allocation-per-resource: many creatures, two
+eyes each, each eye a small render target far below the threshold, plus the acoustic buffers beside
+them. Two limits bite at once — `maxMemoryAllocationCount` is a hard driver cap, and every
+allocation is rounded up to `bufferImageGranularity`, so a great many small ones waste real memory
+in padding.
+
+- [ ] Sub-allocate device memory before creature sensors multiply the allocation count
+
+An allocator wrapper for this already existed and was **deleted unused** in `d72473c`: 444 lines
+across `allocator.hpp`, `allocator.cpp` and `vma.cpp`, compiled into every binary and never once
+instantiated. `git show 96c3484:src/allocator.hpp` returns it in full, and the two siblings alongside
+it.
+
+It was deleted rather than kept because it had never run. Untested wrapper code around a memory
+allocator is worse than none: the next reader trusts 268 lines of plausible API that no build has
+ever exercised, and it drifts silently from the library it wraps. When this is picked up, the
+question to answer first is what Phase 6's allocation pattern actually looks like — the old wrapper
+was written speculatively, against a scene layout that has since been deleted too.
+
 ## Journal
 
 ### 2026-08-01
