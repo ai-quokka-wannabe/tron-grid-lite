@@ -71,6 +71,37 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Journal
 
+### 2026-08-01
+
+- The floor has relief. Value noise, three octaves, quantised to six levels, up to five metres over
+  128 m — ported from the original TronGrid's `src/terrain.cpp`, which had already solved this and
+  had already found the good part: quantising the height turns smooth swells into terraces, which
+  reads as something built rather than grown. Three octaves rather than the original's four, because
+  a fourth octave's features would be a quarter of the wavelength across, barely wider than one quad
+  at this cell size, and detail finer than the mesh can carry does not appear — it aliases, which on
+  a mirror reads as noise.
+- One thing was deliberately **not** ported. The original computes its normals from the raw
+  un-quantised heightmap, so that reflections stretch across the terrace steps like a dent in a car
+  bonnet. That is right for a rasteriser shading with interpolated normals and wrong here: this is a
+  ray tracer with perfect mirrors, where the reflection direction *is* the geometric normal, so a
+  normal that disagreed with the geometry would leak light and self-intersect. Lite keeps true
+  per-face normals, and the shattered facets that result are the honest answer rather than the
+  pretty one.
+- The relief costs nothing. It displaces vertices that already existed, so the triangle count and
+  the hierarchy over it are unchanged.
+- Two things broke on contact with a non-flat floor and had to be fixed. Objects were planted at
+  y = 0 and started floating or sinking; they now sample the ground, and specifically the *lowest*
+  of their four footprint corners, because a terrace step can run straight through a six-metre
+  footprint and something set into the ground reads as deliberate where something hovering above it
+  reads as broken. The cinematic camera dipped to 4.4 m, which is below the highest terrace, so its
+  mean height went from 7 m to 10 m.
+- The floor mesh and the neon tubes agree exactly at shared grid vertices because both call the same
+  surface function with coordinates computed by the same expression, not because heights are copied
+  from one to the other.
+- The relief is deterministic by construction: an integer hash rather than a seeded generator, so
+  the same coordinates give the same bits on every machine and every run. A recording that renders a
+  different landscape each time it is made is not a recording.
+
 ### 2026-07-31
 
 - Added a recording mode and `tools/record_flyby.py`, which flies a closed camera path and encodes
