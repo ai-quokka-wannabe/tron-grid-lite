@@ -415,7 +415,6 @@ float3 radiance(float3 primary_origin, float3 primary_direction)
         }
 
         const float cosine = saturate(dot(-current.direction, normal));
-        const float reflectance = fresnelSchlick(cosine, material.index_of_refraction);
         const float3 hit_position = current.origin + (current.direction * hit.distance);
 
         // Air outside, the material's own index inside. Leaving a surface inverts the ratio.
@@ -427,14 +426,24 @@ float3 radiance(float3 primary_origin, float3 primary_direction)
         // is why a glass edge seen at a shallow angle turns into a mirror.
         const bool total_internal_reflection = dot(refracted, refracted) < 1e-8;
 
-        float transmitted_weight = material.transmission * (1.0 - reflectance);
-        float reflected_weight = reflectance;
+        /*
+            Schlick's approximation is defined for the angle measured on the *air* side of the
+            interface. On the way in that is the angle of incidence, but on the way out it is the
+            angle of the ray that leaves, not the shallower one inside the glass.
 
-        if (total_internal_reflection)
-        {
-            reflected_weight += transmitted_weight;
-            transmitted_weight = 0.0;
-        }
+            Feeding it the internal angle understates reflectance badly exactly where it matters:
+            a ray leaving 1.52 glass at 40 degrees returns 0.04 when the true value has already
+            climbed past 0.3, and then a degree later total internal reflection snaps it to 1. That
+            draws a hard ring around every glass edge — the opposite of the gradual turn to mirror
+            the comment above describes.
+        */
+        const float fresnel_cosine = entering ? cosine : saturate(dot(refracted, -normal));
+        const float reflectance = total_internal_reflection ? 1.0 : fresnelSchlick(fresnel_cosine, material.index_of_refraction);
+
+        // No separate total-internal-reflection case: reflectance is already 1 there, which leaves
+        // nothing to transmit and sends the whole throughput down the reflected branch.
+        const float transmitted_weight = material.transmission * (1.0 - reflectance);
+        const float reflected_weight = reflectance;
 
         if (transmitted_weight > 0.0)
         {

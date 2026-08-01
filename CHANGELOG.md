@@ -119,6 +119,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Glass carried a hard-edged ring where the reflection snapped on. Schlick's approximation is
+  defined for the angle measured on the air side of an interface, but on the exit path the tracer
+  fed it the shallower angle inside the glass — so reflectance read 0.04 where the true value had
+  already climbed past 0.3, and then total internal reflection a degree later snapped it to 1. It
+  now uses the angle of the ray that actually leaves, which is the gradual turn to mirror the
+  surrounding comment always claimed.
+- The final bloom composite sampled the half-resolution mip by integer division, putting a 2x2
+  staircase on every neon halo — the exact artefact the downsample pass builds its own bilinear tap
+  to avoid. It now samples bilinearly too.
+- The bloom pyramid dropped the last column and row at odd resolutions, so a neon tube whose only
+  bright pixels sat there contributed no glow. Mip extents round up instead of truncating.
 - Objects stood on the wrong floor. `plantOnFloor` asked `gridSurfaceHeight`, which is a step
   function once the relief is terraced, but the mesh that is actually drawn ramps linearly across
   whichever cell a riser passes through — so the two disagree by up to a full terrace step, and the

@@ -192,14 +192,21 @@ void PostProcess::computeBloomExtents()
 {
     m_bloom_extents.clear();
 
-    // Mip 0 is half the output, which is where the extract pass writes. Each level halves again.
-    vk::Extent2D size{std::max(m_extent.width / 2u, 1u), std::max(m_extent.height / 2u, 1u)};
+    /*
+        Mip 0 is half the output, which is where the extract pass writes. Each level halves again.
+
+        Rounded up rather than truncated. At an odd width the truncated mip is one texel short, and
+        the last column of the source is then gathered by no thread at all — a neon tube whose only
+        bright pixels sit in that column contributes no bloom. The window is resizable, so odd
+        extents are reachable, and the truncation repeats at every level.
+    */
+    vk::Extent2D size{std::max((m_extent.width + 1u) / 2u, 1u), std::max((m_extent.height + 1u) / 2u, 1u)};
 
     while (m_bloom_extents.size() < MAX_BLOOM_MIPS) {
         m_bloom_extents.push_back(size);
 
-        const uint32_t next_width{size.width / 2u};
-        const uint32_t next_height{size.height / 2u};
+        const uint32_t next_width{(size.width + 1u) / 2u};
+        const uint32_t next_height{(size.height + 1u) / 2u};
         if ((next_width < MIN_BLOOM_EXTENT) || (next_height < MIN_BLOOM_EXTENT)) {
             break;
         }
