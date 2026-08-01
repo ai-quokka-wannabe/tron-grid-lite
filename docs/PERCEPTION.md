@@ -247,15 +247,26 @@ renderer.
   runs at ~9 Hz while the output stream stays at audio rate. Interactive engines update a full
   sound field in 7–14 ms on desktop. Against 60–90 Hz visuals, the acoustic solve can run once
   per seven to ten frames and remain transparent.
-- **Why the tolerance exists.** Four measured mechanisms: energy histograms are 44–176× coarser
-  than the audio sample period and their fine structure is synthesised as noise; the precedence
-  effect fuses reflections arriving within a few milliseconds and weights the leading direction
-  roughly 4:1; late reverberation needs only **12–24 spatial directions** (about 41° apart — 24
-  samples for the entire diffuse tail); and frequency is handled in 6–9 octave bands.
+- **Why the tolerance exists.** Three properties of the *simulation*: energy histograms are 44–176×
+  coarser than the audio sample period and their fine structure is synthesised as noise; late
+  reverberation needs only **12–24 spatial directions** (about 41° apart — 24 samples for the entire
+  diffuse tail); and frequency is handled in 6–9 octave bands.
+
+  A fourth mechanism is often cited alongside these and is deliberately left out: the precedence
+  effect, by which reflections arriving within a few milliseconds are fused and the leading
+  direction weighted roughly 4:1. It is real, but it is a property of an auditory *system* rather
+  than of the world, and this repository does not get to size its own fidelity on assumptions about
+  how a listener will process what it receives — that is the brains' business, in their own
+  repositories. It is also specifically a mammalian result, and there is no reason to expect it of a
+  moth with two receptor cells or a nematode sensing pressure gradients through its skin. The three
+  simulation-side mechanisms carry the conclusion on their own.
 - **Angular acuity of hearing** is far coarser than vision. Human minimum audible angle is about
   1.1° frontally against a foveal 1 arcmin — **66× coarser linearly, ~4,400× in solid angle**.
-  Mouse localisation acuity is around 15°. Motion makes it worse still: the minimum audible
-  *movement* angle rises from 8.8° at 10°/s to 20.2° at 180°/s.
+  Mouse localisation acuity is around 31° in the horizontal plane, and roughly 81° in the median
+  plane — the vertical figure being the one measured case of the caveat this document already
+  records, that every minimum audible angle quoted here is azimuthal and median-plane acuity is
+  several times worse. Motion makes it worse still: the minimum audible *movement* angle rises from
+  8.8° at 10°/s to 20.2° at 180°/s.
 
 One honest caveat in the other direction: an emitted acoustic ray is not a pixel. It is traced
 through hundreds of reflections across a two-to-three-second impulse response, so a 30,000-ray
@@ -341,7 +352,8 @@ These follow from everything above. They are binding on the renderer.
 10. **Acoustic tolerances apply to audio only.** A few thousand rays, millisecond energy bins,
     6–9 octave bands, a ~10 Hz solve with per-block interpolation, 12–24 directions for the
     diffuse tail. These tolerances must not leak into the visual path: audio earns them through
-    the precedence effect and millisecond energy integration, and vision has no equivalent.
+    millisecond energy integration and the coarseness of the histogram itself, and vision has no
+    equivalent.
 11. **Publish the assumption alongside every derived number.** Nearly every error caught while
     verifying this document was a translation error rather than a biology error: peak acuity
     applied whole-field, cycles per degree quoted as pixels per degree, per-eye counts summed as
@@ -431,6 +443,18 @@ These follow from everything above. They are binding on the renderer.
 - Jeon CJ, Strettoi E, Masland RH (1998), "The Major Cell Populations of the Mouse Retina",
   *Journal of Neuroscience* 18(21):8936–8946 —
   <https://pmc.ncbi.nlm.nih.gov/articles/PMC6793518/>
+- Lauer AM, Slee SJ, May BJ (2011), "Acoustic Basis of Directional Acuity in Laboratory Mice",
+  *Journal of the Association for Research in Otolaryngology* 12(5):633–645 —
+  <https://pmc.ncbi.nlm.nih.gov/articles/PMC3173556> — the 31° horizontal and 80.7° median-plane
+  minimum audible angles
+- Heffner HE, Heffner RS (2016), "The Evolution of Mammalian Sound Localization", *Acoustics Today*
+  12(1):20–27 —
+  <https://acousticstoday.org/wp-content/uploads/2016/01/The-Evolution-of-Mammalian-Sound-Localization.pdf>
+  — 33° for mice among 39 mammal species, agreeing independently with Lauer et al.
+- Heffner HE, Heffner RS (2007), "Hearing Ranges of Laboratory Animals", *Journal of the American
+  Association for Laboratory Animal Science* 46(1):20–22 —
+  <https://www.vogelabwehr.at/images/PDF/hearing-range-animals.pdf> — the mouse's 2.3–85.5 kHz
+  hearing range at 60 dB SPL
 
 ### Marsupials
 

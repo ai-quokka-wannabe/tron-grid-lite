@@ -108,6 +108,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Two design documents claimed surfaces already carry acoustic properties. They do not — the fields
+  were reserved once and removed as bloat, `src/components.hpp` says so, and the `static_assert`s
+  pin `Material` at 32 bytes. `ARCHITECTURE.md` additionally promised Phase 5 could proceed "without
+  touching the layout again", which is exactly backwards: it must.
+- `PERCEPTION.md` gave mouse localisation acuity as ~15°. Two independent published groups put it at
+  31–33°; the median-plane figure of ~81° is now recorded too, since the document already flagged
+  that all its minimum audible angles were azimuthal.
+- `PERCEPTION.md` justified coarse acoustic tolerances partly by the precedence effect, which is a
+  property of an auditory system rather than of the world — the one thing this repository is not
+  allowed to reason about. The tolerances stand unchanged on simulation-side grounds alone.
 - The CI cache cleanup never deleted CodeQL overlay-base caches: any key outside the two families
   it knew about became a group of one, and the keep-newest-delete-rest loop cannot fire on a group
   of one. Fifteen dead caches (~260 MB) had accumulated, one per push to main. The cleanup script

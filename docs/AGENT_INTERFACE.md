@@ -317,9 +317,12 @@ Points worth stating plainly, because they are the whole design:
 
 ### Hearing, and the thing it still needs
 
-Acoustic sensing is the next modality planned. Surfaces already carry acoustic properties alongside
-their optical ones, and the same hand-built BVH is intended to serve acoustic rays, so hearing will
-arrive as sample buffers rather than as a channel bolted on elsewhere.
+Acoustic sensing is the next modality planned. The same hand-built BVH is intended to serve acoustic
+rays, so hearing will arrive as sample buffers rather than as a channel bolted on elsewhere.
+
+Surfaces do **not** yet carry acoustic properties: the fields were reserved once, removed as bloat
+because nothing read them, and will return in Phase 5 when something does. See
+[ACOUSTICS.md](ACOUSTICS.md).
 
 One prerequisite is still open, and it is not a technical one: **nothing in this world currently
 makes a sound.** Surfaces emit light; none of them emit anything audible. Before a hearing field

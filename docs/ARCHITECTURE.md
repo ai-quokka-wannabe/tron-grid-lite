@@ -206,8 +206,14 @@ There is no roughness, no metallic parameter, no microfacet distribution, no nor
 reflection direction is `reflect(d, n)`; the refraction direction is `refract(d, n, eta)` with total internal
 reflection falling back to the reflection branch. That is the entire BRDF.
 
-Each material record also carries **acoustic properties** alongside the optical ones — an absorption coefficient and a
-scattering coefficient — so that Phase 5 can trace sound through the same data without touching the layout again.
+Each material record carries **optical properties only**, and deliberately so. Acoustic fields were reserved here
+once and removed again: reserving two further std430 rows doubled the material buffer for fields nothing read, and a
+field nothing reads is a field nothing maintains. Worse, the stale acoustic members outlived their removal in the
+shader's copy of the struct and produced an out-of-bounds read that only GPU-assisted validation caught.
+
+Phase 5 will therefore **have to touch this layout**, and that is the intended cost. What it adds is settled in
+[ACOUSTICS.md](ACOUSTICS.md); the `static_assert`s on `Material` in `src/components.hpp` exist precisely so that the
+C++ and Slang definitions cannot drift apart again while it happens.
 
 ### BVH Construction and Layout
 
