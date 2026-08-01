@@ -5,7 +5,7 @@
 We pledge to make our community welcoming, safe, and equitable for all.
 
 We are committed to fostering an environment that respects and promotes the dignity, rights, and contributions of all individuals, regardless of
-characteristics including race, ethnicity, caste, color, age, physical characteristics, neurodiversity, disability, sex or gender, gender identity or
+characteristics including race, ethnicity, caste, colour, age, physical characteristics, neurodiversity, disability, sex or gender, gender identity or
 expression, sexual orientation, language, philosophy or religion, national or social origin, socio-economic position, level of education, or other status.
 The same privileges of participation are extended to everyone who participates in good faith and in accordance with this Covenant.
 
@@ -31,7 +31,7 @@ We agree to restrict the following behaviours in our community. Instances, threa
 1. **Harassment.** Violating explicitly expressed boundaries or engaging in unnecessary personal attention after any clear request to stop.
 2. **Character attacks.** Making insulting, demeaning, or pejorative comments directed at a community member or group of people.
 3. **Stereotyping or discrimination.** Characterising anyone's personality or behaviour based on immutable identities or traits.
-4. **Sexualization.** Behaving in a way that would generally be considered inappropriately intimate in the context or purpose of the community.
+4. **Sexualisation.** Behaving in a way that would generally be considered inappropriately intimate in the context or purpose of the community.
 5. **Violating confidentiality**. Sharing or acting on someone's personal or private information without their permission.
 6. **Endangerment.** Causing, encouraging, or threatening violence or other harm toward any person or group.
 7. Behaving in other ways that **threaten the well-being** of our community.
@@ -85,7 +85,7 @@ a violation, lower rungs on the ladder may be skipped.
        behind them, and should only be resorted to if working through other remedies has failed to change the behaviour.
     3. Repair: There is no possible repair in cases of this severity.
 
-This enforcement ladder is intended as a guideline. It does not limit the ability of Community Managers to use their discretion and judgment, in keeping with the best interests
+This enforcement ladder is intended as a guideline. It does not limit the ability of Community Moderators to use their discretion and judgment, in keeping with the best interests
 of our community.
 
 ## Scope
@@ -99,7 +99,7 @@ an appointed representative at an online or offline event.
 This Code of Conduct is adapted from the Contributor Covenant, version 3.0, permanently available at
 [https://www.contributor-covenant.org/version/3/0/](https://www.contributor-covenant.org/version/3/0/).
 
-Contributor Covenant is stewarded by the Organisation for Ethical Source and licensed under CC BY-SA 4.0. To view a copy of this license, visit
+Contributor Covenant is stewarded by the Organization for Ethical Source and licensed under CC BY-SA 4.0. To view a copy of this licence, visit
 [https://creativecommons.org/licenses/by-sa/4.0/](https://creativecommons.org/licenses/by-sa/4.0/)
 
 For answers to common questions about Contributor Covenant, see the FAQ at [https://www.contributor-covenant.org/faq](https://www.contributor-covenant.org/faq). Translations

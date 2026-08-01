@@ -21,7 +21,7 @@ any agent works inside**. No brain internals live here, and none should: creatur
 other repositories' business, behind a plain C ABI.
 
 It is a fresh, independent project. It reuses infrastructure and foundation code from the
-author's earlier [TronGrid](https://github.com/MatejGomboc/tron_grid) renderer (same author,
+author's earlier [TronGrid](https://github.com/MatejGomboc/tron-grid) renderer (same author,
 same licence) but leaves behind the hardcore graphics programme — mesh shaders, hardware ray
 tracing, bindless everything — so that it runs on modest GPUs and stays small enough to read in
 an afternoon.
@@ -43,7 +43,9 @@ the interface a creature brain plugs into in Phase 6.
 
 ## Requirements
 
-- **Vulkan SDK** 1.3+ ([LunarG](https://vulkan.lunarg.com/))
+- **Vulkan SDK** 1.4.335.0+ ([LunarG](https://vulkan.lunarg.com/)) — the version CI builds against.
+  The real constraint is that `slangc` and `spirv-val` must be present in the SDK's `bin` directory,
+  because CMake requires both at configure time
 - **C++20** compiler (MSVC, GCC, or Clang)
 - **CMake** 3.25+
 - **Ninja** build system
@@ -95,8 +97,8 @@ cmake --build build/linux-x11-clang --config Debug
    denoiser and no ray tracing hardware: a fixed, shallow Whitted ray tree
 4. **Creature-first resolution** — animal eyes resolve far less than 800×600; creature vision
    renders tiny, and only the spectator window renders big (see [docs/PERCEPTION.md](docs/PERCEPTION.md))
-5. **One world, two senses** — a single BVH answers both visual rays and acoustic rays; surfaces
-   carry optical and acoustic properties together
+5. **One world, two senses** — a single BVH answers both visual rays and acoustic rays. Surfaces
+   carry optical properties only for now; the acoustic coefficients arrive with Phase 5
 6. **Incremental** — every phase produces something visible
 
 ## Material Model
@@ -141,6 +143,7 @@ tracing, 1980 edition, running in compute.
 |----------|---------|
 | [docs/VISION.md](docs/VISION.md) | What this world is for and where it is going |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the renderer is put together |
+| [docs/MATERIALS.md](docs/MATERIALS.md) | The material model, the Fresnel and refraction maths, and the HDR path |
 | [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
 | [docs/AGENT_INTERFACE.md](docs/AGENT_INTERFACE.md) | The plugin contract between world and brain |
 | [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | What research labs build in this area, and what is genuinely unusual here |
@@ -164,9 +167,9 @@ tracing, 1980 edition, running in compute.
 > It will see neon lines against infinite black —
 > through eyes that resolve less than an old CRT,
 > and that is enough, because it has always been enough
-> for every animal that ever chased, hid and played.
+> for every animal that ever chased, hid, and played.
 >
-> The grid does not need four thousand lines of resolution.
+> The Grid does not need four thousand lines of resolution.
 > It needs to be *true*: every reflection honest,
 > every echo travelling the same world as every glint.
 > A small world, rendered simply, perceived completely.

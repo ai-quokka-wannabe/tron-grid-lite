@@ -53,10 +53,11 @@ whether the world is behaving. It is never an input to any creature.
 
 The world is Tron-inspired cyberspace: **neon lines against infinite black**.
 
-- **Infinite black** — there is no sky, no skybox, no horizon, no fog, no terrain. A ray that hits nothing returns
+- **Infinite black** — there is no sky, no skybox, no horizon, no fog. A ray that hits nothing returns
   black. The void is genuinely empty, and that emptiness is free to render.
-- **Everything is a perfect mirror** — every surface in the world is perfectly specular. Most of them are almost black,
-  so they read as dark polished planes that catch and repeat the neon.
+- **Everything is a perfect mirror** — every surface in the world is perfectly specular. Their tints are close to white,
+  and it is Fresnel rather than the tint that keeps them dim head-on, so they read as dark polished planes that catch and
+  repeat the neon.
 - **Emissive geometry is the only light source** — there are no point lights, no directional lights, no ambient term.
   Light exists because some geometry glows. The neon tubes and glowing edges that form the visual language of the world
   *are* the lighting rig.
@@ -71,23 +72,27 @@ frame *N*.
 
 ### Colour Palette
 
-| Colour | Hex | Role |
-|--------|-----|------|
-| Cyan | `#00FFFF` | Primary neon |
-| Magenta | `#FF00FF` | Accent neon |
-| Orange | `#FF8800` | Energy / warning neon |
-| White | `#FFFFFF` | Highlights |
-| Black | `#000000` | The void, and most surfaces |
+| Colour | Linear RGB | Role |
+|--------|------------|------|
+| Cyan | (0.02, 0.62, 1.0) | Primary neon — ordinary grid lines |
+| Orange | (1.0, 0.36, 0.03) | Accent neon — major grid lines |
+| White | (1.0, 1.0, 1.0) | Mirror tints and highlights |
+| Black | (0.0, 0.0, 0.0) | The void |
+
+Two neon hues and no more: a third starts to look like a colour test chart rather than a world.
+[MATERIALS.md § The Neon Palette](MATERIALS.md#the-neon-palette) is canonical for these values and
+for the emissive magnitudes that go with them.
 
 ## Creature Senses
 
 ### Vision
 
-A creature's eye is a **render target of its own**, and it is tiny. Sensor resolutions in the range of 64 x 64 to
-256 x 256 are the normal case, not a degraded mode. This is biologically honest — the eyes of most animals resolve far
-less than a computer display — and it is also what makes hand-written compute ray tracing affordable on a modest GPU.
-A 64 x 64 sensor is 4096 primary rays. A creature can have several eyes, pointing in several directions, and still cost
-less than one spectator frame.
+A creature's eye is a **sensor of its own**, and it is tiny. Sensors run from a few samples to a few tens of thousands,
+as a raster or as an explicit sample-direction list — see
+[PERCEPTION.md § Sensor presets](PERCEPTION.md#sensor-presets). This is biologically honest — the eyes of most animals
+resolve far less than a computer display — and it is also what makes hand-written compute ray tracing affordable on a
+modest GPU. A 64 x 64 raster is 4096 primary rays; the smallest preset is two. A creature can have several eyes,
+pointing in several directions, or none at all, and still cost less than one spectator frame.
 
 The spectator window is separate and larger. It renders the same world with the same tracer, at a resolution a human
 can actually look at.
@@ -96,9 +101,10 @@ can actually look at.
 
 Later in the roadmap, the same acceleration structure that answers visual rays will answer **acoustic rays**. Sound in
 this world travels along the same geometry that light does: it reflects off the same mirrors, is occluded by the same
-walls, and passes through the same glass. To make that possible, every surface carries **both optical and acoustic
-properties** from the start — a reflectivity for photons and an absorption coefficient for pressure waves, stored side
-by side in the same material record.
+walls, and passes through the same glass. To make that possible, every surface will carry **both optical and acoustic
+properties** — a reflectivity for photons and an absorption coefficient for pressure waves, side by side in the same
+material record. The acoustic half is not in `Material` yet: a field nothing reads is a field nothing maintains, so it
+arrives when hearing does.
 
 One world, two senses, one traversal.
 
@@ -117,7 +123,10 @@ and should run on a laptop GPU from 2020. That rules out a long list of otherwis
 - **No GPU-driven pipeline and no heavy allocator layer** — no indirect draw machinery to debug.
 - **No ReSTIR, no SVGF denoiser, no temporal accumulation** — deterministic Whitted shading produces no noise to
   denoise.
-- **No volumetric fog, no procedural terrain, no skybox** — the world is infinite black by design.
+- **No volumetric fog, no skybox** — the world is infinite black by design. The floor's terraced relief is the one
+  departure from flatness, and it earns its place acoustically rather than scenically: a flat mirror sends every
+  reflection away and returns none of it, whereas terrace risers standing square to the ground throw sound back across
+  the world, which is where Phase 5's echoes will come from.
 - **No textures, no roughness, no microfacets, no PBR material system** — three materials, each described by a few
   numbers.
 
@@ -133,7 +142,7 @@ needed writing, debugging, and explaining, and none of them are needed for neon 
    creature behaviour.
 4. **Honest embodiment.** A creature receives sensor data only. No scene graph access, no entity list, no ground truth.
 5. **Creature-sized resolution.** Sensors render tiny. Only the spectator window renders large.
-6. **One world, two senses.** A single BVH serves visual and acoustic rays; surfaces carry optical and acoustic
+6. **One world, two senses.** A single BVH serves visual and acoustic rays; surfaces will carry optical and acoustic
    properties together.
 7. **Own everything that matters.** The BVH, the tracer, the maths, the windowing, the logging and the test harness are
    all in-house. External dependencies are limited to the Vulkan SDK, Volk, vulkan-hpp and Slang.

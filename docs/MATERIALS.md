@@ -12,7 +12,7 @@ valid. A glowing translucent mirror is as expressible as any of the three.
 
 | Name | Behaviour | Parameters that define it |
 |------|-----------|---------------------------|
-| **Mirror** | Perfect specular reflection, Fresnel-weighted | `colour` (usually near-black), `index_of_refraction`; zero `emission` and `transmission` |
+| **Mirror** | Perfect specular reflection, Fresnel-weighted | `colour` (a tint on the reflection, usually close to white), `index_of_refraction`; zero `emission` and `transmission` |
 | **Emissive** | Reflects, and additionally emits a constant radiance — the neon | `colour` plus a non-zero `emission` |
 | **Glass** | Fresnel split between one reflected and one refracted ray | `colour` as tint, `index_of_refraction`, `transmission` towards 1 |
 
@@ -87,11 +87,13 @@ along one physical boundary while reflecting along another.
 ### What the Curve Does
 
 At normal incidence a dielectric reflects very little — around 4 % for glass. At grazing angles
-the Schlick term drives `F` toward 1.0 and every dielectric becomes a mirror. This single fact
+the Schlick term drives `F` towards 1.0 and every dielectric becomes a mirror. This single fact
 produces most of the look of the world:
 
-- A near-black mirror surface (`base colour ≈ (0.005, 0.005, 0.01)`) is almost invisible head-on
-  and blazes with reflected neon at glancing angles.
+- A mirror surface reflects only a fraction of what hits it head-on and blazes with reflected neon
+  at glancing angles. `colour` is a tint applied to the reflected light rather than an albedo, so
+  a mirror stays close to white — the shipped floor is `(0.85, 0.90, 1.00)` — and its head-on
+  dimness comes from `F0` alone.
 - A glass panel is a clear window when faced directly and a mirror when seen edge-on.
 
 ### Indices of Refraction Worth Using
@@ -101,7 +103,7 @@ produces most of the look of the world:
 | Vacuum / air | 1.000 | — | The medium rays travel through by default |
 | Water | 1.333 | 0.020 | |
 | Common glass | 1.500 | 0.040 | The default for the glass material |
-| Volcanic glass (obsidian) | 1.486 | 0.038 | The reference look for the dark mirror floor |
+| Volcanic glass (obsidian) | 1.486 | 0.038 | A real dark-glass reference, quoted for comparison only |
 | Acrylic | 1.490 | 0.039 | |
 | Sapphire | 1.770 | 0.077 | Noticeably brighter reflection |
 | Diamond | 2.417 | 0.172 | Strong reflection, dramatic refraction |
@@ -109,6 +111,11 @@ produces most of the look of the world:
 Anything in the 1.45–1.55 band reads as "glass" and gives `F0 ≈ 0.04`, the familiar default
 dielectric reflectance. Values above 2.0 look conspicuously artificial, which may well be what a
 neon world wants.
+
+The shipped mirror floor is one of those: it uses **2.4**, for `F0 ≈ 0.17`. The IOR is the only
+reflectivity knob this material model has, and the honest 4 % of a real dark glass is far too dim
+for a surface meant to read as a mirror. The reasoning is recorded beside the value, in
+`makeMaterials()` in `../src/main.cpp`.
 
 ---
 
@@ -160,7 +167,7 @@ the result and fall back to reflection:
 ```hlsl
 float3 t = refract(incident, normal, eta);
 
-if (dot(t, t) < 1.0e-6)
+if (dot(t, t) < 1.0e-8)
 {
     t = reflect(incident, normal);   // Total internal reflection.
 }
@@ -210,8 +217,9 @@ pane exactly as it should be.
 One practical detail: a refraction ray fired from the front face of a closed glass object will
 immediately hit that object's own back face unless the traversal skips the originating primitive.
 Carry the source primitive index down the ray and reject it during traversal, or offset the ray
-origin along `T` by a small epsilon. The self-hit is the single most common bug in a hand-written
-refraction path.
+origin off the surface by a small epsilon. The self-hit is the single most common bug in a
+hand-written refraction path. This renderer takes the second option and nothing else —
+`SURFACE_EPSILON` in `../src/trace.slang`.
 
 ---
 
@@ -220,8 +228,8 @@ refraction path.
 ### Why 16-Bit Float
 
 Neon is the only light source in this world, and neon is bright. An emissive tube is authored at
-an intensity well above 1.0 — 15.0 is a reasonable working value — because that is what makes it
-read as a light rather than as a light-coloured surface.
+an intensity well above 1.0 — the shipped tubes peak at 4.2 and 4.4 — because that is what makes
+it read as a light rather than as a light-coloured surface.
 
 An 8-bit UNORM colour target clamps everything above 1.0 on write. Doing so would:
 
@@ -234,7 +242,7 @@ An 8-bit UNORM colour target clamps everything above 1.0 on write. Doing so woul
 
 So the renderer draws into `VK_FORMAT_R16G16B16A16_SFLOAT`: half-float per channel, 64 bits per
 pixel. Half-float tops out at 65504 and holds a little over three significant decimal digits — far
-more headroom than a scene whose brightest emissive sits near 20.0 will ever need, and enough
+more headroom than a scene whose brightest emissive sits at 5.0 will ever need, and enough
 precision that the quantisation is invisible after tonemapping. It is also natively filtered and
 blended at full rate on essentially every GPU that supports Vulkan 1.3. Full 32-bit float would
 double the bandwidth for range and precision nobody can see.
@@ -252,12 +260,14 @@ call site rather than in the struct:
 - The palette entry stays a normalised hue that can be compared across materials and tuned in one
   place, while intensity varies per instance.
 - Because `emission` is float rather than UNORM, the product never clips, so a saturated hue
-  survives being scaled. Orange at `(1.0, 0.03, 0.0) * 15.0` keeps the ratio between its channels
-  exactly; the low green channel is preserved rather than being crushed to zero or the red pinned
-  at 1.0, either of which would shift the hue towards red or towards white.
+  survives being scaled. The shipped accent orange emits `(4.40, 1.60, 0.15)`: the low blue channel
+  is preserved rather than being crushed to zero, and the red is not pinned at 1.0, either of which
+  would shift the hue — towards white in the first case, towards red in the second.
 
-Working magnitudes: 1.0–3.0 for a faint indicator, 10.0–20.0 for a neon tube that should bloom
-strongly, above 50.0 only for something meant to hurt to look at.
+Working magnitudes, against the shipped `EXPOSURE` of 1.0 and `BLOOM_THRESHOLD` of 1.0: below 1.0
+for something that should not bloom at all, 4.0–5.0 for a neon tube that should bloom strongly.
+The brightest emissive channel anywhere in the world is the pillar's 5.0, so anything much above
+that is a deliberate departure from the scene's tone curve rather than a working value.
 
 ### Order of Operations
 
@@ -265,13 +275,18 @@ strongly, above 50.0 only for something meant to hurt to look at.
 1. Trace the ray tree in compute, writing linear HDR radiance into the R16G16B16A16_SFLOAT image
 2. Bloom: threshold extraction, mip-chain downsample, tent-filter upsample
 3. Post-process compute: composite bloom, apply the ACES fitted curve, encode sRGB,
-   write the 8-bit swapchain image directly
+   write an 8-bit UNORM image of its own
+4. Blit that image into the acquired swapchain image
 ```
 
-The post-process pass writes to the swapchain through a storage image, so there is no blit and no
-format-conversion hop. That requires the swapchain to be created as a UNORM format (not `_SRGB`)
-with `VK_IMAGE_USAGE_STORAGE_BIT`, because a storage write performs no automatic sRGB encoding —
-the shader must do the encoding itself, which it does exactly (see below).
+The post-process pass does not touch the swapchain. It writes into its own `R8G8B8A8_UNORM` storage
+image and leaves it in `eTransferSrcOptimal`; the frame loop then blits that image across. The blit
+is what converts the traced RGBA channel order into the surface's BGRA, which is also why it is a
+blit and not a plain copy.
+
+Writing into a UNORM storage image rather than an `_SRGB` one means the write performs no
+automatic sRGB encoding, so the shader must do the encoding itself, which it does exactly (see
+below).
 
 Nothing in this list is stochastic, so nothing in it needs a history buffer.
 
@@ -336,32 +351,27 @@ lines.
 
 | Colour | Linear RGB | Role |
 |--------|-----------|------|
-| Cyan | (0.0, 0.8, 1.0) | Primary — most cells |
-| Orange | (1.0, 0.03, 0.0) | Accent — every 8th row and column |
+| Cyan | (0.02, 0.62, 1.0) | Primary — most grid lines |
+| Orange | (1.0, 0.36, 0.03) | Accent — every 8th row and column |
 
 Two colours rather than one gives the grid a readable sense of scale: the coarse orange supergrid
 tells you how far you are looking across the fine cyan one. Two rather than three or more keeps
 the palette coherent; a third hue starts to look like a colour test chart instead of a world.
 
-The selection is a pure function of world-space position, so it can be evaluated identically at a
-primary hit and at any reflected or refracted hit:
+The selection happens on the host, when the grid mesh is generated, and not in the shader at all.
+Every edge whose row or column index is a multiple of `NeonTubeConfig::major_interval` is emitted
+into the accent sub-mesh rather than the primary one, and the two sub-meshes are tagged with
+`MATERIAL_NEON_ACCENT` and `MATERIAL_NEON_PRIMARY` as their triangles are appended to the
+hierarchy. See `isMajorGridLine()` in `../src/geometry.cpp`.
 
-```hlsl
-float mod_x = fmod(floor(abs(world_pos.x)), MAJOR_GRID_SPACING);
-float mod_z = fmod(floor(abs(world_pos.z)), MAJOR_GRID_SPACING);
-bool is_orange = ((mod_x < 0.5) || (mod_z < 0.5));
-```
+An edge is an accent edge when *either* of its axes lies on a major line, so that the crossings of
+a major row and a major column stay a single unbroken accent lattice instead of breaking at every
+junction. With the shipped `major_interval` of 8 that puts roughly 23 % of the edges on the accent
+colour.
 
-The `floor(abs(...))` ordering, rather than `abs(floor(...))`, keeps the orange bands symmetric
-about the world origin. With the operations the other way round, the bands on the negative side
-shift by one cell relative to the positive side — a subtle asymmetry that is very hard to see and
-very annoying once seen.
-
-With `MAJOR_GRID_SPACING = 8`, roughly 23 % of cells are orange.
-
-Being a position function rather than per-instance data is what keeps reflections correct: the
-mirror floor shows reflected tubes in the right colours because the reflected hit runs the same
-function on the same world position.
+Deciding this once on the host is what keeps reflections correct, at no cost in the shader: the
+material index rides on the triangle, so a reflected or refracted hit reads exactly the index a
+primary hit would, with no function that has to be kept consistent in two places.
 
 ---
 
@@ -373,13 +383,11 @@ black pixel, a white pixel, or a NaN that poisons everything downstream.
 | Guard | Value | Purpose |
 |-------|-------|---------|
 | Fresnel clamp | `clamp(1 - cos_theta, 0, 1)` | Prevents `pow()` on a negative base |
-| Throughput cutoff | `1e-3` | Terminates a ray whose accumulated attenuation can no longer change the pixel |
-| TIR test | `dot(T, T) < 1e-6` | Detects the zero vector from `refract()` without an exact compare |
-| Ray origin offset | `1e-4` along the outgoing direction | Prevents self-intersection (shadow / reflection acne) |
-| Self-hit rejection | Source primitive index | The robust cure for the refraction self-hit; the epsilon offset alone is not enough on thin geometry |
-| Minimum ray distance | `t_min = 1e-4` | Same purpose, enforced during traversal rather than at spawn |
-| Inverse ray direction | Keep the `±inf` | An axis-aligned ray gives `1 / 0` in the BVH slab test; rely on IEEE infinity semantics rather than clamping the divisor |
-| Radiance clamp before bloom | Scene-dependent, e.g. 100.0 | Bounds a runaway accumulation without visibly capping legitimate neon |
+| Throughput cutoff | `1 / 512` | Terminates a ray whose accumulated attenuation can no longer change the pixel |
+| TIR test | `dot(T, T) < 1e-8` | Detects the zero vector from `refract()` without an exact compare |
+| Ray origin offset | `1e-3` along the normal, on whichever side the new ray leaves | Prevents self-intersection (shadow / reflection acne) |
+| Minimum ray distance | `1e-8` | Rejects the degenerate zero-distance hit during traversal; the surface offset above is what actually cures acne |
+| Inverse ray direction | `1e-30` in place of a zero component | An axis-aligned ray gives `1 / 0` in the BVH slab test, and an origin lying on that slab's plane then computes `0 * inf` = NaN, which turns a box the ray does pass through into a miss. The shader and the host BVH substitute the same tiny magnitude |
 | Pre-encode clamp | `clamp(colour, 0, 1)` | Guarantees `linearToSrgb()` never sees a negative input |
 | Normalise after interpolation | Always | Interpolated normals are not unit length; an unnormalised `N` silently corrupts both `reflect()` and `refract()` |
 

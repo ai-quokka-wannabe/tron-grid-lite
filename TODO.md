@@ -13,7 +13,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 | 3     | Full ray tree                 | Reflections, emissives, glass      | **Done** |
 | 4     | Post processing               | Bloom, tonemapping                 | **Done** |
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | Pending |
-| 6     | AI players                    | Creature sensor interface plugs in | Pending |
+| 6     | AI agents                     | Creature sensor interface plugs in | Pending |
 
 ## Etape 1 — Adopt project infrastructure from TronGrid
 
@@ -67,7 +67,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 - [ ] Give surfaces something to be heard: sound sources in the world
 - [ ] Acoustic ray traversal through the same hierarchy
 - [ ] Energy histogram per listener, banded by octave
-- [ ] Fill `hearing_samples` in the agent interface
+- [ ] Add ears to the agent interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md` — and bump `TGL_BRAIN_ABI_VERSION` to 2
 
 ## Journal
 

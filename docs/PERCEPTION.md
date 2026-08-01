@@ -44,7 +44,9 @@ lists every such case.
 
 ## Sensor presets
 
-The world offers a handful of sensor shapes, named after the animals whose measurements set
+**None of these are implemented yet — they are the specification Phase 6 will build to.**
+
+The world will offer a handful of sensor shapes, named after the animals whose measurements set
 their size. A preset is a **render specification** — sample count, sample directions, acceptance
 angles, channel count, quantisation — and nothing more. Which preset an agent asks for, and what
 it does with the buffer, is the plugin's affair.
@@ -215,7 +217,7 @@ display resolution.
 | Habitat PointGoal, Octo | 256×256 | 65,536 |
 | RT-1 | 300×300, compressed to **8 tokens per frame** | 90,000 |
 
-The median of these is about 9,216 pixels; the mode is 64×64. Three published null results
+The median of these is 7,056 pixels (84×84); the mode is 64×64. Three published null results
 license the low end directly:
 
 1. **DD-PPO (Habitat)** average-pools 256×256 to an effective 128×128 — a 4× pixel reduction —

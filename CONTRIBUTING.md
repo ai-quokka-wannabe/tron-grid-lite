@@ -95,7 +95,7 @@ When submitting:
 ### Prerequisites
 
 - C++20 compiler (MSVC 19.30+, GCC 12+, or Clang 15+)
-- CMake 3.16+
+- CMake 3.25+
 - Ninja build system
 - Vulkan SDK 1.4.335.0+
 - XCB development headers (Linux only)
@@ -138,7 +138,7 @@ cmake --build build/linux-x11-gcc --config Debug
 See [STYLE.md](STYLE.md) § Naming Conventions for the full table. Key rules:
 camelCase functions, PascalCase types, `m_` member prefix, SCREAMING_SNAKE_CASE constants.
 
-### Documentation
+### Code Comments
 
 - Add comments for non-obvious logic
 - Keep comments up to date with code changes
@@ -234,7 +234,7 @@ chore: update Vulkan SDK to 1.4.335.0
 - Add a reverse-chronological entry to `TODO.md` § Journal for non-trivial work
 - Update code comments when changing public APIs
 - Keep examples up to date and working
-- `CHANGELOG.md` is reserved for the first stable release; skip it for pre-release work
+- Add an entry to `CHANGELOG.md` § Unreleased for anything user-visible
 
 ---
 

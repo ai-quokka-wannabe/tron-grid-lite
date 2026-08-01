@@ -13,7 +13,7 @@ through rendered frames.
    internals here, and never write features, docs or comments that assume a human player.
    Creature minds belong to other repositories in the `ai-quokka-wannabe` organisation.
 2. **This is a fresh, independent project.** It reuses infrastructure and foundation code from
-   the author's earlier [TronGrid](https://github.com/MatejGomboc/tron_grid) renderer (same
+   the author's earlier [TronGrid](https://github.com/MatejGomboc/tron-grid) renderer (same
    author, same GPL v3 licence), but it is not a part, fork or component of any other project.
    Describe the relationship as "reuses code from" and nothing stronger.
 
@@ -26,11 +26,16 @@ tron-grid-lite/
 ├── .clang-format        ← LLVM-based, Allman braces, 4-space indent, 170 col
 ├── .editorconfig        ← 4-space indent, trim trailing whitespace
 ├── .gitignore
-├── CMakeLists.txt       ← build config (finds Vulkan, sets platform defines)
-├── CMakePresets.json    ← 5 presets: windows-msvc, windows-clang-cl, windows-mingw, linux-x11-gcc, linux-x11-clang
+├── CMakeLists.txt       ← top-level build config (finds Vulkan, sets warnings, adds libs/ and src/)
+├── CMakePresets.json    ← 7 configure presets: windows-msvc, windows-clang-cl, windows-mingw, linux-x11-gcc, linux-x11-clang, linux-x11-clang-asan, linux-x11-clang-tsan
 ├── LICENCE              ← GPL v3
 ├── README.md            ← public-facing project overview
-└── main.cpp             ← entry point (currently hello world placeholder)
+├── TODO.md              ← roadmap, active etapes and journal
+├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, PERCEPTION, AGENT_INTERFACE, RELATED_WORK, DEV_ENV_SETUP
+├── images/              ← the flyby clips the README embeds
+├── libs/                ← bvh, logging, math, signals, testing, window — static libraries
+├── src/                 ← the renderer: main.cpp, Vulkan setup, tracer, postprocess, Slang shaders, tests/
+└── tools/               ← Python scripts outside the build (record_flyby.py)
 ```
 
 ## Rules
@@ -41,8 +46,8 @@ tron-grid-lite/
 - **Formatting:** Run `.clang-format`. Allman braces for functions/namespaces, 4-space indent, 170 column limit.
 - **Vulkan loading:** Volk (dynamic). Always define `VK_NO_PROTOTYPES`. Never link Vulkan statically.
 - **Shaders:** Slang (not GLSL/HLSL directly).
-- **Build:** CMake 3.16+ with Ninja Multi-Config. Use presets: `cmake --preset <name>`, `cmake --build build/<name> --config Debug|Release`.
-- **CI:** GitHub Actions. 5 matrix jobs matching the 5 presets.
+- **Build:** CMake 3.25+ with Ninja Multi-Config. Use presets: `cmake --preset <name>`, `cmake --build build/<name> --config Debug|Release`.
+- **CI:** GitHub Actions. 5 build jobs (one per platform preset) plus 2 sanitiser jobs (ASan+UBSan and TSan, both variants of `linux-x11-clang`).
 - **Licence:** GPL v3-or-later.
 - **Don't over-engineer.** Keep it simple. No abstractions until there's a concrete second use case. This rule is the entire reason this repo exists.
 - **Stay lite.** If a feature needs RT hardware, mesh shaders, or a texture pipeline, it belongs in big TronGrid, not here.
@@ -55,7 +60,7 @@ cmake --preset windows-msvc
 cmake --build build/windows-msvc --config Debug
 
 # Linux
-sudo apt-get install libx11-dev
+sudo apt-get install libxcb1-dev
 cmake --preset linux-x11-gcc
 cmake --build build/linux-x11-gcc --config Debug
 ```
@@ -75,7 +80,7 @@ machine: GTX 1650 Ti laptop (exposes zero VK RT extensions; that is the point).
 | HDR range          | 16-bit float                                | Emissive glow needs headroom               |
 | Present mode       | MAILBOX                                     | Low latency, no tearing                    |
 | Ray tracing        | Deterministic Whitted in compute shaders    | Perfect mirrors + emissives = no MC noise  |
-| Materials          | Mirror / emissive / glass only              | The aesthetic is the algorithm             |
+| Materials          | One continuous model: colour, index_of_refraction, emission, transmission | The aesthetic is the algorithm |
 | Creature vision    | Tiny sensor renders (≤ 800×600, often far less) | Animal eyes resolve little; cheap rays |
 | Acoustics          | Same BVH as visual rays                     | One world, two senses                      |
 | Shader language    | Slang                                       | Modern, modular, multi-target              |
@@ -83,28 +88,9 @@ machine: GTX 1650 Ti laptop (exposes zero VK RT extensions; that is the point).
 
 ## Roadmap
 
-Currently in **Phase 0 — Foundation** (triangle on screen).
+Phases 0 to 4 are **Done** — toolchain, window and frame loop, compute BVH tracer, full ray tree,
+and post processing. **Phase 5 — acoustic rays** is beginning; Phase 6 opens the AI agent sensor
+interface.
 
-| Phase | Goal                          | Milestone                          |
-|-------|-------------------------------|------------------------------------|
-| 0     | Prove the toolchain           | Triangle on screen                 |
-| 1     | Window, swapchain, frame loop | Fly through a wireframe grid       |
-| 2     | BVH + primary rays in compute | Mirror world, first bounce         |
-| 3     | Full ray tree                 | Reflections, emissives, glass      |
-| 4     | Post processing               | Bloom, tonemapping                 |
-| 5     | Acoustic rays                 | Echoes and occlusion via same BVH  |
-| 6     | AI players                    | Creature sensor interface plugs in |
-
-## Phase 0 Checklist
-
-- [ ] Integrate Volk for dynamic Vulkan loading
-- [ ] Create platform window (Win32 / X11)
-- [ ] Vulkan instance + debug messenger
-- [ ] Physical device selection (prefer discrete GPU)
-- [ ] Logical device + queue creation
-- [ ] Swapchain setup (MAILBOX present mode)
-- [ ] Render pass + framebuffers
-- [ ] Graphics pipeline (vertex + fragment, hardcoded triangle)
-- [ ] Command buffer recording + submission
-- [ ] Frame synchronisation (fences + semaphores)
-- [ ] Triangle on screen
+The phase table is canonical in [`TODO.md` § Roadmap](../TODO.md), which also holds the active
+etapes and the journal. Read it there rather than duplicating it here.
