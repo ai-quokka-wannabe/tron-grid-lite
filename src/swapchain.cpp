@@ -147,6 +147,20 @@ void Swapchain::build(uint32_t width, uint32_t height)
     m_present_mode = choosePresentMode(present_modes);
     m_extent = chooseExtent(capabilities, width, height);
 
+    /*
+        The guard above tested the *requested* size, but on Win32 chooseExtent always returns the
+        surface's own currentExtent, and the window's cached size is only refreshed when a WM_SIZE
+        is dequeued. Minimise the window between those two moments and the cached size is still
+        non-zero while the surface already reports nothing at all — which would build a swapchain
+        with a zero extent, violating VUID-VkSwapchainCreateInfoKHR-imageExtent-01689. Under NDEBUG
+        no validation layer is there to say so, and the throw that follows carries no useful
+        message. Re-checking what was actually resolved preserves the early-return contract above.
+    */
+    if ((m_extent.width == 0u) || (m_extent.height == 0u)) {
+        m_extent = vk::Extent2D{0, 0};
+        return;
+    }
+
     // Image count: min + 1 for triple buffering headroom.
     uint32_t image_count{capabilities.minImageCount + 1};
     if ((capabilities.maxImageCount > 0) && (image_count > capabilities.maxImageCount)) {
@@ -170,6 +184,19 @@ void Swapchain::build(uint32_t width, uint32_t height)
         m_logger->logWarning("Surface does not support storage image usage; the tracer must present via a transfer copy.");
     } else if (!format_allows_storage) {
         m_logger->logWarning("Chosen swapchain format does not support storage image writes; the tracer must present via a transfer copy.");
+    }
+
+    /*
+        Only COLOR_ATTACHMENT is guaranteed to appear in supportedUsageFlags. Storage is carefully
+        probed above and then not even used, while transfer-destination — the one usage this
+        renderer genuinely cannot do without, since every frame ends in a blit into the swapchain
+        image — was requested unconditionally. On a surface that omits it, swapchain creation fails
+        VUID-VkSwapchainCreateInfoKHR-imageUsage-01276 and surfaces as a generic fatal error with no
+        indication of the cause.
+    */
+    if (!(capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferDst)) {
+        m_logger->logFatal("Surface does not support transfer-destination usage; the renderer cannot present its blit.");
+        std::abort();
     }
 
     m_image_usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
