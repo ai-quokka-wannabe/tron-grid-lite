@@ -212,10 +212,19 @@ once and removed again: reserving two further std430 rows doubled the material b
 field nothing reads is a field nothing maintains. Worse, the stale acoustic members outlived their removal in the
 shader's copy of the struct and produced an out-of-bounds read that only GPU-assisted validation caught.
 
-Phase 5 will therefore **have to put those coefficients somewhere**, and that is the intended cost. Where they go is
-not settled: [ACOUSTICS.md](ACOUSTICS.md) is a design proposal rather than a decision, and it argues for a parallel
-buffer indexed by the same material index in preference to a wider `Material`. The `static_assert`s on `Material` in
-`src/components.hpp` exist precisely so that the C++ and Slang definitions cannot drift apart again while it happens.
+Phase 5 will therefore **have to put those values somewhere**, and that is the intended cost. They go in a **parallel
+buffer indexed by the same material index**, not in a wider `Material`, for two reasons that both come out of the
+history above.
+
+The first is bandwidth, and it is the same argument that removed them. `Material` is exactly two std430 rows; two
+more floats round up to three, half again as wide. The visual pass reads a material at every hit of every ray of
+every pixel, and the acoustic pass re-solves at something closer to ten hertz — so widening the shared record makes
+the hot path carry cold data on every fetch, forever, to spare the cold path one buffer binding.
+
+The second is that a separate buffer cannot drift. The bug that made the first attempt memorable was the shader's
+copy of `Material` still declaring acoustic members after the C++ side had dropped them, which only GPU-assisted
+validation caught. Fields the visual shader never declares cannot come adrift from fields it never reads. The
+`static_assert`s on `Material` in `src/components.hpp` stay exactly as they are, and keep meaning what they say.
 
 ### BVH Construction and Layout
 
@@ -362,14 +371,36 @@ Sound is traced the same way light is, through the same structure:
 
 - The same BVH buffers are bound to an acoustic compute pass.
 - Rays are cast from a sound source, or gathered towards a listener, and traversal is bit-for-bit the same algorithm.
-- On hit, the material's **acoustic** absorption and scattering coefficients are applied instead of its optical
-  colour, and path length accumulates into a delay.
+- On hit, the material's **acoustic absorption** is applied instead of its optical colour, and path length
+  accumulates into a delay.
 - The output is a small set of arrival events — direction, delay, attenuation — delivered to a creature's hearing
   sensor, not an image.
 
-Nothing about the BVH, its buffer layout or the traversal code has to change: none of it is specific to light. The
-acoustic coefficients are the one thing that does not exist yet, and § Material Model above says why they were taken
-out and where they might go back.
+Nothing about the BVH, its buffer layout or the traversal code has to change: none of it is specific to light. What
+does not exist yet is the pair of acoustic values per material, which § Material Model above places in a parallel
+buffer rather than in `Material` itself.
+
+### Two acoustic values, and specifically not a scattering coefficient
+
+The optical side asks two questions of a surface: what does it do to light that arrives, and what light does it
+originate. `colour` and `emission` answer them. The acoustic side asks exactly the same two questions, so it gets
+exactly the same shape — **absorption** and **source strength** — and nothing else.
+
+Room acoustics would normally add a third, a scattering coefficient splitting each reflection into a specular part
+and a diffuse one. This world does not need it, for the same reason the optical model carries no roughness. Roughness
+was dropped because a perfectly smooth surface is the analytic limit of the microfacet model rather than a
+simplification of it; scattering is dropped because the floor's terraces already **are** the scattering. Their risers
+stand a metre proud and their steps are metres across, against a wavelength of roughly eleven centimetres at the neon
+hum's fundamental — geometry far larger than the wave, redirecting it specularly in genuinely varied directions. A
+statistical coefficient would model a second time, and less honestly, what the triangles are already doing.
+
+Source strength is the value that has to exist instead, because otherwise nothing in the world makes a sound at all.
+The neon hums, so the same triangles that emit light emit sound, and the surface that carries `emission` carries its
+acoustic counterpart beside it.
+
+That leaves the material at two extra floats rather than four. The fields removed once for being read by nothing
+should come back only when something reads them, and a scattering coefficient would arrive with nothing to drive it
+and no diffuse tail to consume it — which is precisely how the first pair came to be deleted.
 
 ---
 
