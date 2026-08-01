@@ -23,7 +23,7 @@
 #include <window/window.hpp>
 #include <vector>
 
-//! Create a vk::raii::SurfaceKHR from the platform-native window handles of the spectator window.
+//! Create a vk::raii::SurfaceKHR from the platform-native window handles of the User's window.
 [[nodiscard]] vk::raii::SurfaceKHR createSurface(const vk::raii::Instance& instance, const WindowLib::Window& window);
 
 //! Required surface extensions for the current platform.

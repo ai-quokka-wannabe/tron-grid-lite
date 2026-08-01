@@ -33,7 +33,7 @@
     anyway, and it means a triangle list for the BVH builder is obtained by reading the vertex
     array three entries at a time with no indirection.
 
-    The world is right-handed and Y-up, distances are metres, and triangle winding is
+    The Grid is right-handed and Y-up, distances are metres, and triangle winding is
     anticlockwise when seen from the front face.
 */
 
@@ -105,7 +105,7 @@ struct Mesh {
     /*!
         Appends another mesh, shifting its indices so they address the merged vertex array.
 
-        This is how the several sub-meshes of the world are concatenated into the single flat
+        This is how the several sub-meshes of the Grid are concatenated into the single flat
         triangle buffer that the `Geometry` component slices with a first-triangle/count pair.
 
         \param other Mesh to append. Left unchanged.
@@ -114,7 +114,7 @@ struct Mesh {
 };
 
 /*!
-    Configuration for the grid floor — the default world surface.
+    Configuration for the grid floor — the Grid's default surface.
 
     The floor is a subdivided plane displaced by a low relief, so it rolls gently rather than
     lying dead flat. The relief costs nothing: it moves vertices that already exist, so the
@@ -124,7 +124,7 @@ struct Mesh {
     lines draw as arcs across the swells instead of as a ruled lattice. Acoustically, it matters
     far more: a flat plane sends every reflection away at the mirror angle and none of it ever
     returns, whereas a rolling surface aims some reflections back into the scene, which is where
-    echoes come from. A perfectly flat world would be acoustically almost silent.
+    echoes come from. A perfectly flat Grid would be acoustically almost silent.
 */
 struct GridFloorConfig {
     uint32_t cells{64u}; //!< Number of quads along each axis, so `cells` × `cells` quads in total.
@@ -146,7 +146,7 @@ struct GridFloorConfig {
         Discrete height levels the relief snaps to. Zero leaves it smooth.
 
         Six over five metres gives steps a little under a metre — tall enough to read as terraces
-        from the spectator camera rather than as ripples, and tall enough to be worth reflecting
+        from the User's camera rather than as ripples, and tall enough to be worth reflecting
         sound off.
     */
     uint32_t relief_terraces{6u};
@@ -227,7 +227,7 @@ struct NeonGrid {
 /*!
     Generates the grid floor: a subdivided plane displaced by `gridSurfaceHeight`.
 
-    This is the default world surface and the first thing the BVH indexes. Face normals are
+    This is the Grid's default surface and the first thing the BVH indexes. Face normals are
     derived from the displaced triangles rather than assumed upward, so the relief shades and
     reflects correctly. Vertices carry a `uv` measured in grid cells from the centre of the floor,
     so a shader can derive grid-line coordinates from `uv` alone without knowing the world extent.

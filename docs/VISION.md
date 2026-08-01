@@ -2,15 +2,15 @@
 
 ## The Idea
 
-TronGrid Lite is a small, deliberately simple Vulkan renderer that builds a world **for AI agents only**.
+TronGrid Lite is a small, deliberately simple Vulkan renderer that builds the Grid — a world **for Programs only**.
 
-There is no human player. There is no gameplay, no score, no win condition, no story. The inhabitants of this world are
-**AI creature agents** — software creatures that perceive the world through rendered images and rendered sound, and act
-back into it through a narrow motor interface. A human being never inhabits this world; a human being only ever
-**spectates** it, through a debug window driven by a free-flight camera used for development and observation.
+There is no human player. There is no gameplay, no score, no win condition, no story. The inhabitants of the Grid are
+**Programs**, each driving a creature that perceives the Grid through rendered images and rendered sound, and acts
+back into it through a narrow motor interface. A User never inhabits the Grid; a User only ever **watches** it,
+through a debug window driven by a free-flight camera used for development and observation.
 
 That distinction shapes every decision in this repository. When a design question comes up, the answer is not "what
-feels good to play" — it is "what does a creature need to perceive, and what does a developer need to see while
+feels good to play" — it is "what does a creature need to perceive, and what does the User need to see while
 debugging it".
 
 ## An Independent Project
@@ -27,48 +27,48 @@ The two projects also aim at opposite ends of the hardware spectrum. The earlier
 hardware ray tracing. TronGrid Lite targets a **GTX 1650 Ti laptop**, which exposes exactly zero Vulkan ray-tracing
 extensions. Everything here must run there.
 
-## The Inhabitants: AI Creature Agents
+## The Inhabitants: Programs
 
-The creatures that live in the Grid are not written in this repository, and their workings are none of this
-repository's business. Each agent is a **separate plugin** — a DLL on Windows, an SO on Linux — loaded at runtime
-behind a plain C ABI. **TronGrid Lite is the stage, not the actor.** It renders senses and applies motor intent. What
-happens between the two is entirely the plugin's affair, and the world is deliberately **agnostic about how any agent
+The Programs that live on the Grid are not written in this repository, and their workings are none of this
+repository's business. Each Program is a **separate plugin** — a DLL on Windows, an SO on Linux — loaded at runtime
+behind a plain C ABI. **TronGrid Lite is the stage, not the actor.** It renders senses and applies actions. What
+happens between the two is entirely the plugin's affair, and the Grid is deliberately **agnostic about how any Program
 works inside**: a lookup table, a neural network, a hand-written reflex arc and a large model are all the same thing
 from here.
 
-That agnosticism is a design constraint, not modesty. The moment the world knows something about how an agent thinks,
+That agnosticism is a design constraint, not modesty. The moment the Grid knows something about how a Program thinks,
 it starts serving that assumption, and it stops being a world. So there is no cognition, no learning and no behaviour
 model anywhere in this codebase, and there should never be one.
 
-What the renderer does owe the agents is **honesty**: what a creature senses must be a consequence of where it is and
+What the renderer does owe the Programs is **honesty**: what a creature senses must be a consequence of where it is and
 what is around it, never a privileged read of scene state. No entity list. No ground-truth positions. No cheating. A
 creature knows what its sensors resolve, and nothing more — see [PERCEPTION.md](PERCEPTION.md) for how small that
 deliberately is.
 
-The human observer sits outside that contract entirely. The spectator window is a debugging instrument — it shows the
-same world from a free camera at a comfortable resolution, so a developer can watch what a creature is doing and judge
-whether the world is behaving. It is never an input to any creature.
+The User sits outside that contract entirely. The debug window is an instrument for development — it shows the
+same Grid from a free camera at a comfortable resolution, so the User can watch what a creature is doing and judge
+whether the Grid is behaving. It is never an input to any creature.
 
 ## The Aesthetic
 
-The world is Tron-inspired cyberspace: **neon lines against infinite black**.
+The Grid is Tron-inspired cyberspace: **neon lines against infinite black**.
 
 - **Infinite black** — there is no sky, no skybox, no horizon, no fog. A ray that hits nothing returns
   black. The void is genuinely empty, and that emptiness is free to render.
-- **Everything is a perfect mirror** — every surface in the world is perfectly specular. Their tints are close to white,
+- **Everything is a perfect mirror** — every surface on the Grid is perfectly specular. Their tints are close to white,
   and it is Fresnel rather than the tint that keeps them dim head-on, so they read as dark polished planes that catch and
   repeat the neon.
 - **Emissive geometry is the only light source** — there are no point lights, no directional lights, no ambient term.
-  Light exists because some geometry glows. The neon tubes and glowing edges that form the visual language of the world
+  Light exists because some geometry glows. The neon tubes and glowing edges that form the visual language of the Grid
   *are* the lighting rig.
 - **Glass** — a small amount of simple transparent geometry with Snell refraction, for depth and for something for a
   creature's optics to be confused by.
 
-The whole surface vocabulary of the world is three materials — mirror, emissive, glass — and that is a feature. With
+The whole surface vocabulary of the Grid is three materials — mirror, emissive, glass — and that is a feature. With
 perfect mirrors and emissive geometry there is nothing stochastic to integrate: the ray tree is **deterministic and
 shallow**, Whitted 1980 style. No Monte Carlo sampling, therefore no noise, therefore no denoiser, therefore no
-temporal accumulation and no ghosting. The image a creature sees on frame *N* depends only on the world state on
-frame *N*.
+temporal accumulation and no ghosting. The image a creature sees on tick *N* depends only on the Grid state on
+tick *N*.
 
 ### Colour Palette
 
@@ -92,21 +92,21 @@ as a raster or as an explicit sample-direction list — see
 [PERCEPTION.md § Sensor presets](PERCEPTION.md#sensor-presets). This is biologically honest — the eyes of most animals
 resolve far less than a computer display — and it is also what makes hand-written compute ray tracing affordable on a
 modest GPU. A 64 x 64 raster is 4096 primary rays; the smallest preset is two. A creature can have several eyes,
-pointing in several directions, or none at all, and still cost less than one spectator frame.
+pointing in several directions, or none at all, and still cost less than one debug-window frame.
 
-The spectator window is separate and larger. It renders the same world with the same tracer, at a resolution a human
+The debug window is separate and larger. It renders the same Grid with the same tracer, at a resolution the User
 can actually look at.
 
 ### Hearing
 
-Later in the roadmap, the same acceleration structure that answers visual rays will answer **acoustic rays**. Sound in
-this world travels along the same geometry that light does: it reflects off the same mirrors, is occluded by the same
+Later in the roadmap, the same acceleration structure that answers visual rays will answer **acoustic rays**. Sound on
+the Grid travels along the same geometry that light does: it reflects off the same mirrors, is occluded by the same
 walls, and passes through the same glass. To make that possible, every surface will carry **both optical and acoustic
 properties** — a reflectivity for photons and an absorption coefficient for pressure waves, side by side in the same
 material record. The acoustic half is not in `Material` yet: a field nothing reads is a field nothing maintains, so it
 arrives when hearing does.
 
-One world, two senses, one traversal.
+One Grid, two senses, one traversal.
 
 ## What TronGrid Lite Deliberately Is Not
 
@@ -116,17 +116,17 @@ and should run on a laptop GPU from 2020. That rules out a long list of otherwis
 - **No hardware ray tracing** — no `VK_KHR_acceleration_structure`, no `VK_KHR_ray_query`, no
   `VK_KHR_ray_tracing_pipeline`. The reference GPU exposes none of them. Rays are traced by hand in ordinary compute
   shaders, against a BVH this project builds itself into storage buffers.
-- **No mesh shaders and no meshlets** — the geometry budget of this world is small enough that the classic pipeline is
+- **No mesh shaders and no meshlets** — the geometry budget of the Grid is small enough that the classic pipeline is
   never the bottleneck, and the tracer does not rasterise anyway.
 - **No bindless descriptor indexing requirement** — a handful of storage buffers and a handful of images, bound
   explicitly, is easier to follow and works everywhere.
 - **No GPU-driven pipeline and no heavy allocator layer** — no indirect draw machinery to debug.
 - **No ReSTIR, no SVGF denoiser, no temporal accumulation** — deterministic Whitted shading produces no noise to
   denoise.
-- **No volumetric fog, no skybox** — the world is infinite black by design. The floor's terraced relief is the one
+- **No volumetric fog, no skybox** — the Grid is infinite black by design. The floor's terraced relief is the one
   departure from flatness, and it earns its place acoustically rather than scenically: a flat mirror sends every
   reflection away and returns none of it, whereas terrace risers standing square to the ground throw sound back across
-  the world, which is where Phase 5's echoes will come from.
+  the Grid, which is where Phase 5's echoes will come from.
 - **No textures, no roughness, no microfacets, no PBR material system** — three materials, each described by a few
   numbers.
 
@@ -136,13 +136,13 @@ needed writing, debugging, and explaining, and none of them are needed for neon 
 ## Design Principles
 
 1. **Simple over clever.** The whole renderer should fit in one head.
-2. **Agents first, humans never.** The world exists to be perceived by creatures. Human-facing output is a debugging
+2. **Programs first, Users never.** The Grid exists to be perceived by creatures. User-facing output is a debugging
    convenience and is allowed to be crude.
-3. **Deterministic rendering.** Same world state in, same image out. Essential for training, testing, and reproducing
+3. **Deterministic rendering.** Same Grid state in, same image out. Essential for training, testing, and reproducing
    creature behaviour.
-4. **Honest embodiment.** A creature receives sensor data only. No scene graph access, no entity list, no ground truth.
-5. **Creature-sized resolution.** Sensors render tiny. Only the spectator window renders large.
-6. **One world, two senses.** A single BVH serves visual and acoustic rays; surfaces will carry optical and acoustic
+4. **Honest embodiment.** A creature receives senses only. No scene graph access, no entity list, no ground truth.
+5. **Creature-sized resolution.** Sensors render tiny. Only the debug window renders large.
+6. **One Grid, two senses.** A single BVH serves visual and acoustic rays; surfaces will carry optical and acoustic
    properties together.
 7. **Own everything that matters.** The BVH, the tracer, the maths, the windowing, the logging and the test harness are
    all in-house. External dependencies are limited to the Vulkan SDK, Volk, vulkan-hpp and Slang.
@@ -161,18 +161,18 @@ Each phase produces a working, demonstrable result. The canonical task checklist
 | 3 | Full deterministic ray tree | Reflections, emissive light, glass with Snell refraction |
 | 4 | Post-processing | Bloom and tonemapping — the neon finally glows |
 | 5 | Acoustic rays | Echo and occlusion traced through the same BVH |
-| 6 | AI agent sensor interface | A creature brain plugs in and perceives |
+| 6 | Program sensor interface | A Program plugs in and perceives |
 
 ```text
 Phase 0 --> 1 --> 2 --> 3 --> 4 --+--> 5 --+--> 6
 ```
 
-Phases 0 to 4 build the world. Phase 5 gives it a second sense. Phase 6 opens it to its inhabitants — and from that
-point on, the interesting work happens in the brain repositories, not here.
+Phases 0 to 4 build the Grid. Phase 5 gives it a second sense. Phase 6 opens it to its inhabitants — and from that
+point on, the interesting work happens in the Program repositories, not here.
 
 ## The Point
 
-> A digital creature will wake up in this world.
+> A digital creature will wake up on the Grid.
 > It will see neon lines against infinite black —
 > through eyes that resolve less than an old CRT,
 > and that is enough, because it has always been enough
@@ -180,5 +180,5 @@ point on, the interesting work happens in the brain repositories, not here.
 >
 > The Grid does not need four thousand lines of resolution.
 > It needs to be *true*: every reflection honest,
-> every echo travelling the same world as every glint.
+> every echo travelling the same Grid as every glint.
 > A small world, rendered simply, perceived completely.

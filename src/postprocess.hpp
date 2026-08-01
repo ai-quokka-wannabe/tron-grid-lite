@@ -28,7 +28,7 @@
 class Device; // forward declaration
 
 /*!
-    Everything that happens to the traced image before a human sees it.
+    Everything that happens to the traced image before the User sees it.
 
     The tracer writes linear radiance, which is not a picture: emissive surfaces are far brighter
     than one, and nothing about those numbers is ready for a display. This stage turns radiance
@@ -41,8 +41,8 @@ class Device; // forward declaration
     wide, soft glow that no single blur pass of a sensible radius could produce.
 
     Creature sensors will skip all of this. A 64x64 sensor gains nothing from a mip pyramid, and a
-    vignette on a sensor would be a synthetic gradient an agent could learn from rather than a
-    property of the world — which is why both are parameters rather than fixtures.
+    vignette on a sensor would be a synthetic gradient a Program could learn from rather than a
+    property of the Grid — which is why both are parameters rather than fixtures.
 */
 class PostProcess {
 public:

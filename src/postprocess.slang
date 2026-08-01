@@ -17,10 +17,10 @@
 //     ACES fitted RRT+ODT tone curve, encodes to sRGB and optionally darkens the corners with a subtle vignette. The result is written straight
 //     into the destination storage image.
 //
-//     The pass is used for two different destinations. For the spectator window the destination is the swapchain image and the vignette is
-//     usually enabled, because it reads as photographic to a human observer. For a creature sensor the destination is the small sensor image and
-//     the vignette must be disabled (strength 0), because a synthetic radial brightness gradient would be an artefact the agent could learn from
-//     rather than a property of the world.
+//     The pass is used for two different destinations. For the User's window the destination is the swapchain image and the vignette is usually
+//     enabled, because it reads as photographic to the User. For a creature sensor the destination is the small sensor image and the vignette
+//     must be disabled (strength 0), because a synthetic radial brightness gradient would be an artefact the Program could learn from rather
+//     than a property of the Grid.
 //
 //     Deliberately absent, in contrast to the renderer this code was adapted from: no chromatic aberration, no colour grade, no scan lines and no
 //     volumetric fog composite. The output is meant to be an honest tone mapping of the radiance the tracer computed.
@@ -188,8 +188,8 @@ void postprocessMain(uint3 thread_id : SV_DispatchThreadID)
     colour.g = linearToSrgb(colour.g);
     colour.b = linearToSrgb(colour.b);
 
-    // Optional vignette: a radial falloff that darkens the corners. Enabled for the human spectator window, disabled for creature sensors so no
-    // synthetic brightness gradient contaminates what an agent perceives.
+    // Optional vignette: a radial falloff that darkens the corners. Enabled for the User's window, disabled for creature sensors so no
+    // synthetic brightness gradient contaminates what a Program perceives.
     if (push.vignette_strength > 0.0)
     {
         float2 uv = (float2(thread_id.xy) + 0.5) / float2(width, height);

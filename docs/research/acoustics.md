@@ -58,7 +58,7 @@ Everything whose definition contains the word *enclosure*:
 - **Late reverberation synthesis**, mean-free-path estimation, transition order, and the 40 to 100
   diffuse reflection orders Schissler and Manocha need for one to two seconds of tail. Schissler,
   Mehra and Manocha note that in outdoor scenes most rays escape after the fourth or fifth bounce;
-  this world is more extreme than any outdoor benchmark in the literature.
+  the Grid is more extreme than any outdoor benchmark in the literature.
 - **Receiver spheres.** They exist to make a stochastic ray count converge in a closed room. A 0.5 m
   sphere smears arrival times by 1.5 ms, which is larger than the histogram bin this document
   proposes, and this scene is sparse enough to afford a point receiver.
@@ -67,7 +67,7 @@ Everything whose definition contains the word *enclosure*:
 ### The wavelength ledger
 
 The single cheapest way to say what the acoustic renderer can and cannot mean is to state, for each
-feature of the world, the frequency at which one wavelength equals it. Below that frequency the
+feature of the Grid, the frequency at which one wavelength equals it. Below that frequency the
 feature is sub-wavelength and a ray-traced shadow behind it is fiction; well above it, the ray model
 is doing honest work.
 
@@ -84,7 +84,7 @@ is doing honest work.
 | Largest single acoustic plane — one terrace level, median run | 14 m | 24.5 Hz |
 | Floor plan extent (no longer one plane) | 128 m | 2.7 Hz |
 
-Read down that table and the world sorts itself into three classes. The **terrace levels are valid at
+Read down that table and the Grid sorts itself into three classes. The **terrace levels are valid at
 every audible frequency** and are the only surfaces of which that is true — and note that this is now
 a statement about six stepped planes rather than about one 128 m sheet, because the relief means
 there is no single floor plane any more. The **terrace steps, pillars, slabs and column are valid
@@ -129,7 +129,7 @@ range. That is the geometric-optics regime by any standard, and it is what makes
 Phase 5" a physics decision rather than a budget one.
 
 Three caveats are not being hidden. First, the diffraction that matters most to a small animal is
-around its own head, and this world does not model creature bodies as acoustic scatterers at all.
+around its own head, and the Grid does not model creature bodies as acoustic scatterers at all.
 Second, the insect presets are not pressure receivers and a pressure-energy histogram computes a
 quantity their ears do not measure — see [the roster](#the-creature-roster). Third, all of it is
 conditional on the sources being high-frequency, which is exactly what
@@ -147,7 +147,7 @@ from. The sensor shapes derived from this are in [ACOUSTICS.md](../ACOUSTICS.md)
 Every preset's acoustic specification, with its provenance stated. As in
 [PERCEPTION.md](../PERCEPTION.md), the biology is theirs and the buffer sizes are ours.
 
-| Preset | Anchor | Frequency range | Ears | Bands | Localisation the biology achieves (recorded for calibration; not a world parameter) | Of the 3 kHz hum it hears |
+| Preset | Anchor | Frequency range | Ears | Bands | Localisation the biology achieves (recorded for calibration; not a Grid parameter) | Of the 3 kHz hum it hears |
 |--------|--------|-----------------|------|-------|--------------|---------------------------|
 | `elegans` | *C. elegans* | 100 Hz – 5 kHz, pressure **gradient**, whole cuticle | 2 (head, tail) | 1 | none; must move | the fundamental only |
 | `insect-min` | *Drosophila* / ant | near-field particle velocity, ~100–300 Hz, range mm to a few cm | 0 | — | — | nothing |
@@ -165,8 +165,8 @@ cuticle acting as a distributed eardrum. The 2024 follow-up sharpens it in a way
 sensor shape: the worm responds to **pressure gradients** rather than to absolute level, and
 selectively to localised sound. So the acoustic `elegans` sensor is not a spectrum and not a level —
 it is a two-sample difference along the body axis, exactly mirroring the two-zone photoreceptive strip
-already specified. Two "ears" at head and tail, one band, and the world does **not** compute the
-difference: taking it is interpretation and belongs to the brain.
+already specified. Two "ears" at head and tail, one band, and the Grid does **not** compute the
+difference: taking it is interpretation and belongs to the Program.
 
 **Silence is a legitimate sensor specification.** Römer puts the independent evolution of insect ears
 at probably more than twenty times, which is the strongest possible statement that hearing is not an
@@ -195,7 +195,7 @@ prey animal is ever added, this is its specification.
 the house mouse a 60 dB range of 2.3 kHz to 85.5 kHz — the upper limit more than two octaves above the
 human 17.6 kHz, the lower limit the highest of any common laboratory mammal, and a range of *good*
 hearing spanning only 0.4 octaves against a cat's 6.6. A rodent creature genuinely cannot hear
-low-frequency content in this world, and that is the same class of decision as clamping the `elegans`
+low-frequency content on the Grid, and that is the same class of decision as clamping the `elegans`
 visual response to zero above 545 nm.
 
 **The macropod figures are proxies, and the chain is one step weaker than the vision proxy.** There is
@@ -222,7 +222,7 @@ fovea, uniform wide field — predicts poor acuity, and the measured mouse figur
 the `macropod` preset's horizontal visual streak predicts coarse localisation too. **The acoustic
 angular resolution each preset's biology achieves follows from the retinal topography already cited,
 and does not need researching independently** — which is a calibration check on the roster, not a
-quantity the world computes.
+quantity the Grid computes.
 
 That last point is already reflected in PERCEPTION.md, which gives the mouse 31° in the horizontal
 plane and roughly 81° in the median plane. The primary sources are Lauer, Slee and May, who report an

@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   acoustic properties the shared BVH will need.
 - Slang shaders: `postprocess.slang` (ACES tonemap and sRGB encode) and `bloom_downsample.slang`
   (three bloom entry points), compiled and SPIR-V-validated at build time.
-- Documentation: `docs/VISION.md`, `docs/ARCHITECTURE.md`, `docs/AGENT_INTERFACE.md` and
+- Documentation: `docs/VISION.md`, `docs/ARCHITECTURE.md`, `docs/PROGRAM_INTERFACE.md` and
   `docs/DEV_ENV_SETUP.md`.
 - `docs/PERCEPTION.md` — the sensor presets the world renders (`elegans`, `insect-min`,
   `insect-mid`, `insect-high`, `rodent`, `macropod`), the published measurements that set their
@@ -60,6 +60,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scene. 13.7 ms at 1280x720 on a GTX 1650 Ti.
 
 ### Changed
+
+- **BREAKING — the agent ABI is renamed throughout, and `TGL_PROGRAM_ABI_VERSION` is `2u`.** The
+  project now uses Tron's vocabulary as its own: a **Program** is the thing that thinks, a
+  **creature** is the body it drives, the **User** is the human at the debug window, and the world
+  is **the Grid**. `TglBrain` becomes `TglProgram`, `tglGetBrainVTable` becomes
+  `tglGetProgramVTable`, and `creature_create` / `creature_tick` / `creature_destroy` become
+  `program_rez` / `program_tick` / `program_derez`. `docs/AGENT_INTERFACE.md` is now
+  `docs/PROGRAM_INTERFACE.md`. No Program has been written against version 1, so nothing breaks in
+  practice.
+- `library_init` and `library_shutdown` deliberately keep their plain names. The rule the scheme
+  follows is that Tron words name events on the Grid and plain words name events in the operating
+  system — those two are `LoadLibrary`/`dlopen` and `FreeLibrary`/`dlclose`, facts about Windows and
+  Linux rather than about this world.
+- `README.md` gains a vocabulary glossary, and `STYLE.md` records the three rulings that keep it
+  stable: Tron's "Program" is a proper noun with the American single-m spelling while British
+  "programme" is a different word, the GPL boilerplate stays lowercase and untouched, and "rez" is
+  never glossed as "resolve" — "resolution" is used throughout these documents in the pixel sense.
 
 - Unified the material model: `MaterialKind` is gone and `Material` gained a continuous
   `transmission` parameter. Every surface reflects, transmits and emits simultaneously, so there

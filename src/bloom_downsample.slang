@@ -13,12 +13,12 @@
 */
 
 // Purpose:
-//     Bloom mip chain for the emissive surfaces. Emissive materials are the only light sources in this world, so the soft halo the bloom chain
+//     Bloom mip chain for the emissive surfaces. Emissive materials are the only light sources in the Grid, so the soft halo the bloom chain
 //     produces is what makes a neon edge read as a light rather than as a bright stripe. Three compute entry points share one descriptor set
 //     layout, one pipeline layout and one push-constant block; the host dispatches them in the order extract, downsample (per mip, descending),
 //     upsample (per mip, ascending), then hands mip 0 to the post-process pass.
 //
-//     The chain runs on the spectator window's HDR image. Creature sensors are tiny (typically 64x64 to 256x256), so a mip chain buys them
+//     The chain runs on the HDR image of the User's window. Creature sensors are tiny (typically 64x64 to 256x256), so a mip chain buys them
 //     nothing; the host is expected to skip bloom for sensor renders and pass bloom_strength 0 to the post-process shader instead.
 //
 // Entry points:

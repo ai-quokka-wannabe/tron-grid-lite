@@ -20,19 +20,19 @@
 #include <window/window_event.hpp>
 
 /*!
-    Input controller for the human observer's free-flight spectator camera.
+    Input controller for the User's free-flight debug camera.
 
     This is the only interactive element in the entire project, and it exists purely for
-    development and observation. A human being sitting at the keyboard flies this camera around
-    the world to watch what happens, to inspect geometry, and to verify that the renderer behaves
+    development and observation. The User, sitting at the keyboard, flies this camera around
+    the Grid to watch what happens, to inspect geometry, and to verify that the renderer behaves
     correctly.
 
-    It is emphatically not a player character. The world is inhabited exclusively by creatures
-    driven by their own agent plugins; those creatures receive their motor intent across the plugin
+    It is emphatically not a player character. The Grid is inhabited exclusively by creatures
+    driven by their own Programs; those creatures receive their actions across the plugin
     interface and never from this class. Nothing typed at the keyboard can influence any creature,
-    and moving the spectator camera has no effect whatsoever on what any creature perceives —
+    and moving the debug camera has no effect whatsoever on what any creature perceives —
     creature sensors derive their own view and projection matrices from their own state (see
-    docs/PERCEPTION.md). The spectator is a window onto the world, never a hand inside it.
+    docs/PERCEPTION.md). This camera is a window onto the Grid, never a hand inside it.
 
     The controller owns only input state: a set of currently-held keys, a desired cursor-capture
     flag, and the accumulated mouse-look deltas. It holds no window, no camera and no renderer
@@ -99,7 +99,7 @@ public:
         Key presses and releases maintain the held-key set, mouse movement accumulates look deltas
         while the cursor is captured, and the capture toggle flips the desired capture state. Focus
         loss releases every held key so the camera does not drift while the window is in the
-        background. Events the spectator does not care about are ignored.
+        background. Events this controller does not care about are ignored.
 
         Note that key repeats are only flagged on Win32; the X11 backend reports every auto-repeat
         as a fresh press (with an intervening release), so holding the capture-toggle key down on
@@ -116,7 +116,7 @@ public:
 
         Pitch is deliberately left unclamped: Camera owns the orientation as a quaternion and exposes
         no pitch angle to clamp against, so looking far enough up or down rolls the view past
-        vertical. That is harmless for an observer tool, and a pitch limit belongs in Camera if it is
+        vertical. That is harmless for a debug camera, and a pitch limit belongs in Camera if it is
         ever wanted.
 
         Must be called once per frame even when no key is held, because it is what drains the pending

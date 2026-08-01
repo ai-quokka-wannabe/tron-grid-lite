@@ -270,7 +270,7 @@ TEST_CASE(bvh_traversal_agrees_with_brute_force_on_random_rays)
 
 TEST_CASE(bvh_traversal_agrees_with_brute_force_on_rays_that_start_inside)
 {
-    // Creature eyes sit inside the world rather than looking at it from outside, so the case of an
+    // Creature eyes sit inside the Grid rather than looking at it from outside, so the case of an
     // origin surrounded by geometry is the one that actually matters.
     const std::vector<BvhLib::Triangle> triangles{randomCloud(800u, 5150u)};
     const BvhLib::Bvh bvh{BvhLib::build(triangles)};
@@ -341,7 +341,7 @@ TEST_CASE(bvh_handles_a_flat_sheet_of_coplanar_triangles)
 TEST_CASE(bvh_axis_parallel_rays_from_exact_grid_coordinates_still_hit)
 {
     /*
-        The regression that matters most for this world.
+        The regression that matters most for the Grid.
 
         A ray straight down has two direction components of exactly zero, so their reciprocals are
         infinite. Launch it from a coordinate that lies exactly on a node boundary — which every

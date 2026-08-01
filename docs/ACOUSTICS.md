@@ -23,12 +23,12 @@ Manocha's 2017 system spent 75.1 ms of a 258 ms budget on audio rendering alone,
 pays none of it.
 
 The same boundary excludes a subtler class of thing. Several of the field's most useful tricks are
-models of a *listener* rather than of the world — Wwise's abstract diffraction coefficient,
+models of a *listener* rather than of the Grid — Wwise's abstract diffraction coefficient,
 psychoacoustic Doppler thresholds, the precedence effect, the parametric encodings in Project
 Acoustics that are defined by what a person notices. Every one of those is cognition wearing a
-physics costume. The world reports energy arriving at a point in time; whether two arrivals fuse,
-whether a reflection is masked, whether a pitch shift is noticeable, is the brain's business and
-lives in a brain repository.
+physics costume. The Grid reports energy arriving at a point in time; whether two arrivals fuse,
+whether a reflection is masked, whether a pitch shift is noticeable, is the Program's business and
+lives in a Program repository.
 
 Bioacoustics appears here for one reason only, the same reason biology appears in
 [PERCEPTION.md](PERCEPTION.md): **to set the size of a buffer.** Frequency range, band count, time
@@ -37,7 +37,7 @@ becomes "how does the animal interpret this", it is out of scope.
 
 PERCEPTION.md has already made this move, and this document inherits the boundary rather than
 re-arguing it: its acoustic section names the precedence effect only to exclude it, on the grounds
-that the world does not get to size its own fidelity on an assumption about how a listener will fuse
+that the Grid does not get to size its own fidelity on an assumption about how a listener will fuse
 what it receives — an assumption there is no reason to extend to a moth with two receptor cells or a
 nematode sensing pressure gradients through its skin. Its tolerance conclusions stand on the three
 simulation-side mechanisms alone, and so do this document's.
@@ -52,7 +52,7 @@ For a renderer, light is instantaneous. A visual ray's answer is a **value**: tr
 pixel. Sound travels at about 343 m/s, so an acoustic ray's answer is a **function of time** — an
 impulse response — and every consequence in this document flows from that single fact.
 
-The immediate consequence is that a 128 m world is 373 ms wide. At the measured 14.4 ms frame time
+The immediate consequence is that the 128 m Grid is 373 ms wide. At the measured 14.4 ms frame time
 that is twenty-six frames. Sound leaving a source now arrives at a listener over the next twenty-six
 frames, by which time everything that moves has moved.
 
@@ -140,7 +140,7 @@ accumulated += current.throughput * material.emission;   // trace.slang
 ```
 
 Replace `accumulated` with a histogram bin chosen by accumulated delay, and `material.emission` with
-the material's authored acoustic source strength times the world's hum spectrum, and the acoustic
+the material's authored acoustic source strength times the Grid's hum spectrum, and the acoustic
 kernel **is** the visual kernel. Rays find emitters by hitting them, exactly as light does.
 
 Point sources are the opposite case and need the opposite treatment. A creature vocalisation is a
@@ -158,7 +158,7 @@ Vocalisations cost `listeners × sources × candidate paths`, with a very small 
 ### A snapshot cannot honestly answer a time-domain query
 
 The response is computed against one frame's BVH and arrives over the following tens of milliseconds,
-during which the world moves. Every interactive acoustics engine has this problem and every one of
+during which the Grid moves. Every interactive acoustics engine has this problem and every one of
 them accepts it. The honest thing is to state the bound rather than pretend the snapshot is exact:
 **nothing in the delivered response is staler than the response length in creature motion** — about
 58 ms, or four frames, because the 20 m cap proposed below bounds *total accumulated path length*,
@@ -170,8 +170,8 @@ a Phase 5b decision.)
 
 `TglSenses::irradiance` is one float because radiance genuinely is instantaneous. Hearing is not, and
 a per-tick scalar would be a lie about the physics. The delay line has to live somewhere, and there
-are only two candidates: the world or the brain. Propagation delay is physics, not cognition, so it
-is the world's, and the repository's founding rule settles it without discussion.
+are only two candidates: the Grid or the Program. Propagation delay is physics, not cognition, so
+it is the Grid's, and the repository's founding rule settles it without discussion.
 
 A per-tick *scalar* is also too coarse in a second way. At 60 Hz a tick is 16.7 ms, which at 343 m/s
 is 5.7 m of path — enough to fold the direct arrival, every terrace bounce and the nearest pillar
@@ -186,8 +186,8 @@ direction samples, and larger only than `elegans`, whose entire visual sense is 
 ## What the Literature Settled On
 
 Geometrical acoustics is the right foundation, but only half of its standard architecture applies to
-a world with no ceiling: image sources for early reflections survive, the stochastic late-reverberant
-tail does not, because there is no enclosure for a tail to decay in.
+the Grid, which has no ceiling: image sources for early reflections survive, the stochastic
+late-reverberant tail does not, because there is no enclosure for a tail to decay in.
 
 That argument, the wavelength ledger it rests on, and why creature scale makes diffraction *less*
 important here rather than more, are set out in
@@ -195,7 +195,7 @@ important here rather than more, are set out in
 
 ## The Terraced Floor
 
-This is the newest and most concrete part of the world, and it invalidates a conclusion several
+This is the newest and most concrete part of the Grid, and it invalidates a conclusion several
 research lenses reached: that the scene is an open half-space with a flat mirror floor, and therefore
 has no echoes worth computing. That was true when they looked. It is now only partly true.
 
@@ -270,7 +270,7 @@ terrace step lives in permanently.
 **Deflection instead of escape.** A facet tilted by `θ` rotates the specular direction by `2θ`. At
 22.6° that is 45.2°, at 30.5° it is 61°. A ray skimming a flat plane at grazing incidence bounces
 forward at grazing and keeps skimming until it runs off the edge; over terraced ground it is kicked
-well off the mirror direction, sometimes up out of the world and sometimes down into the next
+well off the mirror direction, sometimes up out of the Grid and sometimes down into the next
 terrace. That is geometric scattering, modelled as geometry.
 
 **Concave corners, which do almost nothing.** Where a riser meets the terrace below it the dihedral
@@ -300,17 +300,17 @@ monostatic echolocation at all.**
 With genuinely vertical risers they can, immediately and at any range: a creature emitting
 horizontally hits a vertical face square on and the echo comes straight back. That is the behaviour
 the design comment reasons about — *"a riser standing square to the ground throws sound back across
-the world"* — and it is one generator change away.
+the Grid"* — and it is one generator change away.
 
 **Recommendation.** Have `generateGridFloor` emit an explicit vertical quad at every level change
 rather than tilting the surface quad. Cost: 693 boundary edges, two triangles each, **1,386 extra
 triangles** — the floor goes from 8,192 to 9,578 and the scene from 24,952 to 26,338, an increase of
-5.6 %. In exchange the world gains **1,155 m² of genuinely vertical wall** distributed across 128 m,
+5.6 %. In exchange the Grid gains **1,155 m² of genuinely vertical wall** distributed across 128 m,
 and every one of those square metres retro-reflects. The alternative, dropping `cell_size` well below
 the terrace step, is worse: at 0.25 m the risers reach 73° but the floor costs 524,288 triangles.
 
 If neither change is made, the honest statement in the documentation must be that the relief tilts
-reflections rather than returning them, and that echolocation in this world is bistatic only.
+reflections rather than returning them, and that echolocation on the Grid is bistatic only.
 
 ### What the relief changes in the research's conclusions
 
@@ -358,11 +358,11 @@ sense of a room's size. It requires energy to circulate rather than leave. This 
 it, and RT60 measures precisely this quantity, which is why quoting a reverberation time here would be
 a category error rather than an approximation.
 
-The practical consequence for a creature is worth being blunt about: **hearing in this world is a
+The practical consequence for a creature is worth being blunt about: **hearing on the Grid is a
 sense of where things are, not a sense of what kind of space this is, because there is no space.**
 Direction, distance, and occlusion shadows behind terrace steps and pillars are real information a
-brain can use. A sense of enclosure is not available, and no better algorithm would make it available.
-If it is ever wanted, the fix is world geometry, and that is a VISION.md decision rather than an
+Program can use. A sense of enclosure is not available, and no better algorithm would make it available.
+If it is ever wanted, the fix is Grid geometry, and that is a VISION.md decision rather than an
 acoustics one.
 
 ### Delays this geometry actually produces
@@ -418,14 +418,14 @@ model, and it is worth stating in the same shape. The optical model is not a sim
 physically-based rendering; it is PBR at the smooth limit, where the microfacet distribution collapses
 to a delta function and the BRDF reduces analytically to Fresnel-weighted mirror reflection plus Snell
 refraction. **The acoustic model should have the same character: not a cheap approximation, but the
-correct closed form for the geometry this world actually contains.**
+correct closed form for the geometry the Grid actually contains.**
 
 #### Why the source term is a scalar and not a spectrum
 
 The hum has one spectrum — a 3 kHz fundamental and its harmonics, settled under
-[the hum decision](#the-humming-neon) — and every tube in the world radiates it. What differs between
+[the hum decision](#the-humming-neon) — and every tube on the Grid radiates it. What differs between
 one sounding material and another is *how loudly*, not *with what colour*. So the spectrum is a single
-world-level constant, one `float4` over the listener's bands, and the material carries the scalar that
+Grid-level constant, one `float4` over the listener's bands, and the material carries the scalar that
 multiplies it. That is the same split the next subsection argues for absorption, arriving from the
 other side: the band structure lives at the deposit, and the material carries one number.
 
@@ -436,8 +436,8 @@ second use case, and a `float4` per material is what it costs. Not before.
 
 #### Why not per-band absorption
 
-Frequency dependence is real for porous and resonant absorbers and negligible for everything in this
-world. The pyroomacoustics materials database gives smooth unpainted concrete `0.01 … 0.05` across
+Frequency dependence is real for porous and resonant absorbers and negligible for everything on the
+Grid. The pyroomacoustics materials database gives smooth unpainted concrete `0.01 … 0.05` across
 125 Hz to 8 kHz, rendered brickwork `0.01 … 0.04`, 3 mm glass `0.08 … 0.02`. Converted to what a
 renderer multiplies by, those are losses of **under 0.3 dB per bounce**, and under about 3 dB after
 ten bounces, most of it concentrated in the 125 Hz band where the geometry is invalid anyway. The one
@@ -490,7 +490,7 @@ explicit allowance for edge diffraction from finite panels.
 
 Four reasons it does not belong here:
 
-1. **There is no unmodelled geometry for it to stand in for.** Every surface in this world is a
+1. **There is no unmodelled geometry for it to stand in for.** Every surface on the Grid is a
    mathematically planar quad, and that quad *is* the geometry. Acoustic smoothness is judged against
    wavelengths of centimetres to metres, so these surfaces are acoustically smooth at every frequency
    any creature on the roster can hear. Zeng, Christensen and Rindel recommend 0.005–0.02 for smooth
@@ -513,7 +513,7 @@ Four reasons it does not belong here:
    `(1 - s)(1 - alpha) + alpha + s(1 - alpha) = 1` splits a reflection into a specular part and a
    diffuse part, and the only implementation compatible with one-ray-per-bounce is the stochastic one
    — Russian roulette between `reflect(I, N)` and a cosine-weighted random direction. There is no RNG
-   anywhere in this repository, and AGENT_INTERFACE.md publishes bit-identical replay as a guarantee.
+   anywhere in this repository, and PROGRAM_INTERFACE.md publishes bit-identical replay as a guarantee.
    Introducing the project's first Monte Carlo estimator, and the temporal accumulation that would
    follow it, to model a phenomenon whose correct coefficient here is zero, is a bad trade.
 
@@ -542,12 +542,12 @@ Audio, which does carry a three-band transmission array, documents it as "only u
 occlusion calculations" and never carries it through the reflection tree. Defer it, and if it is ever
 added, follow that precedent exactly.
 
-There is a pleasing inversion worth recording. Optically, glass is the most interesting material in
-this world: transmission towards 1, Snell refraction, total internal reflection, the whole apparatus of
+There is a pleasing inversion worth recording. Optically, glass is the most interesting material on
+the Grid: transmission towards 1, Snell refraction, total internal reflection, the whole apparatus of
 [MATERIALS.md](MATERIALS.md). Acoustically the same slab is a near-perfect mirror with `alpha ≈ 0.03`
 and `tau ≈ 0.0005`. **The one surface the optical renderer treats as transparent is the one the
 acoustic renderer treats as most opaque** — which means a creature with both senses gets information
-neither alone provides. That is "one world, two senses" earning its keep rather than merely being
+neither alone provides. That is "one Grid, two senses" earning its keep rather than merely being
 asserted.
 
 #### There is no acoustic Fresnel, and this is the genuine asymmetry
@@ -564,7 +564,7 @@ So absorption must be **authored**, not derived. It is the one acoustic paramete
 counterpart, and any attempt to compute it from a "sonic IOR" would produce a world in which nothing
 ever decays. The documentation should say this plainly rather than pretending the symmetry between the
 two senses is complete. The source strength is authored for the same reason and one further one: there
-is no reference level in this world at all, so the number is relative by construction.
+is no reference level on the Grid at all, so the number is relative by construction.
 
 #### Values, and how uncertain they are
 
@@ -613,7 +613,7 @@ the buffer is twelve floats. The silent-failure window never opens.
 
 This does brush against design principle 5 as README.md currently words it — "surfaces carry optical
 and acoustic properties together" — and that wording should be adjusted rather than the design bent to
-fit it. The principle that matters is that this is **one world**: one BVH, one triangle table, one
+fit it. The principle that matters is that this is **one Grid**: one BVH, one triangle table, one
 material index answering both senses. Whether the two coefficient sets share a cache line is an
 implementation detail, and coupling them by index rather than by row is the honest reading. It is also,
 exactly, what the de-bloating pass concluded when it deleted these fields the first time.
@@ -656,7 +656,7 @@ straddles the 500 Hz to 1 kHz boundary — and 0.5 kHz and 2 kHz are ISO 266 oct
 that no edge coincides with convention would be false as well. The single `elegans` band reaches down
 to 100 Hz, where the ray answer for everything but the terrace levels is fiction. That is not a reason
 to move the edges — they come from the audiogram, not from convention — but it must be said plainly
-that below about 500 Hz the world delivers `elegans` an energy figure whose spatial structure it cannot
+that below about 500 Hz the Grid delivers `elegans` an energy figure whose spatial structure it cannot
 vouch for.
 
 This is the one correction to PERCEPTION.md this document proposes, and it must be made in two places:
@@ -678,7 +678,7 @@ The cost of the finer bin is four times the bins, and the bins are the cheapest 
 
 ### Two ears, never a mono mix
 
-The world can make localisation *possible*; it cannot and must not perform it. What it has to deliver
+The Grid can make localisation *possible*; it cannot and must not perform it. What it has to deliver
 is the physical basis: two ears at a stated separation, each receiving its own signal, so that
 arrival-time and level differences exist in the data. Heffner and Heffner enumerate the three cues —
 binaural time difference, binaural intensity difference (which requires the head to cast a shadow,
@@ -695,15 +695,15 @@ of the tympanum, making the ear itself intrinsically directional.
 Two things follow. Interaural time differences of microseconds cannot survive 1 ms bins, so if binaural
 timing is ever wanted the histogram must carry a direction per arrival rather than energy alone — a
 different data structure, cheap in a scene with few arrivals, and deliberately not proposed for the
-first cut. And the *world* should stop at two buffers: how a brain extracts direction from them is the
-brain's problem, and *Ormia* is a standing warning that the mechanism may live in the body's mechanics
-rather than in computation at all.
+first cut. And the *Grid* should stop at two buffers: how a Program extracts direction from them is
+the Program's problem, and *Ormia* is a standing warning that the mechanism may live in the body's
+mechanics rather than in computation at all.
 
-The current TODO item, "Fill `hearing_samples` in the agent interface", names a flat array. **A flat
+The current TODO item, "Fill `hearing_samples` in the Program interface", names a flat array. **A flat
 sample list is precisely the shape that makes localisation impossible**, and the name should be changed
 before it freezes. Worth stating plainly: no such field exists anywhere in the repository, and
-`tgl_brain_abi.h` does not exist as a file at all — the ABI lives only as C snippets inside
-[AGENT_INTERFACE.md](AGENT_INTERFACE.md). That makes this the cheapest possible moment to shape it.
+`tgl_program_abi.h` does not exist as a file at all — the ABI lives only as C snippets inside
+[PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md). That makes this the cheapest possible moment to shape it.
 
 ### Solve rate: two rates, for two different things
 
@@ -715,17 +715,17 @@ Audio ships the same ratio as a default: `SimulationUpdateInterval = 0.1f`.
 
 That conclusion is sound for a passive listener and **wrong by a factor of about twenty for an
 echolocating emitter**. Schnitzler and Kalko document the terminal buzz as "a series of short signals at
-a high repetition rate (up to 180–200 Hz)", with a single bat's demand on the world spanning two orders
+a high repetition rate (up to 180–200 Hz)", with a single bat's demand on the Grid spanning two orders
 of magnitude between cruising and the final hundred milliseconds before capture — and the transition
-driven by the animal's own behaviour, which the world cannot schedule.
+driven by the animal's own behaviour, which the Grid cannot schedule.
 
 The reconciliation is that these are two different solves. The **ambient solve** — the hum bed and the
-world's steady reflections — can run at 10–20 Hz because the geometry changes slowly, and the buffer
+Grid's steady reflections — can run at 10–20 Hz because the geometry changes slowly, and the buffer
 can simply be held between solves. (The interpolation Schäfer and colleagues needed is interpolation of
 a *waveform*, and there is no waveform here, so this repository pays none of that cost either.) A
 **vocalisation** is not an ambient solve; it is one impulsive event, 1–3 ms long, whose response is one
 enumeration against a 20 m range cap. At 200 pings per second that is a few tens of thousands of
-ray-segments, which is nothing. **The world must schedule per source rather than picking one global
+ray-segments, which is nothing. **The Grid must schedule per source rather than picking one global
 rate**, and that is an architectural fact rather than a tuning parameter.
 
 Two other numbers from the same source bound the trace usefully. A bat emitting at 112 dB SPL detects a
@@ -775,20 +775,21 @@ typedef struct TglEarView
 modality grouping the document commits to. `ear_count` of zero is a legitimate body and is the correct
 specification for all three insect presets.
 
-The direction of control is the same as for eyes: **the world decides how many ears a body has, where
-they sit, and what bands they resolve.** A brain does not request an ear.
+The direction of control is the same as for eyes: **the Grid decides how many ears a body has, where
+they sit, and what bands they resolve.** A Program does not request an ear.
 
-If echolocation is wanted — and AGENT_INTERFACE.md already observes that it "needs no new sense at all"
+If echolocation is wanted — and PROGRAM_INTERFACE.md already observes that it "needs no new sense at all"
 once hearing and vocalisation exist — `TglActions` gains a vocalisation field in the **same** bump, not
 a later one. That is the whole of the second breaking change, and it should not be split.
 
-`TGL_BRAIN_ABI_VERSION` goes from `1u` to `2u`, per the pre-1.0 rule of breaking changes only with no
-compatibility machinery. **The cost of this breaking change is currently zero**: there is no header to
-edit, no brain repository consuming it, and `tglGetBrainVTable` is unimplemented on the world side too.
+`TGL_PROGRAM_ABI_VERSION` goes from `1u` to `2u`, per the pre-1.0 rule of breaking changes only with no
+compatibility machinery. **The cost of this breaking change is currently zero**: there is no header
+to edit, no Program repository consuming it, and `tglGetProgramVTable` is unimplemented on the Grid
+side too.
 
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
 time bin per ear, and stops.** Anything that names a source, separates streams, reports "a wall is
-three metres to your left", or performs auditory scene analysis of any kind belongs in a brain
+three metres to your left", or performs auditory scene analysis of any kind belongs in a Program
 repository.
 
 ---
@@ -796,7 +797,7 @@ repository.
 ## The Humming Neon
 
 **Decision: the neon geometry is the sound source, and its fundamental is 3 kHz.** Light and sound
-radiate from the same triangles, and "one world, two senses" becomes literal rather than aspirational.
+radiate from the same triangles, and "one Grid, two senses" becomes literal rather than aspirational.
 
 This section states the research's objection in full, agrees with the part of it that is correct, and
 then states plainly which part of the decision is a departure from physics.
@@ -808,17 +809,17 @@ The objection is correct as far as it goes, and it has two halves.
 **Audibility.** The audible hum of a gas-discharge fixture is not produced by the glowing gas column.
 On the standard engineering account it comes from the magnetic ballast, whose laminated core is
 squeezed and released by magnetostriction at twice the mains frequency — 100 Hz on 50 Hz mains, 120 Hz
-on 60 Hz. Set the world's neon humming at 100 Hz and consult the roster. *C. elegans* hears it, since
+on 60 Hz. Set the Grid's neon humming at 100 Hz and consult the roster. *C. elegans* hears it, since
 its range starts at exactly 100 Hz. A macropod might, at the very bottom edge of a proxy range starting
 near 500 Hz. **A mouse-class creature is flatly deaf to it**, with a 60 dB lower limit of 2.3 kHz, more
 than four octaves above. The insect presets would not detect it beyond a few millimetres regardless,
-because it is the wrong field. So the most architecturally elegant option would deliver a world that is
+because it is the wrong field. So the most architecturally elegant option would leave the Grid
 silent to most of the roster, and the one creature it serves best is the one that cannot localise
 anything anyway.
 
 **Validity.** At 100 Hz the wavelength is 3.43 m. The pillars are 0.26 wavelengths across, the terrace
 steps 0.24, the glowing column 0.41, the widest glass slab 1.75, and the tube emitting the sound is
-0.015 wavelengths wide. **Every object in this world except the terrace levels is at or below one
+0.015 wavelengths wide. **Every object on the Grid except the terrace levels is at or below one
 wavelength.** This is the exact regime in which ray tracing produces its worst answers: it would report
 confident, detailed, entirely fictional occlusion patterns behind objects that real 100 Hz sound flows
 around almost undisturbed, and the errors would be *systematic*, so a creature would learn to rely on
@@ -890,16 +891,16 @@ transients. Shooting from 16,640 triangles is not merely expensive, it is the wr
 
 Air absorption barely touches the fundamental: interpolating ISO 9613-2's 20 °C / 70 % table between
 2 kHz (9.0 dB/km) and 4 kHz (22.9 dB/km) gives roughly 14 dB/km at 3 kHz, so about 1.8 dB across the
-entire 128 m world. The harmonics are where the spectral tilt appears — 8 kHz loses 9.8 dB over the same
-span — and that tilt is a genuine, learnable distance cue in a world where vision is deliberately
-unreliable.
+entire 128 m of the Grid. The harmonics are where the spectral tilt appears — 8 kHz loses 9.8 dB over
+the same span — and that tilt is a genuine, learnable distance cue on the Grid, where vision is
+deliberately unreliable.
 
 The hum also buys something the research noticed and is worth keeping: a persistent ambient bed with
-genuine position dependence, from which a creature could infer coarse altitude and terrace level in a
-world whose mirror floor makes vision untrustworthy. That is the same argument PERCEPTION.md already
+genuine position dependence, from which a creature could infer coarse altitude and terrace level where
+the Grid's mirror floor makes vision untrustworthy. That is the same argument PERCEPTION.md already
 makes for vestibular sensing, arriving through a different sense.
 
-**Creature vocalisation is not excluded and should follow.** It makes the acoustic world dynamic, it
+**Creature vocalisation is not excluded and should follow.** It makes the Grid's acoustics dynamic, it
 delivers echolocation for free once hearing exists, and it is the case that exercises the point-source
 enumeration path. It is Phase 5b, not a competitor.
 
@@ -918,7 +919,7 @@ they fix the maximum simulated frequency at **500 Hz**, precompute on a 140-mach
 bake times of 4 to 20 hours per scene with raw field data of 9 to 66 TB compressed to tens of megabytes.
 Behaviour above 500 Hz is not simulated at all — it is extrapolated parametrically. **The most
 sophisticated production wave-acoustics system in the industry stops two to seven octaves below where
-this world's listeners begin.** Scaling 500 Hz to 85.5 kHz is a frequency ratio of 171 and, at
+the Grid's listeners begin.** Scaling 500 Hz to 85.5 kHz is a frequency ratio of 171 and, at
 fourth-power scaling, a factor of roughly 850 million in work. Beyond that, the method assumes static
 geometry, needs a bake step and an asset format, and ships as binary plugins — three of this
 repository's constraints, each independently fatal. Mehra and colleagues' equivalent-source formulation
@@ -970,7 +971,7 @@ Savioja's room acoustic rendering equation is the paper that made the graphics-a
 formal, which is exactly the analogy this repository is built on, and it deserves the citation. But the
 data structure is a patch-to-patch transfer matrix over static geometry, sharing nothing with a BVH, and
 its known weakness — blurred specular paths — is precisely where this scene's short, sparse response
-lives. This world moves.
+lives. The Grid moves.
 
 **RT60, Sabine, Eyring, the Schroeder frequency and any statistical reverberator.** Argued above.
 ISO 3382-1's definition contains the word *enclosure* and this scene is not one.
@@ -992,10 +993,10 @@ Each of these has a written trigger, so that "later" means something checkable.
   correct, lets the receiver be a point, and traces to Heinz's 1993 grafting of statistical scattering
   onto an image-source solver, with Rindel's ODEON description and Schröder's RAVEN work as the modern
   references. Its cost is one visibility ray per surface hit per listener. **Trigger: an enclosed space
-  exists in the world** — a tunnel, a hollow structure, anything with a ceiling. Until then, rays escape
+  exists on the Grid** — a tunnel, a hollow structure, anything with a ceiling. Until then, rays escape
   after one or two bounces and there is almost nothing for it to smooth.
-- **A hand-authored diffracting-edge list.** The correct edge list for this world is not derivable from
-  the triangle soup, but it *is* knowable a priori, because the world is generated procedurally: the ten
+- **A hand-authored diffracting-edge list.** The correct edge list for the Grid is not derivable from
+  the triangle soup, but it *is* knowable a priori, because the Grid is generated procedurally: the ten
   boxes' forty vertical edges could be emitted by `generateBox` in about twenty lines, and if the risers
   ever become vertical they are known to the generator too. Feed those to a single-edge Maekawa
   attenuation applied only in shadow regions. **Trigger: a creature demonstrably failing a task because
@@ -1038,17 +1039,17 @@ Each of these has a written trigger, so that "later" means something checkable.
 - **Acoustic materials.** A new `StructuredBuffer<float2>` of six `(absorption, source strength)`
   pairs, indexed by the same material index, bound only by the acoustic pipeline. `Material`,
   `trace.slang` and all six `static_assert`s are untouched.
-- **The hum spectrum.** One `float4` per solve, the world's 3 kHz fundamental and its harmonics resolved
+- **The hum spectrum.** One `float4` per solve, the Grid's 3 kHz fundamental and its harmonics resolved
   into the listening ear's four bands. It is a push constant, not a material field, because every
-  sounding surface in the world shares it.
+  sounding surface on the Grid shares it.
 - **Air absorption.** An eight-entry constant table from ISO 9613-2's 20 °C / 70 % row (0.1, 0.3, 1.1,
   2.8, 5.0, 9.0, 22.9, 76.6 dB/km at 63 Hz to 8 kHz), extended above 8 kHz by evaluating ISO 9613-1's
   formulae **once, offline**, and pasting the resulting constants in beside the tabulated ones — the
   standard notes explicitly that its formulae extend to ultrasonic frequencies. Nothing evaluates a
-  relaxation-frequency model at run time in a world fixed at 20 °C and 70 %; if temperature ever becomes
-  a scene parameter, that is when the formulae move into the code. The numbers must appear in the
-  documentation rather than living silently in a constant.
-- **Per-listener ring buffer.** The world owns the delay line. Sixty-four bins of 1 ms per band per ear
+  relaxation-frequency model at run time while the Grid is fixed at 20 °C and 70 %; if temperature
+  ever becomes a scene parameter, that is when the formulae move into the code. The numbers must
+  appear in the documentation rather than living silently in a constant.
+- **Per-listener ring buffer.** The Grid owns the delay line. Sixty-four bins of 1 ms per band per ear
   covers the proposed 20 m total-path cap with room to spare: 2 KiB per two-eared creature, 40 KiB for
   twenty of them.
 
@@ -1083,8 +1084,8 @@ until Phase 5b.
    every hit whose material has a non-zero `acoustic_source_strength`, deposit that strength times the
    hum spectrum into the bin the accumulated delay selects, exactly as `trace.slang` deposits radiance.
    **The directions come from a spherical Fibonacci set indexed by the ray id, never from an RNG.**
-   There is no random number generator anywhere in this repository, AGENT_INTERFACE.md publishes
-   bit-identical replay as a guarantee, and PERCEPTION.md rule 6 forbids adding smoothing for an agent's
+   There is no random number generator anywhere in this repository, PROGRAM_INTERFACE.md publishes
+   bit-identical replay as a guarantee, and PERCEPTION.md rule 6 forbids adding smoothing for a Program's
    benefit. A deterministic quasi-uniform set gives the same count and the same coverage,
    bit-identically, every run.
 4. **Reduce and deliver.** One workgroup owns one ear. The histogram lives in shared memory as `uint`s —
@@ -1108,15 +1109,15 @@ Conventions that must be chosen once and written down:
 
 - **Explicit `1/r²`, never a detection sphere.** The two are mutually exclusive and mixing them
   double-counts spreading. Detection spheres exist to make a stochastic ray count converge in a closed
-  room; this world is an open plane with a point receiver it can afford. The failure mode of getting
+  room; the Grid is an open plane with a point receiver it can afford. The failure mode of getting
   this wrong is a silent 6 dB per doubling that looks like a material problem.
 - **Range cap of 20 m of total accumulated path**, replacing the hardcoded `10000.0` in `trace.slang`
   with a parameter. Justified three ways: air absorption at 30 kHz costs 14 dB over 20 m and 90 dB over
-  128 m, so the world has a physical acoustic horizon; Schnitzler and Kalko bound useful echolocation at
+  128 m, so the Grid has a physical acoustic horizon; Schnitzler and Kalko bound useful echolocation at
   10.5 m; and a distance cap bounds traversal cost predictably. Lawrence and Simmons' figures make the
   point sharply — beyond about 7 m a 100 kHz call loses more to the air than to the inverse square law,
-  and at 8 kHz the same crossover is out past 400 m. **The acoustic world is smaller than the visual
-  one, and that is physics rather than a budget.**
+  and at 8 kHz the same crossover is out past 400 m. **The Grid is smaller acoustically than
+  visually, and that is physics rather than a budget.**
 - **Reflection order cap of 4.** Rays escape after one or two bounces here; four is generous.
 
 ### Acceptance, and how this is checked
@@ -1135,7 +1136,7 @@ acceptance criteria, in increasing order of what they prove:
 3. **One analytic case.** A single listener over a single flat terrace level with one sounding triangle
    directly above has a direct arrival and exactly one image arrival, both at delays computable by
    hand. If the two bins are not where arithmetic says they are, the delay accumulation is wrong.
-4. **Energy sanity.** With `alpha` set to zero and the range cap set beyond the world, no path may gain
+4. **Energy sanity.** With `alpha` set to zero and the range cap set beyond the Grid, no path may gain
    energy, and the sum over all bins must fall monotonically as absorption rises. This catches the
    double-counted spreading the convention note above warns about.
 
@@ -1188,7 +1189,7 @@ Three caveats keep the budget honest:
 **Realistic bottom line: 0.24 to 0.36 ms per frame for twenty two-eared listeners**, which is under 3 %
 of the current frame and about the cost of the post-processing chain, with an order of magnitude of
 headroom before the number becomes interesting. The binding constraint is **listener count, not ray
-count** — the opposite of the intuition one brings from room acoustics. Note also that the spectator
+count** — the opposite of the intuition one brings from room acoustics. Note also that the User's
 window is the worst case that will ever exist: a creature sensor is a fourteenth to a two-hundredth of
 that frame, so a headless creature-only run frees essentially the whole budget.
 
@@ -1248,7 +1249,7 @@ document recommends replacing with the per-ear view above.
 Following [PERCEPTION.md](PERCEPTION.md)'s convention: where the physics or the biology does not
 translate cleanly, this document says so rather than inventing a number.
 
-- **Absolute sound pressure levels.** There is no reference level in this world. The histogram carries
+- **Absolute sound pressure levels.** There is no reference level on the Grid. The histogram carries
   energy relative to the emitting source, `acoustic_source_strength` is relative to a primary neon tube,
   and any dB SPL figure would be fabricated.
 - **A scattering coefficient for any surface.** It is zero by construction, and a non-zero value would

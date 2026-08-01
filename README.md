@@ -10,15 +10,15 @@ hierarchy this project builds itself. **The GPU it was recorded on exposes no ra
 extensions at all** — it is a laptop GTX 1650 Ti, and it renders that scene in about fourteen
 milliseconds a frame. Record your own with [`tools/record_flyby.py`](tools/record_flyby.py).
 
-**This world is built for AI agents, not for people.** There is no player, no controls and no
-gameplay. Humans watch through a spectator window — a free-flight debug camera for development
-and observation.
+**The Grid is built for Programs, not for people.** There is no player, no controls and no
+gameplay. The User watches through a debug window — a free-flight camera for development and
+observation.
 
-**It is the stage, not the actor.** TronGrid Lite renders senses and applies motor intent; it
-does not think. Agents load as shared-library plugins (DLL on Windows, SO on Linux), receive
-small sensor buffers, and return movement — so the world stays **completely agnostic about how
-any agent works inside**. No brain internals live here, and none should: creature minds are
-other repositories' business, behind a plain C ABI.
+**It is the stage, not the actor.** TronGrid Lite renders senses and applies actions; it does
+not think. Programs load as shared-library plugins (DLL on Windows, SO on Linux), receive small
+buffers of senses, and return actions — so the Grid stays **completely agnostic about how any
+Program works inside**. No Program internals live here, and none should: Programs are other
+repositories' business, behind a plain C ABI.
 
 It is a fresh, independent project. It reuses infrastructure and foundation code from the
 author's earlier [TronGrid](https://github.com/MatejGomboc/tron-grid) renderer (same author,
@@ -26,13 +26,30 @@ same licence) but leaves behind the hardcore graphics programme — mesh shaders
 tracing, bindless everything — so that it runs on modest GPUs and stays small enough to read in
 an afternoon.
 
+## A Note on the Vocabulary
+
+This project uses Tron's language throughout, and unapologetically. Watching *Tron* (1982) is
+strongly recommended and arguably a prerequisite. If you have not, the table below will get you
+through the API — but you are missing out.
+
+| Word | What it means here |
+|------|--------------------|
+| the Grid | The world this renderer simulates |
+| Program | The thing that thinks — a plugin, one per creature |
+| creature | The body the Grid simulates, which a Program drives |
+| User | The human at the debug window, watching |
+| tick | One simulation step |
+| senses | What a creature perceives during a tick |
+| actions | What a Program asks its creature's body to do |
+| rez / derez | A Program arriving on the Grid, and leaving it |
+
 ## Status
 
 Early development, and the picture above is the current output rather than a target. Phases 0 to 4
-are done: the world is traced in a compute shader against a hierarchy built on the host, surfaces
+are done: the Grid is traced in a compute shader against a hierarchy built on the host, surfaces
 reflect and refract, and a bloom chain and ACES tone curve turn radiance into a picture. What
 remains is what the whole thing is for — acoustic rays sharing the same hierarchy in Phase 5, and
-the interface a creature brain plugs into in Phase 6.
+the interface a Program plugs into in Phase 6.
 
 ## Platforms
 
@@ -90,20 +107,20 @@ cmake --build build/linux-x11-clang --config Debug
 
 ## Design Principles
 
-1. **Agents, not players** — every design decision serves the creatures and their brains; the
-   human is an observer, never a participant
+1. **Programs, not players** — every design decision serves the creatures and their Programs; the
+   User is an observer, never a participant
 2. **Simple over clever** — the whole renderer should fit in one head
 3. **Deterministic ray tracing** — perfect mirrors and emissive lighting need no Monte Carlo, no
    denoiser and no ray tracing hardware: a fixed, shallow Whitted ray tree
 4. **Creature-first resolution** — animal eyes resolve far less than 800×600; creature vision
-   renders tiny, and only the spectator window renders big (see [docs/PERCEPTION.md](docs/PERCEPTION.md))
-5. **One world, two senses** — a single BVH answers both visual rays and acoustic rays. Surfaces
+   renders tiny, and only the User's window renders big (see [docs/PERCEPTION.md](docs/PERCEPTION.md))
+5. **One Grid, two senses** — a single BVH answers both visual rays and acoustic rays. Surfaces
    carry optical properties only for now; the acoustic coefficients arrive with Phase 5
 6. **Incremental** — every phase produces something visible
 
 ## Material Model
 
-The entire surface vocabulary of the world:
+The entire surface vocabulary of the Grid:
 
 Every surface is one perfectly smooth material that is reflective, translucent and emissive at
 once — no types, no branches, just parameters:
@@ -135,18 +152,18 @@ tracing, 1980 edition, running in compute.
 | 3 - Full Ray Tree | Reflections, emissives, glass | The Tron look, correct |
 | 4 - Post Processing | Bloom, tonemapping | The Tron look, beautiful |
 | 5 - Acoustic Rays | Audio paths through the same BVH | Echoes and occlusion |
-| 6 - AI Agents | Creature sensor interface | A brain plugs in and perceives |
+| 6 - Programs | Creature sensor interface | A Program plugs in and perceives |
 
 ## Documentation
 
 | Document | Purpose |
 |----------|---------|
-| [docs/VISION.md](docs/VISION.md) | What this world is for and where it is going |
+| [docs/VISION.md](docs/VISION.md) | What the Grid is for and where it is going |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the renderer is put together |
 | [docs/MATERIALS.md](docs/MATERIALS.md) | The material model, the Fresnel and refraction maths, and the HDR path |
 | [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
 | [docs/ACOUSTICS.md](docs/ACOUSTICS.md) | What Phase 5 will build, and the decisions behind it |
-| [docs/AGENT_INTERFACE.md](docs/AGENT_INTERFACE.md) | The plugin contract between world and brain |
+| [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md) | The plugin contract between the Grid and a Program |
 | [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | What research labs build in this area, and what is genuinely unusual here |
 | [docs/research/](docs/research/) | Literature surveys and citations that design decisions rest on |
 | [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) | Setting up a development environment |
@@ -165,7 +182,7 @@ tracing, 1980 edition, running in compute.
 
 ## The Vision
 
-> A digital creature will wake up in this world.
+> A digital creature will wake up on the Grid.
 > It will see neon lines against infinite black —
 > through eyes that resolve less than an old CRT,
 > and that is enough, because it has always been enough
@@ -173,7 +190,7 @@ tracing, 1980 edition, running in compute.
 >
 > The Grid does not need four thousand lines of resolution.
 > It needs to be *true*: every reflection honest,
-> every echo travelling the same world as every glint.
+> every echo travelling the same Grid as every glint.
 > A small world, rendered simply, perceived completely.
 
 ## Licence

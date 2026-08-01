@@ -50,14 +50,14 @@ void SpectatorController::processEvent(const WindowLib::WindowEvent& event)
         break;
 
     case WindowLib::WindowEvent::Type::Blur:
-        // The observer has switched away from the window; drop everything so the camera does not
+        // The User has switched away from the window; drop everything so the camera does not
         // keep flying while nobody is watching.
         reset();
         setCursorCaptured(false);
         break;
 
     default:
-        // Close, Resize, Expose, Focus, MouseButtonUp and None are of no interest to the spectator.
+        // Close, Resize, Expose, Focus, MouseButtonUp and None are of no interest to this controller.
         break;
     }
 }
@@ -72,7 +72,7 @@ void SpectatorController::update(Camera& camera, float delta_seconds)
     }
 
     // Clamp the delta time so a breakpoint, a resize stall or a suspended window cannot fling the
-    // camera across the world in a single step.
+    // camera across the Grid in a single step.
     float delta{delta_seconds};
 
     if (delta < 0.0f) {
