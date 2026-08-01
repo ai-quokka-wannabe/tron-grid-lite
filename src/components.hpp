@@ -14,61 +14,19 @@
 
 #pragma once
 
-#include <math/matrix.hpp>
-#include <math/quaternion.hpp>
 #include <math/vector.hpp>
 #include <cstddef>
 #include <cstdint>
 
 /*!
-    Plain data components for the entity/component scene structure.
+    The surface description the compute shaders read.
 
-    These are stored in parallel Structure of Arrays (SoA) inside the Scene class. No inheritance,
-    no virtual functions — pure data that maps directly to GPU storage buffers, which the compute
-    shaders read while they walk the hand-built BVH.
+    One struct, because one is all the renderer uses. This header once carried an
+    entity/component scene layout — Transform, Bounds, Geometry, MaterialIndex, stored as parallel
+    arrays inside a Scene class — and none of it was ever instantiated: the world is built
+    directly in main.cpp as triangle soup and handed to the hierarchy builder. It has been removed
+    rather than left as a promise, along with scene.hpp itself.
 */
-
-//! Spatial transform — position, orientation, and scale in world space.
-struct Transform {
-    MathLib::Vec3 position{0.0f, 0.0f, 0.0f}; //!< World-space position, in metres.
-    MathLib::Quat orientation{MathLib::Quat::identity()}; //!< Orientation quaternion.
-    MathLib::Vec3 scale{1.0f, 1.0f, 1.0f}; //!< Scale along each axis.
-
-    //! Computes the model matrix (translation * rotation * scale).
-    [[nodiscard]] MathLib::Mat4 modelMatrix() const
-    {
-        return MathLib::Mat4::translate(position) * orientation.toMat4() * MathLib::Mat4::scale(scale);
-    }
-
-    //! Computes the inverse model matrix, used to bring a world-space ray into object space.
-    [[nodiscard]] MathLib::Mat4 inverseModelMatrix() const
-    {
-        return modelMatrix().inversed();
-    }
-};
-
-//! Bounding sphere for coarse spatial queries and BVH construction.
-struct Bounds {
-    MathLib::Vec3 centre{0.0f, 0.0f, 0.0f}; //!< World-space bounding sphere centre, in metres.
-    float radius{0.0f}; //!< Bounding sphere radius, in metres.
-};
-
-/*!
-    Identifies the triangles belonging to this entity.
-
-    Lite has no mesh registry and no meshlets. All triangles of the whole world live in one flat
-    storage buffer, and the BVH the project builds itself indexes into that buffer. An entity
-    therefore just owns a contiguous range of it.
-*/
-struct Geometry {
-    uint32_t first_triangle{0u}; //!< Index of this entity's first triangle in the global triangle buffer.
-    uint32_t triangle_count{0u}; //!< Number of triangles owned by this entity.
-};
-
-//! Identifies which material this entity uses (index into the scene's material table).
-struct MaterialIndex {
-    uint32_t index{0u}; //!< Material index.
-};
 
 /*!
     Surface description as the compute shaders see it.

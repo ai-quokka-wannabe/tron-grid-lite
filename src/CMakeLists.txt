@@ -1,12 +1,10 @@
 add_executable(${PROJECT_NAME}
     main.cpp
     volk.cpp
-    vma.cpp
     instance.cpp
     device.cpp
     surface.cpp
     swapchain.cpp
-    allocator.cpp
     tracer.cpp
     postprocess.cpp
     geometry.cpp
@@ -31,8 +29,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     VK_NO_PROTOTYPES
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
-    VMA_STATIC_VULKAN_FUNCTIONS=0
-    VMA_DYNAMIC_VULKAN_FUNCTIONS=0
     $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR NOMINMAX WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR>
 )
@@ -73,7 +69,6 @@ function(add_slang_shader name source)
             -profile spirv_1_4
             -emit-spirv-directly
             -fvk-use-entrypoint-name
-            -fvk-invert-y
             -warnings-as-errors all
             ${entry_args}
             -o ${SHADER_OUTPUT_DIR}/${name}.spv

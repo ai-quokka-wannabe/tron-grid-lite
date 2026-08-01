@@ -14,6 +14,7 @@
 
 #include "postprocess.hpp"
 #include "device.hpp"
+#include "vulkan_helpers.hpp"
 #include <algorithm>
 #include <array>
 #include <fstream>
@@ -21,6 +22,9 @@
 
 namespace
 {
+
+    using VulkanHelpers::findMemoryType;
+    using VulkanHelpers::readSpirv;
 
     //! Workgroup size, matching [numthreads(8, 8, 1)] in both post-processing shaders.
     constexpr uint32_t WORKGROUP_SIZE{8u};
@@ -51,57 +55,6 @@ namespace
 
     static_assert(sizeof(BloomPushConstants) == 4u, "bloom_downsample.slang declares a 4-byte push constant block.");
     static_assert(sizeof(PostProcessPushConstants) == 12u, "postprocess.slang declares a 12-byte push constant block.");
-
-    //! Finds a memory type satisfying both the resource's requirements and the requested properties.
-    [[nodiscard]] uint32_t findMemoryType(const vk::raii::PhysicalDevice& physical_device, uint32_t type_bits, vk::MemoryPropertyFlags required)
-    {
-        const vk::PhysicalDeviceMemoryProperties properties{physical_device.getMemoryProperties()};
-        for (uint32_t index{0u}; index < properties.memoryTypeCount; ++index) {
-            if (((type_bits & (1u << index)) != 0u) && ((properties.memoryTypes[index].propertyFlags & required) == required)) {
-                return index;
-            }
-        }
-        throw std::runtime_error{"No memory type satisfies the requested properties."};
-    }
-
-    //! First word of every SPIR-V module, per the specification.
-    constexpr uint32_t SPIRV_MAGIC{0x07230203u};
-
-    //! Reads a compiled SPIR-V module from disk.
-    [[nodiscard]] std::vector<uint32_t> readSpirv(const std::string& path)
-    {
-        std::ifstream file{path, std::ios::binary | std::ios::ate};
-        if (!file.is_open()) {
-            throw std::runtime_error{"Failed to open SPIR-V module: " + path};
-        }
-
-        const std::streamsize size_bytes{file.tellg()};
-        if ((size_bytes <= 0) || ((size_bytes % 4) != 0)) {
-            throw std::runtime_error{"SPIR-V module has an invalid size: " + path};
-        }
-
-        std::vector<uint32_t> words(static_cast<size_t>(size_bytes) / 4u);
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(words.data()), size_bytes);
-
-        /*
-            The read has to be checked. std::vector value-initialises, so a short read leaves a
-            silently zero-filled tail while the full size is still reported to vkCreateShaderModule.
-            A release build has no validation layer to reject the result, so the driver's SPIR-V
-            parser consumes the zeros — a hang or a crash instead of the clean error this function
-            is otherwise built to produce.
-        */
-        if (file.gcount() != size_bytes) {
-            throw std::runtime_error{"Truncated SPIR-V module: " + path};
-        }
-
-        // The magic number catches the likelier mistake of pointing at the wrong file entirely.
-        if (words.front() != SPIRV_MAGIC) {
-            throw std::runtime_error{"Not a SPIR-V module: " + path};
-        }
-
-        return words;
-    }
 
     //! Builds one compute pipeline from a module and an entry point name.
     [[nodiscard]] vk::raii::Pipeline makeComputePipeline(const vk::raii::Device& device, const vk::raii::ShaderModule& module, const char* entry_point,

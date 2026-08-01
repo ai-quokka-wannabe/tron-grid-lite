@@ -39,6 +39,7 @@
 #include "surface.hpp"
 #include "swapchain.hpp"
 #include "tracer.hpp"
+#include "vulkan_helpers.hpp"
 #include <bvh/bvh.hpp>
 #include <log/logger.hpp>
 #include <math/vector.hpp>
@@ -356,19 +357,6 @@ namespace
         }
     }
 
-    //! Finds a host-visible memory type for the frame readback buffer.
-    [[nodiscard]] uint32_t findHostVisibleMemoryType(const vk::raii::PhysicalDevice& physical_device, uint32_t type_bits)
-    {
-        const vk::PhysicalDeviceMemoryProperties properties{physical_device.getMemoryProperties()};
-        const vk::MemoryPropertyFlags required{vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent};
-        for (uint32_t index{0u}; index < properties.memoryTypeCount; ++index) {
-            if (((type_bits & (1u << index)) != 0u) && ((properties.memoryTypes[index].propertyFlags & required) == required)) {
-                return index;
-            }
-        }
-        throw std::runtime_error{"No host-visible memory type for the frame readback buffer."};
-    }
-
 } // namespace
 
 /*!
@@ -405,7 +393,9 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
         device.get(), vk::BufferCreateInfo{.size = frame_bytes, .usage = vk::BufferUsageFlagBits::eTransferDst, .sharingMode = vk::SharingMode::eExclusive}};
     const vk::MemoryRequirements requirements{readback.getMemoryRequirements()};
     const vk::raii::DeviceMemory readback_memory{device.get(),
-        vk::MemoryAllocateInfo{.allocationSize = requirements.size, .memoryTypeIndex = findHostVisibleMemoryType(device.physicalDevice(), requirements.memoryTypeBits)}};
+        vk::MemoryAllocateInfo{.allocationSize = requirements.size,
+            .memoryTypeIndex = VulkanHelpers::findMemoryType(device.physicalDevice(), requirements.memoryTypeBits,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)}};
     readback.bindMemory(*readback_memory, 0u);
 
     const vk::raii::CommandPool command_pool{
