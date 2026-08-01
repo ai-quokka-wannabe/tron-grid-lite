@@ -37,6 +37,21 @@ namespace WindowLib
         if (!m_class_registered) {
             WNDCLASSEXW wc = {};
             wc.cbSize = sizeof(WNDCLASSEXW);
+            /*
+                Declared before the first window is created, which is the only point at which
+                Windows accepts it. A process that declares nothing is treated as system-DPI-unaware
+                and handed DWM bitmap virtualisation: on a 150%-scaled panel — the default on the
+                laptops this project targets — a requested 1280x720 client area is created as
+                1280x720 *virtual* pixels, the swapchain is built to match, and the compositor then
+                upscales the result by 1.5. Every pixel of a ray tracer's output arrives at the
+                display through a bilinear stretch.
+
+                PerMonitorV2 rather than plain per-monitor: it is the only mode in which Windows
+                also scales the non-client area and sends WM_DPICHANGED as a window moves between
+                displays of different scale.
+            */
+            SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
             wc.style = CS_HREDRAW | CS_VREDRAW;
             wc.lpfnWndProc = wndProcStatic;
             wc.hInstance = m_hinstance;
@@ -60,9 +75,11 @@ namespace WindowLib
             style = WS_POPUP;
         }
 
-        // Adjust window rect to account for borders/title bar
+        // Adjust window rect to account for borders/title bar. The DPI-aware form, because with
+        // PerMonitorV2 declared above the frame is scaled per monitor and the unaware version would
+        // compute it for 96 DPI regardless.
         RECT rect = {0, 0, static_cast<LONG>(config.width), static_cast<LONG>(config.height)};
-        AdjustWindowRect(&rect, style, FALSE);
+        AdjustWindowRectExForDpi(&rect, style, FALSE, 0, GetDpiForSystem());
 
         int window_width{rect.right - rect.left};
         int window_height{rect.bottom - rect.top};
@@ -157,6 +174,8 @@ namespace WindowLib
             SetCursorPos(centre.x, centre.y);
             m_last_mouse_x = static_cast<int32_t>((rect.right - rect.left) / 2);
             m_last_mouse_y = static_cast<int32_t>((rect.bottom - rect.top) / 2);
+            m_warp_target_x = m_last_mouse_x;
+            m_warp_target_y = m_last_mouse_y;
             m_warp_pending = true;
         } else {
             ClipCursor(nullptr);
@@ -267,13 +286,18 @@ namespace WindowLib
             // move emits two events — one real, one phantom (dx=0, dy=0) — doubling
             // consumer event load and potentially confusing camera-look code that integrates
             // dx/dy.
-            if (m_warp_pending) {
+            // Matched by position, not by the flag alone: Windows sends no WM_MOUSEMOVE when the
+            // pointer was already at the destination, and an unmatched flag would then swallow the
+            // user's next real movement.
+            if (m_warp_pending && (x == m_warp_target_x) && (y == m_warp_target_y)) {
                 m_warp_pending = false;
                 m_last_mouse_x = x;
                 m_last_mouse_y = y;
                 m_mouse_tracked = true;
                 return 0;
             }
+
+            m_warp_pending = false;
 
             int32_t dx{m_mouse_tracked ? (x - m_last_mouse_x) : 0};
             int32_t dy{m_mouse_tracked ? (y - m_last_mouse_y) : 0};
@@ -288,6 +312,8 @@ namespace WindowLib
                 POINT screen_centre{centre};
                 ClientToScreen(hwnd, &screen_centre);
                 SetCursorPos(screen_centre.x, screen_centre.y);
+                m_warp_target_x = centre.x;
+                m_warp_target_y = centre.y;
                 m_warp_pending = true; // The next WM_MOUSEMOVE will be the synthetic recentre.
             } else {
                 m_last_mouse_x = x;

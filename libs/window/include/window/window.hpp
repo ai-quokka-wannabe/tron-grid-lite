@@ -26,7 +26,7 @@ namespace WindowLib
 
     //! Configuration parameters for creating a platform window.
     struct WindowConfig {
-        std::string title{"TRON Grid Renderer"}; //!< Window title text.
+        std::string title{"TronGrid Lite"}; //!< Window title text.
         uint32_t width{1920}; //!< Initial window width in pixels.
         uint32_t height{1080}; //!< Initial window height in pixels.
         bool resizable{true}; //!< Whether the window can be resized by the user.

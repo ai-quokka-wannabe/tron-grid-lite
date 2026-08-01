@@ -22,7 +22,7 @@
 //! Looks up or creates an X11 atom by name.
 [[nodiscard]] static xcb_atom_t internAtom(xcb_connection_t* conn, const char* name)
 {
-    xcb_intern_atom_cookie_t cookie{xcb_intern_atom(conn, 0, strlen(name), name)};
+    xcb_intern_atom_cookie_t cookie{xcb_intern_atom(conn, 0, std::strlen(name), name)};
     xcb_intern_atom_reply_t* reply{xcb_intern_atom_reply(conn, cookie, nullptr)};
     if (!reply) {
         return XCB_ATOM_NONE;
@@ -230,17 +230,27 @@ namespace WindowLib
                 xcb_grab_pointer(m_connection, 1, m_window, XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE | XCB_EVENT_MASK_POINTER_MOTION,
                     XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, m_window, m_invisible_cursor, XCB_CURRENT_TIME)};
             xcb_grab_pointer_reply_t* grab_reply{xcb_grab_pointer_reply(m_connection, grab_cookie, nullptr)};
+
+            /*
+                A null reply is a failure, not an unknown. xcb_grab_pointer_reply returns null when
+                the request produced an X error or the connection broke — precisely the cases where
+                the grab definitely did not happen. Treating null as success left the pointer
+                ungrabbed while the window believed it had captured it: the cursor stayed visible,
+                the pointer wandered out of the window, and the camera kept turning.
+            */
+            bool grab_ok{false};
             if (grab_reply != nullptr) {
-                bool grab_ok{grab_reply->status == XCB_GRAB_STATUS_SUCCESS};
+                grab_ok = (grab_reply->status == XCB_GRAB_STATUS_SUCCESS);
                 free(grab_reply);
-                if (!grab_ok) {
-                    m_cursor_captured = false;
-                    // Grab failed — release the cursor we just created.
-                    xcb_free_cursor(m_connection, m_invisible_cursor);
-                    m_invisible_cursor = 0;
-                    xcb_flush(m_connection);
-                    return;
-                }
+            }
+
+            if (!grab_ok) {
+                m_cursor_captured = false;
+                // Release the cursor we just created.
+                xcb_free_cursor(m_connection, m_invisible_cursor);
+                m_invisible_cursor = 0;
+                xcb_flush(m_connection);
+                return;
             }
 
             // Centre cursor. The warp triggers a synthetic XCB_MOTION_NOTIFY — flag it so
@@ -248,6 +258,8 @@ namespace WindowLib
             xcb_warp_pointer(m_connection, XCB_NONE, m_window, 0, 0, 0, 0, static_cast<int16_t>(m_width / 2), static_cast<int16_t>(m_height / 2));
             m_last_mouse_x = static_cast<int32_t>(m_width / 2);
             m_last_mouse_y = static_cast<int32_t>(m_height / 2);
+            m_warp_target_x = m_last_mouse_x;
+            m_warp_target_y = m_last_mouse_y;
             m_warp_pending = true;
 
             // The cursor is intentionally NOT freed here — the pointer grab still
@@ -331,13 +343,18 @@ namespace WindowLib
             // with the new position. Without this filter, every real mouse move emits two
             // events — one real, one phantom (dx=0, dy=0) — doubling consumer event load
             // and potentially confusing camera-look code that integrates dx/dy.
-            if (m_warp_pending) {
+            // Matched by position, not by the flag alone: X sends no motion event when the pointer
+            // was already at the destination, and an unmatched flag would then swallow the user's
+            // next real movement.
+            if (m_warp_pending && (x == m_warp_target_x) && (y == m_warp_target_y)) {
                 m_warp_pending = false;
                 m_last_mouse_x = x;
                 m_last_mouse_y = y;
                 m_mouse_tracked = true;
                 break;
             }
+
+            m_warp_pending = false;
 
             int32_t dx{m_mouse_tracked ? (x - m_last_mouse_x) : 0};
             int32_t dy{m_mouse_tracked ? (y - m_last_mouse_y) : 0};
@@ -350,6 +367,8 @@ namespace WindowLib
                 m_last_mouse_y = static_cast<int32_t>(cy);
                 xcb_warp_pointer(m_connection, XCB_NONE, m_window, 0, 0, 0, 0, cx, cy);
                 xcb_flush(m_connection);
+                m_warp_target_x = static_cast<int32_t>(cx);
+                m_warp_target_y = static_cast<int32_t>(cy);
                 m_warp_pending = true; // The next XCB_MOTION_NOTIFY will be the synthetic recentre.
             } else {
                 m_last_mouse_x = x;
