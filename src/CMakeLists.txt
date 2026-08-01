@@ -126,3 +126,10 @@ add_custom_target(copy_shaders ALL
     VERBATIM
 )
 add_dependencies(copy_shaders shaders)
+
+# Install rules. The release workflow stages the archive with `cmake --install`, so that the
+# knowledge of where the binary and its shaders actually land lives here rather than being
+# duplicated as a hand-written path in a YAML file — which is how the release archive came to be
+# assembled from a directory that Ninja Multi-Config never writes.
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+install(FILES ${SHADER_SPV_FILES} DESTINATION .)

@@ -119,6 +119,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No release has ever shipped.** The release workflow copied the binary from
+  `build/<preset>/Release/`, a directory Ninja Multi-Config never writes — the executable lands in
+  `build/<preset>/src/<Config>/`. Every tag push failed both matrix legs before producing anything.
+  The archive also omitted the three compiled shaders the binary loads at startup, so even with the
+  path corrected a user would have unpacked a program that dies on launch. Both are now moot: the
+  build declares `install()` rules and the workflow stages with `cmake --install`, so where the
+  artefacts live is knowledge held in one place instead of duplicated as a hand-written path in
+  YAML. Release builds now also run the test suite, because a tag can be pushed from any commit and
+  the attestation should not vouch for the provenance of an untested binary.
+- **The renderer could only be launched from its own output directory.** Shaders were opened by
+  bare relative name, which resolves against the working directory rather than the executable's, so
+  every IDE debug configuration, every shortcut and every unpacked release failed at startup with
+  "Failed to open SPIR-V module: trace.spv". The three paths are now resolved against the
+  executable's own location.
 - Two design documents claimed surfaces already carry acoustic properties. They do not — the fields
   were reserved once and removed as bloat, `src/components.hpp` says so, and the `static_assert`s
   pin `Material` at 32 bytes. `ARCHITECTURE.md` additionally promised Phase 5 could proceed "without

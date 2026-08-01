@@ -59,6 +59,13 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <limits.h>
+#include <unistd.h>
+#endif
+
 namespace
 {
 
@@ -116,6 +123,50 @@ namespace
 
             out.push_back(BvhLib::Triangle{.v0 = v0, .material = material, .edge1 = v1 - v0, .padding0 = 0u, .edge2 = v2 - v0, .padding1 = 0u});
         }
+    }
+
+    /*!
+        Returns the directory holding this executable.
+
+        The compiled shaders sit beside the binary, and they used to be opened by bare relative
+        name — which resolves against the *working* directory, not the executable's. That works
+        only when the program happens to be launched from its own output directory, and silently
+        fails everywhere else: every IDE debug configuration, every shortcut, and every user who
+        unpacks a release and runs it from anywhere but inside the folder.
+
+        Falls back to the working directory if the platform call fails, which restores exactly the
+        old behaviour rather than making a bad situation worse.
+    */
+    [[nodiscard]] std::filesystem::path executableDirectory()
+    {
+#ifdef _WIN32
+        std::wstring buffer(MAX_PATH, wchar_t{});
+        for (;;) {
+            const DWORD written{GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()))};
+            if (written == 0u) {
+                return std::filesystem::current_path();
+            }
+
+            // Truncation is reported by filling the buffer exactly, so grow and ask again.
+            if (written < buffer.size()) {
+                buffer.resize(written);
+                break;
+            }
+
+            buffer.resize(buffer.size() * 2u);
+        }
+
+        return std::filesystem::path{buffer}.parent_path();
+#else
+        std::string buffer(PATH_MAX, char{});
+        const ssize_t written{readlink("/proc/self/exe", buffer.data(), buffer.size())};
+        if (written <= 0) {
+            return std::filesystem::current_path();
+        }
+
+        buffer.resize(static_cast<size_t>(written));
+        return std::filesystem::path{buffer}.parent_path();
+#endif
     }
 
     /*!
@@ -507,10 +558,14 @@ int main(int argc, char** argv)
         logger.logInfo("Hierarchy built in " + std::to_string(static_cast<double>(build_milliseconds)) + " ms: " + std::to_string(bvh.triangles.size()) + " triangles, "
             + std::to_string(bvh.nodes.size()) + " nodes, depth " + std::to_string(bvh.depth()) + " of " + std::to_string(BvhLib::MAX_DEPTH) + ".");
 
-        Tracer tracer{device, bvh, makeMaterials(), MAX_FRAMES_IN_FLIGHT, "trace.spv", logger};
+        // Absolute paths, so the renderer runs from any working directory rather than only from
+        // its own output folder.
+        const std::filesystem::path shader_directory{executableDirectory()};
+
+        Tracer tracer{device, bvh, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
         tracer.resize(swapchain.extent());
 
-        PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, "bloom.spv", "postprocess.spv", logger};
+        PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};
         post_process.resize(swapchain.extent(), tracer.outputViews());
 
         if (recording) {
