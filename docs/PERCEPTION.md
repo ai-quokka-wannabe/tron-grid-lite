@@ -1,21 +1,21 @@
 # Perception
 
-What the world renders into a creature's senses, why those sensor buffers are deliberately tiny,
+What the Grid renders into a creature's senses, why those sensor buffers are deliberately tiny,
 and what the biology actually says.
 
 ## Scope
 
-TronGrid Lite is the **stage, not the actor**. It renders senses; it does not think. An agent
-loads as a shared-library plugin (DLL on Windows, SO on Linux), receives sensor buffers, and
-returns motor intent. What happens in between is entirely the plugin's business — the world is
-**agnostic about how any agent works inside**, and deliberately so. Nothing in this repository
-models cognition, learning or behaviour, and nothing here should.
+TronGrid Lite is the **stage, not the actor**. It renders senses; it does not think. A Program
+loads as a shared-library plugin (DLL on Windows, SO on Linux), receives senses, and returns
+actions. What happens in between is entirely the plugin's business — the Grid is **agnostic
+about how any Program works inside**, and deliberately so. Nothing in this repository models
+cognition, learning or behaviour, and nothing here should.
 
-So this document is not about animal minds. It is about **the shape and size of the buffers the
+So this document is not about animal cognition. It is about **the shape and size of the buffers the
 renderer fills**, and the biology is here for one reason only: to justify those sizes. The
 single most consequential number in the project is the one nobody thinks to question — **how
 many samples does a sensor get?** Answer it with a display resolution and the renderer becomes
-expensive, the simulation becomes small, and the sensor becomes a camera on legs. Answer it with
+expensive, the Grid becomes small, and the sensor becomes a camera on legs. Answer it with
 biology and the opposite happens.
 
 The short version: **animal eyes resolve far less than 800×600, and most of the presets below
@@ -46,24 +46,24 @@ lists every such case.
 
 **None of these are implemented yet — they are the specification Phase 6 will build to.**
 
-The world will offer a handful of sensor shapes, named after the animals whose measurements set
+The Grid will offer a handful of sensor shapes, named after the animals whose measurements set
 their size. A preset is a **render specification** — sample count, sample directions, acceptance
-angles, channel count, quantisation — and nothing more. Which preset an agent asks for, and what
+angles, channel count, quantisation — and nothing more. Which preset a Program asks for, and what
 it does with the buffer, is the plugin's affair.
 
 The names run from the simplest animal upward, and the sizes are startlingly small at the bottom.
 
 | Preset | Recommended sensor | Channels | Primary rays per creature per frame | Biological anchor |
 |------|--------------------|----------|-------------------------------------|-------------------|
-| `elegans` | 1×2 body-referenced strip — *not* a view of the world | 1 (UV-weighted scalar) | **2** (8–16 with jitter) | 2 demonstrated spatial zones; no eyes, no opsins, no optics |
+| `elegans` | 1×2 body-referenced strip — *not* a view of the Grid | 1 (UV-weighted scalar) | **2** (8–16 with jitter) | 2 demonstrated spatial zones; no eyes, no opsins, no optics |
 | `insect-min` | ~1,000–1,500 direction samples, non-uniform, both eyes | 1–3 | **1,000–1,500** | Ant 420–590 ommatidia per eye; *Drosophila* ~750 |
 | `insect-mid` | ~9,450 direction samples (~69×69 per eye equivalent) | 3 | **9,450** | 4,725 ommatidia per eye (microCT) |
 | `insect-high` | ~57,000 samples, foveated as a great-circle band | 3 | **57,000** | *Anax junius* ~28,000–30,000 ommatidia per eye |
 | `rodent` | One ~166×166-equivalent panoramic buffer, uniform, no fovea | 1–3 | **17,600–27,500** | 0.4–0.5 cyc/deg acuity across an 8.38 sr field |
 | `macropod` | 256×256 forward plus a coarse peripheral band | 3 | **65,536** | Tammar wallaby 4.8 cyc/deg behavioural |
 
-For scale, a 640×480 spectator window is 307,200 pixels. **Every preset below the last is cheaper
-than a single spectator frame, and the first three presets are cheaper by two to three orders of
+For scale, a 640×480 debug window is 307,200 pixels. **Every preset below the last is cheaper
+than one frame of that window, and the first three presets are cheaper by two to three orders of
 magnitude.** Twenty simultaneous fruit-fly-class creatures cost about 30,000 primary rays per
 frame — a tenth of one 640×480 image.
 
@@ -257,8 +257,8 @@ renderer.
   A fourth mechanism is often cited alongside these and is deliberately left out: the precedence
   effect, by which reflections arriving within a few milliseconds are fused and the leading
   direction weighted roughly 4:1. It is real, but it is a property of an auditory *system* rather
-  than of the world, and this repository does not get to size its own fidelity on assumptions about
-  how a listener will process what it receives — that is the brains' business, in their own
+  than of the Grid, and this repository does not get to size its own fidelity on assumptions about
+  how a listener will process what it receives — that is the Programs' business, in their own
   repositories. It is also specifically a mammalian result, and there is no reason to expect it of a
   moth with two receptor cells or a nematode sensing pressure gradients through its skin. The three
   simulation-side mechanisms carry the conclusion on their own.
@@ -277,14 +277,14 @@ solve is millions of ray-segments of work.
 ## The senses that are not eyes
 
 Vision dominates this document because it dominates the render budget, but it is not the only
-modality the world hands over. The full list lives in
-[AGENT_INTERFACE.md](AGENT_INTERFACE.md#the-senses-at-a-glance); what follows is why the
+modality the Grid hands over. The full list lives in
+[PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md#the-senses-at-a-glance); what follows is why the
 non-visual ones are shaped as they are.
 
 **Vestibular sensing costs three floats and prevents a specific failure.** Otolith organs sense
 linear acceleration, semicircular canals sense rotation, and crucially the otolith cannot separate
 gravity from acceleration — the two arrive as a single specific force, which is exactly why tilting
-a person in the dark feels like accelerating forwards. The world reports the same conflated
+a person in the dark feels like accelerating forwards. The Grid reports the same conflated
 quantity rather than a clean "down" vector, so a creature is fooled in the same way an animal is.
 
 That matters more here than in most worlds. **Every surface is a perfect mirror**, so the reflected
@@ -307,7 +307,7 @@ order in which to climb the ladder.
 **Proprioception and vestibular sensing are deliberately separate fields.** The first is what the
 body's actuators report about themselves, the second is what inertia reports about the body. They
 agree while a creature drives itself and disagree the moment it is pushed, slides or falls — and
-that disagreement is information a brain can use.
+that disagreement is information a Program can use.
 
 ## Design rules
 
@@ -317,10 +317,10 @@ These follow from everything above. They are binding on the renderer.
    small buffer is what the GPU actually traces. A downsampled image is also the *wrong* image:
    box-filtered downsampling is antialiased, whereas a native small render aliases — and for
    ant-class eyes, aliasing is the biologically correct result.
-2. **Sensor targets are structurally separate from the spectator window.** The spectator window
-   is sized for a human and their unpredictable gaze. Creature sensors are simulation state.
-   They share the scene, the BVH and the materials, and nothing else: no shared resolution,
-   aspect ratio, channel count or post-processing. A creature's sensor is not a camera.
+2. **Sensor targets are structurally separate from the User's window.** That window is sized for
+   the User and their unpredictable gaze. Creature sensors are Grid state. They share the scene,
+   the BVH and the materials, and nothing else: no shared resolution, aspect ratio, channel count
+   or post-processing. A creature's sensor is not a camera.
 3. **Per-creature sensor descriptors.** Each creature owns its sample count,
    sample-direction list, per-sample acceptance angle, channel count and quantisation. Twenty
    C. elegans cost 40 rays; twenty fruit flies cost 30,000. These are different data structures,
@@ -336,8 +336,8 @@ These follow from everything above. They are binding on the renderer.
 6. **Blur, aliasing and noise are the creature's problem to cope with, not bugs to fix.** A
    faithful *Drosophila* render blurs with a kernel twice the sample spacing; a faithful ant
    render aliases; a C. elegans sensor is a single noisy scalar that cannot resolve direction at
-   all. If an agent cannot cope, that is a finding about the agent. Do not add antialiasing,
-   temporal accumulation or denoising to make an agent's life easier unless the biology has an
+   all. If a Program cannot cope, that is a finding about the Program. Do not add antialiasing,
+   temporal accumulation or denoising to make a Program's life easier unless the biology has an
    equivalent.
 7. **Model motion as a resolution mechanism, not just as animation.** A moving compound eye
    resolves about four times finer than its lattice permits; C. elegans must move to infer

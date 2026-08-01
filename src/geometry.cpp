@@ -236,7 +236,7 @@ float gridSurfaceHeight(float world_x, float world_z, const GridFloorConfig& con
 
         The risers earn their place acoustically as well. A gently curved slope deflects a
         reflection away at a shallow angle and it is never heard again, whereas a riser standing
-        square to the ground throws sound back across the world. Echoes come from the steps, not
+        square to the ground throws sound back across the Grid. Echoes come from the steps, not
         from the swells.
     */
     if (config.relief_terraces > 0u) {

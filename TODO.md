@@ -13,7 +13,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 | 3     | Full ray tree                 | Reflections, emissives, glass      | **Done** |
 | 4     | Post processing               | Bloom, tonemapping                 | **Done** |
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | Pending |
-| 6     | AI agents                     | Creature sensor interface plugs in | Pending |
+| 6     | Programs                      | Creature sensor interface plugs in | Pending |
 
 ## Etape 1 — Adopt project infrastructure from TronGrid
 
@@ -36,7 +36,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Etape 3 — Phase 1: window, swapchain and frame loop
 
-- [x] Spectator camera wired to input (free flight, for the human observer only)
+- [x] User camera wired to input (free flight, for the User only)
 - [x] Neon grid geometry to fly through
 - [x] Depth buffer, recreated with the swapchain
 - [x] Frame timing and GPU timestamp profiling with a once-per-second summary
@@ -64,10 +64,10 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Etape 7 — Phase 5: acoustic rays
 
-- [ ] Give surfaces something to be heard: sound sources in the world
+- [ ] Give surfaces something to be heard: sound sources on the Grid
 - [ ] Acoustic ray traversal through the same hierarchy
 - [ ] Energy histogram per listener, banded by octave
-- [ ] Add ears to the agent interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md` — and bump `TGL_BRAIN_ABI_VERSION` to 2
+- [ ] Add ears to the Program interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md` — and bump `TGL_PROGRAM_ABI_VERSION` to 2
 
 ## Etape 8 — Phase 6 prerequisite: sub-allocate device memory
 
@@ -76,7 +76,7 @@ Deferred deliberately, and this entry exists so that deferral does not become fo
 Every allocation in this renderer is its own `vkAllocateMemory`, and the validation layer objects
 fifteen times on every single run: *"the required size of the allocation is 578400, but smaller
 buffers like this should be sub-allocated from larger memory blocks"*. The threshold it complains
-below is 1 MiB, and most of this world's buffers are well under it.
+below is 1 MiB, and most of the Grid's buffers are well under it.
 
 Today that is untidy rather than harmful. **Phase 6 is where it stops being untidy**, because
 creature sensors are exactly the wrong shape for one-allocation-per-resource: many creatures, two
@@ -197,8 +197,8 @@ was written speculatively, against a scene layout that has since been deleted to
   GitHub's default setup, which never reads that file, so the change would have been silently
   inert. Making it work would mean owning a hand-maintained workflow forever and disarming the
   query repo-wide.
-- **Revisit this in Phase 6.** Once the creature roster resolves brain library paths out of a
-  config file (`docs/AGENT_INTERFACE.md`), the path stops coming from the command line and starts
+- **Revisit this in Phase 6.** Once the creature roster resolves Program library paths out of a
+  config file (`docs/PROGRAM_INTERFACE.md`), the path stops coming from the command line and starts
   coming from a file that a downloaded creature pack could write. At that point the query is right
   and confinement becomes a real requirement rather than theatre.
 - Merging the first Python file taught code scanning a new language, and it promptly raised four
@@ -228,7 +228,7 @@ was written speculatively, against a scene layout that has since been deleted to
   `src/postprocess.*`. Exposure moved there too, since how much radiance survives into a
   displayable range is a property of the tone mapping rather than of the tracer.
 - Both post-processing shaders had been compiled and SPIR-V-validated on every build since the
-  original infrastructure port, and never once dispatched. Three agents read their contracts in
+  original infrastructure port, and never once dispatched. Three reviewers read their contracts in
   parallel before any host code was written, which caught two things that would each have cost an
   afternoon: the tone mapping shader declared its output format `unknown`, which requires the
   optional `shaderStorageImageWriteWithoutFormat` device feature — declaring `rgba8`, which is
@@ -262,7 +262,7 @@ was written speculatively, against a scene layout that has since been deleted to
   changing. Repeated with the environment set, both axes cost roughly a doubling across their
   range and the two multiply. The table now in trace.slang is the corrected data.
 - Settled on a stack of three and a depth of six: 13.7 ms at 1280x720 on the reference GTX 1650 Ti,
-  inside a sixty-frame budget. Worth keeping in proportion — the spectator window is the most
+  inside a sixty-frame budget. Worth keeping in proportion — the User's window is the most
   expensive consumer this renderer will ever have, and a creature sensor is a fourteenth of it at
   most.
 
@@ -292,7 +292,7 @@ verified, three survived. All three were real.
 
 ### 2026-07-30
 
-- Etape 4 (Phase 2 milestone): **the world is ray traced.** The rasteriser is gone — no graphics
+- Etape 4 (Phase 2 milestone): **the Grid is ray traced.** The rasteriser is gone — no graphics
   pipeline, no depth buffer, no vertex buffer, and `triangle.slang` deleted with them. Every pixel
   is now a ray walked through a hand-built hierarchy in a compute shader.
 - `libs/bvh` holds the builder: a binned surface-area-heuristic split over twelve buckets, with a
@@ -329,16 +329,16 @@ verified, three survived. All three were real.
   requests nothing beyond Vulkan 1.3 core (dynamic rendering, synchronisation2) plus the
   swapchain extension: no ray tracing, no mesh shaders, no bindless. Ported the three shaders
   that survive the scope cut (triangle, postprocess, bloom) and dropped the rest. Documentation
-  written fresh for Lite: VISION, ARCHITECTURE, AGENT_INTERFACE, DEV_ENV_SETUP.
+  written fresh for Lite: VISION, ARCHITECTURE, PROGRAM_INTERFACE, DEV_ENV_SETUP.
 - Etape 2b: wrote `docs/PERCEPTION.md` from a verified literature review — sensor presets and
   their published anchors, the human comparison (the sharpest patch of human vision is a 240×240
   image; 4K exists as insurance against unpredictable gaze, which a simulated sensor never
   needs), what embodied-AI research actually feeds to networks, the acoustic budget, and twelve
   design rules. Scope sharpened across the docs at the same time: this repo is the stage, not
-  the actor — it renders senses and applies motor intent, agents are DLL/SO plugins behind a
+  the actor — it renders senses and applies actions, Programs are DLL/SO plugins behind a
   plain C ABI, and no cognition, learning or behaviour model belongs here.
 - Etape 3 (Phase 1 milestone): **flying through the neon grid.** Ported the last of what
-  TronGrid could lend — procedural geometry, the GPU timestamp profiler and the spectator
+  TronGrid could lend — procedural geometry, the GPU timestamp profiler and the User camera
   controller — plus `docs/MATERIALS.md`. Wired them into a real frame loop with a depth buffer.
   Two rendering bugs found and fixed by looking at the output rather than the code: neon tubes
   z-fought the floor at distance (lifted 5 cm, near plane moved to 0.5 m), then still broke into
@@ -355,7 +355,7 @@ verified, three survived. All three were real.
   against the acquire semaphore's wait stage, and both frames in flight shared one depth image.
   Each frame now owns a depth buffer. Validation runs clean, and the profiler reports **0.37 ms
   per frame — 2.2% of a 60 fps budget** for 24,832 triangles on the reference GTX 1650 Ti.
-- Reviewed the full list of senses the world forwards to a brain, and fixed what the review found.
+- Reviewed the full list of senses the Grid forwards to a Program, and fixed what the review found.
   The eye fields could not express the sensor presets `PERCEPTION.md` already specifies — several
   eyes, non-RGB channel counts, or a sample-direction list rather than a raster — so `TglEyeDesc`
   and `TglEyeView` replace them and the ABI version went to 1 while breaking changes are still
@@ -363,7 +363,7 @@ verified, three survived. All three were real.
   grounded; recorded that hearing has no sound sources yet, that echolocation falls out of hearing
   plus a vocalisation action, and that chemoreception is deliberately absent but arguably the most
   faithful sense for the smallest preset. A compass was considered and rejected: it would hand a
-  brain the structure the world exists to make it earn.
+  Program the structure the Grid exists to make it earn.
 - Material model unified: the `MaterialKind` enum is gone. Every surface is one perfectly smooth
   material that reflects, transmits and emits at once, so "mirror", "neon" and "glass" are named
   points in a continuous space rather than types. No shader branch, and a glowing translucent

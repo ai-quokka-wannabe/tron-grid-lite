@@ -11,7 +11,7 @@ well-funded subfield with peer-reviewed tools, and several of them do parts of t
 this project will.
 
 So this page serves three purposes. It credits the work whose measurements and ideas the rest of
-the documentation leans on. It gives anyone writing a creature brain a reading list far better than
+the documentation leans on. It gives anyone writing a Program a reading list far better than
 anything here. And it states honestly what is unusual about this project and what is simply
 ordinary — because a contributor deserves to know which is which before spending an evening on it.
 
@@ -54,7 +54,7 @@ The work continues: an [integrative data-driven model of *C. elegans* brain, bod
 interactions](https://www.nature.com/articles/s43588-024-00738-w) appeared in *Nature Computational
 Science* in 2024.
 
-**Anyone writing the worm brain for this organisation should start at OpenWorm rather than from
+**Anyone writing the worm Program for this organisation should start at OpenWorm rather than from
 scratch.** The `elegans` sensor preset in [PERCEPTION.md](PERCEPTION.md) is drawn from the primary
 photoreception literature rather than from OpenWorm directly, but the connectome, the cell-level
 data and the years of accumulated modelling are theirs, and the worm end of this ladder stands on
@@ -115,7 +115,7 @@ frequently changes nothing.
 
 Not much, and it is worth being precise about which parts:
 
-- **The world is deliberately hostile to vision.** The simulators above render naturalistic
+- **The Grid is deliberately hostile to vision.** The simulators above render naturalistic
   environments — real ant habitats, realistic terrain, ordinary rooms. This one is perfect mirrors
   and emissive neon on infinite black, where reflected space is geometrically indistinguishable
   from real space. That is an awkward environment for a spatial learner, on purpose.
@@ -123,10 +123,10 @@ Not much, and it is worth being precise about which parts:
   a laboratory studies one animal. A single world offering sensor presets from a two-scalar worm to
   a macropod, all tracing the same acceleration structure, is uncommon mainly because nobody with a
   research question needs it.
-- **The brain is behind a plain C ABI.** Research simulators are tightly coupled to Python and to a
-  particular neural-modelling framework, which is right for a laboratory and wrong for a playground.
-  Here the world knows nothing whatever about how a brain works, which is closer to a game engine's
-  mod interface than to a scientific instrument.
+- **The Program is behind a plain C ABI.** Research simulators are tightly coupled to Python and to
+  a particular neural-modelling framework, which is right for a laboratory and wrong for a
+  playground. Here the Grid knows nothing whatever about how a Program works, which is closer to a
+  game engine's mod interface than to a scientific instrument.
 - **One acceleration structure for sight and sound.** Multi-modal simulators exist; building a
   single BVH so that a creature's ears are traced against exactly the geometry its eyes see is an
   engineering convenience rather than a research contribution, but it does shape the whole design.
@@ -139,8 +139,8 @@ Not much, and it is worth being precise about which parts:
 - **Not a benchmark.** There are no tasks, no rewards, no scores and no leaderboard.
 - **Not neuroscience.** No hypothesis about real animals is being tested. The biology in
   [PERCEPTION.md](PERCEPTION.md) is there to justify buffer sizes, and for no other reason.
-- **Not a brain.** The renderer is the stage. What the actors do is somebody else's repository, and
-  deliberately so — see [AGENT_INTERFACE.md](AGENT_INTERFACE.md).
+- **Not a Program.** The renderer is the stage. What the actors do is somebody else's repository,
+  and deliberately so — see [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md).
 
 What is left, after all those disclaimers, is a small honest world that runs on a cheap GPU and
-lets people plug strange little minds into it. That is enough.
+lets people plug strange little Programs into it. That is enough.

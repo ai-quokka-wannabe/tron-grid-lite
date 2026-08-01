@@ -20,12 +20,13 @@
 #include <math/vector.hpp>
 
 /*!
-    Free-flight spectator camera with quaternion orientation.
+    Free-flight debug camera with quaternion orientation.
 
-    This is the camera used by the human observer in the debug window, and during development to
-    inspect the world. It is not a player camera: the world is inhabited exclusively by AI creature
-    agents, and a human never controls an inhabitant. The camera exists purely so that a developer
-    can fly around, watch what the creatures do, and verify that the renderer behaves.
+    This is the camera the User looks through in the debug window, and during development to
+    inspect the Grid. It is not a player camera: the Grid is inhabited exclusively by creatures
+    driven by Programs, and the User never controls an inhabitant. The camera exists purely so
+    that a developer can fly around, watch what the creatures do, and verify that the renderer
+    behaves.
 
     Supports WASD + mouse look. Movement is in local camera space (forward/right relative to where
     the camera is looking), with vertical movement along the world up axis. Rotation is
@@ -33,12 +34,12 @@
 
     Note that creature sensors do not use this class. Each creature's eye derives its own view and
     projection matrices directly from that creature's own state (position, head orientation, field
-    of view), and renders at its own tiny sensor resolution. Changing the spectator camera therefore
+    of view), and renders at its own tiny sensor resolution. Changing the User's camera therefore
     has no effect whatsoever on what any creature perceives.
 */
 class Camera {
 public:
-    //! Constructs a spectator camera at the given position looking along -Z.
+    //! Constructs a debug camera at the given position looking along -Z.
     explicit Camera(const MathLib::Vec3& position = {0.0f, 0.0f, 0.0f}, float fov_y = MathLib::PI / 4.0f, float near_plane = 0.1f, float far_plane = 100.0f) :
         m_position(position),
         m_fov_y(fov_y),
@@ -95,7 +96,7 @@ public:
     /*!
         Places the camera at an absolute pose.
 
-        The interactive controls above are all incremental, which is what a person flying a camera
+        The interactive controls above are all incremental, which is what the User flying a camera
         wants. A scripted path is the opposite: it knows exactly where the camera belongs at a given
         moment, including a roll that no keyboard control produces.
     */

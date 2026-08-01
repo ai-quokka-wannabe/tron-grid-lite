@@ -9,7 +9,7 @@ Technical architecture of TronGrid Lite.
 
 ## Overview
 
-TronGrid Lite is a C++20 Vulkan 1.3 renderer for a world inhabited by AI creature agents. It is small on purpose. The
+TronGrid Lite is a C++20 Vulkan 1.3 renderer for the Grid, a world inhabited by Programs. It is small on purpose. The
 entire rendering strategy is one sentence: **trace a shallow, deterministic Whitted ray tree in ordinary compute
 shaders, against a bounding volume hierarchy the project builds itself into storage buffers.**
 
@@ -31,7 +31,7 @@ Everything else — maths, windowing, logging, signals, the test harness, the BV
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │                            Application                               │
-│  Main loop · Debug camera · Scene · Creature agent hosting           │
+│  Main loop · Debug camera · Scene · Program hosting                  │
 ├──────────────────────────────────────────────────────────────────────┤
 │                            Renderer                                  │
 │  BVH builder · Compute Whitted tracer · Post-process · Present       │
@@ -46,10 +46,10 @@ Everything else — maths, windowing, logging, signals, the test harness, the BV
 │  Dynamic Vulkan function pointer resolution, VK_NO_PROTOTYPES        │
 └──────────────────────────────────────────────────────────────────────┘
           ▲
-          │ sensor buffers out, motor commands in — no engine access
+          │ senses out, actions in — no engine access
           ▼
 ┌──────────────────────────────────────────────────────────────────────┐
-│  AI creature brain (DLL / SO) — separate repository, loose coupling  │
+│  Program (DLL / SO) — separate repository, loose coupling            │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -68,8 +68,8 @@ Everything else — maths, windowing, logging, signals, the test harness, the BV
 | Materials | One continuous, branchless parameter space | Mirror, neon and glass are named points in it, four values each |
 | Shader language | Slang | Modern, modular, compiles to SPIR-V |
 | Creature vision | Dedicated small render targets, 64 x 64 to 256 x 256 | Biologically honest; keeps ray counts trivial |
-| Spectator output | Separate, larger swapchain window | Debugging and observation only |
-| Acoustics | Same BVH, same surfaces | One world, two senses |
+| Debug window output | Separate, larger swapchain window | Debugging and observation only |
+| Acoustics | Same BVH, same surfaces | One Grid, two senses |
 | Coordinate system | Right-handed, Y-up | Matches glTF and most authoring tools |
 | Units | Metres | Physically meaningful light and sound propagation |
 | Colour space | Linear internal, sRGB on output | Correct accumulation and blending |
@@ -184,7 +184,7 @@ share. Surface creation uses `VK_USE_PLATFORM_WIN32_KHR` or `VK_USE_PLATFORM_XCB
 
 ### Geometry Representation
 
-The world is a flat list of triangles in world space, plus a parallel list of material indices. There is no scene
+The Grid is a flat list of triangles in world space, plus a parallel list of material indices. There is no scene
 graph, no instancing layer, no transform hierarchy in the GPU data. Geometry is small enough that flattening it is the
 simplest thing that works.
 
@@ -250,7 +250,7 @@ nodes run Möller-Trumbore against their triangle range. Nothing exotic, nothing
 is visible in a shader the author wrote.
 
 The same buffers will be bound by the acoustic pass in Phase 5. The BVH is built once per frame at most — in practice
-only when the world changes — and is shared by every sensor and by the spectator view.
+only when the Grid changes — and is shared by every sensor and by the debug view.
 
 ---
 
@@ -268,7 +268,7 @@ One compute shader does the entire image. Each invocation owns one pixel of one 
 6. Repeat to a fixed maximum depth, then terminate. The ray tree is shallow and bounded by construction.
 
 Because there is no random sampling anywhere in this loop, the output is **noise-free and reproducible**. The same
-world state and the same camera produce a bit-identical image. That is what makes a denoiser unnecessary and what makes
+Grid state and the same camera produce a bit-identical image. That is what makes a denoiser unnecessary and what makes
 creature training runs reproducible.
 
 The recursion is written as an explicit iterative loop with a small ray stack — compute shaders have no recursion, and
@@ -276,25 +276,25 @@ a bounded stack is cheaper and more predictable than one anyway.
 
 ---
 
-## Render Targets: Sensors versus Spectator
+## Render Targets: Sensors versus the Debug Window
 
 Two distinct classes of render target exist, and they are not the same resource.
 
-| | Creature sensor targets | Spectator window |
+| | Creature sensor targets | Debug window |
 |---|---|---|
-| **Purpose** | The input a creature perceives | Human debugging and observation |
+| **Purpose** | The input a creature perceives | Debugging and observation for the User |
 | **Resolution** | 64 x 64 to 256 x 256, per eye | Whatever the debug window is sized to |
 | **Count** | One per eye, several eyes per creature | Exactly one |
 | **Camera** | Rigidly attached to the creature | Free-flight debug camera |
-| **Format** | `R16G16B16A16_SFLOAT`, read back or sampled by the brain | HDR, then post-processed and presented |
+| **Format** | `R16G16B16A16_SFLOAT`, read back or sampled by the Program | HDR, then post-processed and presented |
 | **Post-processing** | None — creatures receive linear radiance | Bloom and tonemapping |
 | **Present** | Never presented | Presented through the swapchain |
 
-The spectator view is not privileged in any way that matters: it runs the same tracer over the same BVH. It is simply
+The debug view is not privileged in any way that matters: it runs the same tracer over the same BVH. It is simply
 larger, and it is the only target that ever reaches a monitor.
 
 Creature sensors are deliberately not tonemapped. A creature receives linear radiance, and any perceptual compression
-is the brain's business, not the renderer's.
+is the Program's business, not the renderer's.
 
 ---
 
@@ -304,7 +304,7 @@ is the brain's business, not the renderer's.
                               ┌───────────────────────┐
                               │      Main loop        │
                               │  poll window events   │
-                              │  step world state     │
+                              │  step Grid state      │
                               └───────────┬───────────┘
                                           │
                               ┌───────────▼───────────┐
@@ -315,7 +315,7 @@ is the brain's business, not the renderer's.
                    ┌──────────────────────┼──────────────────────┐
                    │                                             │
        ┌───────────▼────────────┐                    ┌───────────▼────────────┐
-       │  Sensor trace pass     │                    │  Spectator trace pass  │
+       │  Sensor trace pass     │                    │  Debug view trace pass │
        │  compute, 64 x 64 ...  │                    │  compute, window size  │
        │  one dispatch per eye  │                    │  same shader, same BVH │
        └───────────┬────────────┘                    └───────────┬────────────┘
@@ -336,13 +336,13 @@ is the brain's business, not the renderer's.
                    │                                 └───────────┬────────────┘
                    │                                             │
        ┌───────────▼────────────┐                    ┌───────────▼────────────┐
-       │  Creature brain        │                    │  Present (MAILBOX)     │
+       │  Program               │                    │  Present (MAILBOX)     │
        │  DLL / SO, separate    │                    │  swapchain image       │
-       │  repo, reads sensors,  │                    └────────────────────────┘
-       │  writes motor commands │
+       │  repo, reads senses,   │                    └────────────────────────┘
+       │  writes actions        │
        └───────────┬────────────┘
                    │
-                   └───────────► back into world state, next frame
+                   └───────────► back into Grid state, next tick
 ```
 
 Both trace passes read the same BVH buffers in the same frame; they differ only in dispatch size and in the camera
@@ -387,14 +387,14 @@ originate. `colour` and `emission` answer them. The acoustic side asks exactly t
 exactly the same shape — **absorption** and **source strength** — and nothing else.
 
 Room acoustics would normally add a third, a scattering coefficient splitting each reflection into a specular part
-and a diffuse one. This world does not need it, for the same reason the optical model carries no roughness. Roughness
+and a diffuse one. The Grid does not need it, for the same reason the optical model carries no roughness. Roughness
 was dropped because a perfectly smooth surface is the analytic limit of the microfacet model rather than a
 simplification of it; scattering is dropped because the floor's terraces already **are** the scattering. Their risers
 stand a metre proud and their steps are metres across, against a wavelength of roughly eleven centimetres at the neon
 hum's fundamental — geometry far larger than the wave, redirecting it specularly in genuinely varied directions. A
 statistical coefficient would model a second time, and less honestly, what the triangles are already doing.
 
-Source strength is the value that has to exist instead, because otherwise nothing in the world makes a sound at all.
+Source strength is the value that has to exist instead, because otherwise nothing on the Grid makes a sound at all.
 The neon hums, so the same triangles that emit light emit sound, and the surface that carries `emission` carries its
 acoustic counterpart beside it.
 
@@ -404,29 +404,29 @@ and no diffuse tail to consume it — which is precisely how the first pair came
 
 ---
 
-## AI Agent Sensor Interface *(Phase 6, planned)*
+## Program Sensor Interface *(Phase 6, planned)*
 
-A creature brain is a shared library — DLL on Windows, SO on Linux — living in its **own repository** in the same
+A Program is a shared library — DLL on Windows, SO on Linux — living in its **own repository** in the same
 organisation. The renderer knows nothing about what is inside it.
 
 The coupling is deliberately one-directional and narrow:
 
 ```text
 ┌────────────────────────────┐        ┌────────────────────────────┐
-│  TronGrid Lite             │        │  Creature brain (DLL / SO) │
+│  TronGrid Lite             │        │  Program (DLL / SO)        │
 │                            │        │  separate repository       │
-│  traces sensor targets ────────────►│  reads sensor buffers      │
-│                            │ sensor │                            │
-│  reads motor commands ◄─────────────│  writes motor commands     │
+│  traces sensor targets ────────────►│  reads senses              │
+│                            │ senses │                            │
+│  reads actions ◄────────────────────│  writes actions            │
 │                            │  iface │  (any architecture at all) │
 └────────────────────────────┘        └────────────────────────────┘
 ```
 
-The brain never links against renderer internals, never touches a Vulkan object, and never reads world state. It gets
-sensor buffers and it returns motor commands. There is no entity list, no position query, no ground truth of any kind —
-see [VISION.md](VISION.md) § The Inhabitants for why that boundary is not negotiable.
+A Program never links against renderer internals, never touches a Vulkan object, and never reads Grid state. It gets
+senses and it returns actions. There is no entity list, no position query, no ground truth of any kind — see
+[VISION.md](VISION.md) § The Inhabitants for why that boundary is not negotiable.
 
-The human spectator window sits entirely outside this interface and is never an input to any brain.
+The User's debug window sits entirely outside this interface and is never an input to any Program.
 
 ---
 
@@ -441,9 +441,9 @@ Each omission below is a design decision, and each one is what keeps the rendere
 | Bindless descriptor indexing | A handful of explicit bindings is easier to follow and has no capability requirement |
 | GPU-driven indirect pipeline | Nothing here is draw-call bound; indirect machinery would be cost without benefit |
 | Denoiser (SVGF, ReSTIR, temporal accumulation) | Deterministic Whitted shading produces no noise, so there is nothing to denoise |
-| Textures, samplers, asset pipeline | Four analytic parameters per surface describe the whole world |
+| Textures, samplers, asset pipeline | Four analytic parameters per surface describe the whole Grid |
 | Roughness, microfacets, full PBR | Perfect mirrors and emissive geometry are the aesthetic; anything more would blur it |
-| Volumetric fog, terrain, skybox | The world is infinite black; a missed ray costs nothing |
+| Volumetric fog, terrain, skybox | The Grid is infinite black; a missed ray costs nothing |
 | Third-party physics or audio libraries | The BVH already answers both, and in-house keeps the dependency list short |
 | Rendergraph, component system, resource handles | Not enough passes or entity variety to justify the abstraction. Revisit only with a concrete second use case |
 

@@ -553,6 +553,43 @@ npx markdownlint-cli2 "**/*.md"
 
 ---
 
+## Tron Naming
+
+The Grid, the Programs that live on it and the User who watches it are named by a settled
+vocabulary. Recorded here are only the rulings that a future reviewer, spell-checker or linter would
+otherwise "correct" into something wrong.
+
+**The governing principle, which decides the cases not listed:** Tron words name events on the Grid;
+plain words name events in the operating system. `program_rez`, `program_tick` and `program_derez`
+happen on the Grid. `library_init` and `library_shutdown` are `LoadLibrary`/`dlopen` and
+`FreeLibrary`/`dlclose` — facts about Windows and Linux rather than about the Grid — and keep their
+plain names.
+
+**Capitalisation:** *Program* and *User* are capitalised when they are the Tron terms, because they
+name kinds of being in this world. They are lowercase when they are ordinary English:
+
+| Text | Reading |
+|------|---------|
+| `This program is free software` | GPL boilerplate — lowercase, untouchable |
+| the graphics programme | British English, a different word |
+| a Program is rezzed onto the Grid | The Tron term |
+| the user runs `tools/record_flyby.py` | Whoever is at the keyboard |
+| the User watches through the window | The Tron term |
+
+Three rulings, so that nothing corrects them back:
+
+1. Tron's *Program* is a proper noun and keeps the American single-m spelling. British *programme*
+   is a different word and stays British. Both appear in this repository legitimately, and neither
+   is ever rewritten into the other — including by § British Spelling below.
+2. The GPL boilerplate *"This program is free software"* is a legal text. It is lowercase and
+   untouchable, in every licence header in every file.
+3. *rez* and *derez* are never glossed as "resolve" or "resolution", and the canon noun
+   "de-resolution" is not used in prose here. "Resolution" is used throughout these documents in the
+   pixel sense, and in a ray tracer a reader who half-recognises the word would read "rez" as a
+   resolution setting.
+
+---
+
 ## British Spelling 🇬🇧
 
 Use British spelling in all documentation, comments, and user-facing strings:
@@ -569,6 +606,8 @@ Use British spelling in all documentation, comments, and user-facing strings:
 | initialize | initialise |
 
 Code identifiers may use American spelling where it matches library/API conventions (e.g., Vulkan API names).
+
+The Tron term *Program* is not a spelling to correct — see § Tron Naming.
 
 ---
 

@@ -15,16 +15,16 @@
 /*
     Phase 4 — the compute ray tracer and its post-processing.
 
-    Builds the world on the host, hands it to the GPU as a bounding volume hierarchy in storage
+    Builds the Grid on the host, hands it to the GPU as a bounding volume hierarchy in storage
     buffers, and traces it in a compute shader. There is no rasteriser and no ray-tracing hardware:
-    every pixel of the spectator window is a ray walked through the hierarchy by hand.
+    every pixel of the User's window is a ray walked through the hierarchy by hand.
 
     The tracer writes linear radiance. Turning that into a picture — the bloom pyramid, the ACES
     tone curve, sRGB encoding — is the post-processing stage's job, and only then is the result
     blitted to the swapchain.
 
     The same tracer will render creature sensors, at a far smaller resolution, once bodies exist.
-    Nothing here is a game — the camera exists so that a human can watch and debug.
+    Nothing here is a game — the camera exists so that the User can watch and debug.
 */
 
 #include "camera.hpp"
@@ -94,15 +94,15 @@ namespace
     /*!
         Radial darkening of the corners.
 
-        Enabled for the spectator window, where it reads as photographic. It must stay at zero for
-        creature sensors: a synthetic brightness gradient is exactly the kind of artefact an agent
-        would learn to exploit instead of learning the world.
+        Enabled for the User's window, where it reads as photographic. It must stay at zero for
+        creature sensors: a synthetic brightness gradient is exactly the kind of artefact a Program
+        would learn to exploit instead of learning the Grid.
     */
     constexpr float VIGNETTE_STRENGTH{0.35f};
 
-    //! Material slots in the world's material table.
+    //! Material slots in the Grid's material table.
     enum MaterialSlot : uint32_t {
-        MATERIAL_FLOOR = 0u, //!< The mirror the whole world stands on.
+        MATERIAL_FLOOR = 0u, //!< The mirror the whole Grid stands on.
         MATERIAL_NEON_PRIMARY = 1u, //!< Cyan tubes along ordinary grid lines.
         MATERIAL_NEON_ACCENT = 2u, //!< Orange tubes along major grid lines.
         MATERIAL_PILLAR = 3u, //!< Standing blocks, bright enough to light the floor around them.
@@ -171,10 +171,10 @@ namespace
     }
 
     /*!
-        The world's material table.
+        The Grid's material table.
 
         Three entries, all of them perfectly smooth. The floor carries no emission at all: every
-        photon in this world starts inside a neon tube, and the floor is only ever as bright as
+        photon in the Grid starts inside a neon tube, and the floor is only ever as bright as
         what it reflects. Fresnel does the rest — barely anything head-on, everything at a grazing
         angle, which is what draws the long streaks towards the horizon.
     */
@@ -189,7 +189,7 @@ namespace
             1.5 returns four per cent, which is honest for a window and far too dim for a floor
             that is meant to read as a mirror. At 2.4 it returns about seventeen per cent head-on
             and still climbs to everything at a grazing angle, which is the effect the aesthetic
-            is after. Nothing else in the world uses this value while transmission stays at zero.
+            is after. Nothing else in the Grid uses this value while transmission stays at zero.
         */
         materials[MATERIAL_FLOOR].index_of_refraction = 2.4f;
         materials[MATERIAL_NEON_PRIMARY] = makeEmissive(MathLib::Vec3{0.05f, 0.35f, 0.55f}, MathLib::Vec3{0.10f, 2.60f, 4.20f});
@@ -210,7 +210,7 @@ namespace
     /*!
         A few blocks standing off the floor.
 
-        Their purpose is not decoration. A perfectly flat world has nothing to reflect: the tubes
+        Their purpose is not decoration. A perfectly flat Grid has nothing to reflect: the tubes
         lie a centimetre above the mirror, so their reflection sits a centimetre below and merges
         with the tube itself. Geometry with height is what makes the second ray segment visible,
         and it is the only way to see at a glance whether the mirror is working.
@@ -218,7 +218,7 @@ namespace
     /*!
         Plants a box on the floor: returns the centre that puts its base on the ground beneath it.
 
-        Everything standing in the world goes through this. The floor is no longer a plane, so a
+        Everything standing in the Grid goes through this. The floor is no longer a plane, so a
         fixed height would leave objects buried in a terrace or hovering over a hollow, and the
         error is worst exactly where the relief is most interesting.
     */
@@ -472,7 +472,7 @@ int main(int argc, char** argv)
     LoggingLib::Logger logger;
 
     try {
-        logger.logInfo("TronGrid Lite - Phase 4 (a world for AI agents; this window is for the human observer only).");
+        logger.logInfo("TronGrid Lite - Phase 4 (the Grid, a world for Programs; this window is for the User only).");
 
         /*
             Recording mode. The window is still created because the device picks its present queue
@@ -521,7 +521,7 @@ int main(int argc, char** argv)
             }
         }
 
-        const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - spectator", .width = 1280, .height = 720, .resizable = true, .decorated = true};
+        const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - debug window", .width = 1280, .height = 720, .resizable = true, .decorated = true};
         const std::unique_ptr<WindowLib::Window> window{WindowLib::create(window_config, logger)};
 
 #ifdef NDEBUG
@@ -536,7 +536,7 @@ int main(int argc, char** argv)
 
         Swapchain swapchain{device, *surface, window->width(), window->height(), logger};
 
-        // The world: a flat mirror floor with neon tubes along its grid lines.
+        // The Grid: a flat mirror floor with neon tubes along its grid lines.
         const GridFloorConfig floor_config{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
 
         /*
@@ -641,7 +641,7 @@ int main(int argc, char** argv)
             }
         } idle_guard{&device};
 
-        // The spectator: a free camera for the human observer. Creatures never use this.
+        // The debug camera: the User's free-flight view. Creatures never use this.
         Camera camera{MathLib::Vec3{0.0f, 6.0f, 40.0f}};
         SpectatorController spectator;
 

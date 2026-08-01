@@ -117,9 +117,9 @@ ctest --preset windows-msvc-debug
 build\windows-msvc\src\Debug\TronGridLite.exe
 ```
 
-This opens the **spectator window** — a free-flight debug camera for observing the world. It is a
-development and observation tool only: there is no human inhabitant of TronGrid Lite, and the
-camera influences nothing.
+This opens the **debug window** — the User's free-flight camera for observing the Grid. It is a
+development and observation tool only: no User inhabits TronGrid Lite, and the camera influences
+nothing.
 
 ---
 
@@ -326,9 +326,9 @@ flag.
 
 ### The application starts and the window is black
 
-Expected, in part: the world of TronGrid Lite is infinite black with no skybox and mostly black
-mirror surfaces. Only emissive neon geometry produces light. If you see nothing at all, fly the
-spectator camera until neon comes into view, and check the log for validation errors.
+Expected, in part: the Grid is infinite black with no skybox and mostly black mirror surfaces.
+Only emissive neon geometry produces light. If you see nothing at all, fly the camera until neon
+comes into view, and check the log for validation errors.
 
 ---
 

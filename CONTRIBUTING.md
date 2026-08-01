@@ -138,6 +138,10 @@ cmake --build build/linux-x11-gcc --config Debug
 See [STYLE.md](STYLE.md) § Naming Conventions for the full table. Key rules:
 camelCase functions, PascalCase types, `m_` member prefix, SCREAMING_SNAKE_CASE constants.
 
+What things in this world are called — the Grid, Programs, creatures, the User, ticks, senses and
+actions — is settled in [STYLE.md](STYLE.md) § Tron Naming, which also records why *Program* and
+*programme* are both correct here and neither is to be "corrected" into the other.
+
 ### Code Comments
 
 - Add comments for non-obvious logic

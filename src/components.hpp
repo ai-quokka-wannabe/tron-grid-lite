@@ -23,7 +23,7 @@
 
     One struct, because one is all the renderer uses. This header once carried an
     entity/component scene layout — Transform, Bounds, Geometry, MaterialIndex, stored as parallel
-    arrays inside a Scene class — and none of it was ever instantiated: the world is built
+    arrays inside a Scene class — and none of it was ever instantiated: the Grid is built
     directly in main.cpp as triangle soup and handed to the hierarchy builder. It has been removed
     rather than left as a promise, along with scene.hpp itself.
 */

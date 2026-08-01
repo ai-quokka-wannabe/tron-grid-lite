@@ -34,7 +34,7 @@ namespace
     /*!
         Linear radiance, not a picture.
 
-        Emissive surfaces in this world are far brighter than one, and the reflections of them
+        Emissive surfaces in the Grid are far brighter than one, and the reflections of them
         brighter still in places, so an eight-bit target would clip everything interesting before
         the tone curve ever saw it. Half float keeps the range that bloom and tone mapping need.
     */
@@ -82,7 +82,7 @@ Tracer::Tracer(const Device& device, const BvhLib::Bvh& bvh, const std::vector<M
         throw std::runtime_error{"The tracer needs at least one material."};
     }
 
-    // A storage buffer of size zero is not legal, so an empty world still gets one element of each.
+    // A storage buffer of size zero is not legal, so an empty Grid still gets one element of each.
     // The shader checks node_count and renders black rather than reading them.
     const BvhLib::Node placeholder_node{};
     const BvhLib::Triangle placeholder_triangle{};
@@ -97,7 +97,7 @@ Tracer::Tracer(const Device& device, const BvhLib::Bvh& bvh, const std::vector<M
 
     const vk::DeviceSize total_bytes{(static_cast<vk::DeviceSize>(m_node_count) * sizeof(BvhLib::Node))
         + (static_cast<vk::DeviceSize>(m_triangle_count) * sizeof(BvhLib::Triangle)) + (materials.size() * sizeof(Material))};
-    m_logger->logInfo("World uploaded: " + std::to_string(m_triangle_count) + " triangles, " + std::to_string(m_node_count) + " hierarchy nodes, "
+    m_logger->logInfo("Grid uploaded: " + std::to_string(m_triangle_count) + " triangles, " + std::to_string(m_node_count) + " hierarchy nodes, "
         + std::to_string(materials.size()) + " materials, " + std::to_string(total_bytes / 1024u) + " KiB of device-local storage.");
 
     const std::array<vk::DescriptorSetLayoutBinding, 4> bindings{

@@ -20,13 +20,13 @@
 #include <cstdint>
 
 /*!
-    A scripted camera path for recording a clip of the world.
+    A scripted camera path for recording a clip of the Grid.
 
     Every term is periodic in the normalised time it takes, and every oscillation completes a whole
     number of cycles over that period, so the pose at time 1 is exactly the pose at time 0. A clip
     recorded from it loops without a seam, which is what an animation embedded in a README needs.
 
-    This is a spectator-camera feature and nothing more. It records what a human sees; creatures
+    This is a debug-camera feature and nothing more. It records what the User sees; creatures
     have their own sensors and are never driven by it.
 */
 class CinematicPath {
@@ -62,7 +62,7 @@ private:
         rails — which it entirely is.
 
         The wobble is deliberately almost imperceptible. Enough of it reads as a hand on the
-        controls; any more reads as a fault, and this footage exists to show the world rather than
+        controls; any more reads as a fault, and this footage exists to show the Grid rather than
         the camera work.
     */
     float m_orbit_radius{34.0f}; //!< Mean distance from the centre of the scene, in metres.

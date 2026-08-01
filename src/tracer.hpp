@@ -35,7 +35,7 @@ class Device; // forward declaration
 
     There is no ray-tracing hardware in play. The hierarchy, the triangles and the materials live
     in ordinary storage buffers, and `trace.slang` traverses them with a fixed-size stack. Because
-    every surface in this world is perfectly smooth, each intersection spawns exactly one reflected
+    every surface in the Grid is perfectly smooth, each intersection spawns exactly one reflected
     ray, so the whole thing is deterministic: no sampling, no variance, no denoiser.
 
     Each frame in flight owns its own output image, because the host records the next frame while
@@ -46,7 +46,7 @@ class Device; // forward declaration
 class Tracer {
 public:
     /*!
-        Uploads the world and builds everything needed to trace it.
+        Uploads the Grid and builds everything needed to trace it.
 
         \param device Logical device.
         \param bvh Hierarchy to upload. May be empty, in which case the tracer renders black.
@@ -140,7 +140,7 @@ private:
     LoggingLib::Logger* m_logger{nullptr}; //!< Logger (non-owning).
 
     uint32_t m_frames_in_flight{0u}; //!< Number of output images and descriptor sets.
-    uint32_t m_node_count{0u}; //!< Nodes in the hierarchy; zero means an empty world.
+    uint32_t m_node_count{0u}; //!< Nodes in the hierarchy; zero means an empty Grid.
     uint32_t m_triangle_count{0u}; //!< Triangles in the hierarchy.
     vk::Extent2D m_extent{}; //!< Current output image size.
 

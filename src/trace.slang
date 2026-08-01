@@ -13,14 +13,14 @@
 */
 
 // Purpose:
-//     The renderer. Traces the world by walking a hand-built bounding volume hierarchy in an
+//     The renderer. Traces the Grid by walking a hand-built bounding volume hierarchy in an
 //     ordinary compute shader, with no ray-tracing hardware of any kind. Every surface is
 //     perfectly smooth, so each intersection spawns exactly one reflected ray: the ray tree is
 //     deterministic and shallow, there is no Monte Carlo integration, no variance and therefore
 //     no denoiser anywhere in this project.
 //
 //     The same kernel will serve creature sensors, at a far smaller resolution, once bodies
-//     exist. Nothing here is specific to the spectator window except the size of the image.
+//     exist. Nothing here is specific to the User's window except the size of the image.
 //
 // Entry points:
 //     traceMain — [shader("compute")], [numthreads(8, 8, 1)] — one thread per output pixel.
@@ -38,7 +38,7 @@
 //     offset 48, size 16 : pixel_delta_v     — xyz direction change per pixel step in y.
 //     offset 64, size  8 : resolution        — output image size in pixels.
 //     offset 72, size  4 : max_bounces       — total ray segments per pixel, at least 1.
-//     offset 76, size  4 : node_count        — zero means an empty world; the kernel writes black.
+//     offset 76, size  4 : node_count        — zero means an empty Grid; the kernel writes black.
 //
 //     The tracer writes linear radiance and nothing else: exposure, tone mapping and sRGB encoding
 //     all belong to postprocess.slang, which sees the bloom chain as well.
@@ -203,7 +203,7 @@ Hit trace(float3 origin, float3 direction, float max_distance)
 
     // A zero direction component would make its reciprocal infinite, and an origin lying exactly on
     // that slab's plane then computes 0 * inf, which is NaN — and a NaN propagating through the min
-    // and max reductions turns a box the ray passes through into a miss. The world's floor is
+    // and max reductions turns a box the ray passes through into a miss. The Grid's floor is
     // axis-aligned on a two-metre grid, so this is an everyday case rather than a corner one.
     // Substituting a tiny magnitude keeps every reciprocal finite. The host does the same.
     const float3 safe_direction = select(direction == 0.0, float3(1e-30, 1e-30, 1e-30), direction);
@@ -277,7 +277,7 @@ Hit trace(float3 origin, float3 direction, float max_distance)
     This is the whole lighting model. A perfectly smooth surface reflects a share of the light that
     depends only on the viewing angle and the index of refraction: about four per cent head-on for
     ordinary glass, rising to everything at all at a grazing angle. That rise is what produces the
-    long bright streaks along a mirrored floor, and it is why this world's floor reads as almost
+    long bright streaks along a mirrored floor, and it is why the Grid's floor reads as almost
     black underfoot and blazing towards the horizon.
 */
 float fresnelSchlick(float cosine, float index_of_refraction)
@@ -320,7 +320,7 @@ struct RayTask
     Both axes cost roughly a doubling across the range, and they multiply rather than add. Three
     slots and a depth of six sit just inside a sixty-frame budget while rendering glass correctly.
 
-    Worth keeping in proportion: the spectator window is by far the most expensive consumer this
+    Worth keeping in proportion: the User's window is by far the most expensive consumer this
     renderer will ever have. A creature sensor is 64x64 to 256x256 pixels, between a fourteenth
     and a two-hundredth of this frame, so the figures above are the ceiling and not the workload.
 */
@@ -349,7 +349,7 @@ float maxComponent(float3 value)
 /*!
     Traces the ray tree rooted at one primary ray.
 
-    Every surface in this world is perfectly smooth, so an intersection produces at most two
+    Every surface in the Grid is perfectly smooth, so an intersection produces at most two
     outgoing rays with no sampling whatsoever: one reflected, one refracted, weighted by Fresnel.
     That is Whitted's 1980 algorithm, and it is deterministic — the same pixel traced twice gives
     bit-identical results, which is why this renderer has no denoiser and needs none.
@@ -389,7 +389,7 @@ float3 radiance(float3 primary_origin, float3 primary_direction)
 
         if (!hit.valid)
         {
-            // Infinite black. The world has no sky, which is why emissive geometry reads as neon.
+            // Infinite black. The Grid has no sky, which is why emissive geometry reads as neon.
             have_ray = false;
             continue;
         }

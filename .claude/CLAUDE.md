@@ -1,17 +1,17 @@
 # TronGrid Lite
 
-Deliberately simple Vulkan renderer for a Tron-style world perceived by AI creatures
+Deliberately simple Vulkan renderer for the Grid, a Tron-style world perceived by creatures
 through rendered frames.
 
 **Two facts that govern every decision in this repo:**
 
-1. **This world is for AI agents only, and it is the stage rather than the actor.** There is no
-   human player, no controls, no gameplay — humans only spectate through a free-flight debug
-   camera. The repo's whole job is to render senses and apply motor intent; agents load as
-   shared-library plugins (DLL/SO) behind a plain C ABI, so the world stays agnostic about how
-   any agent works inside. **Never** add cognition, learning, behaviour models or brain
+1. **The Grid is for Programs only, and it is the stage rather than the actor.** There is no
+   human player, no controls, no gameplay — the User only watches through a free-flight debug
+   camera. The repo's whole job is to render senses and apply actions; Programs load as
+   shared-library plugins (DLL/SO) behind a plain C ABI, so the Grid stays agnostic about how
+   any Program works inside. **Never** add cognition, learning, behaviour models or Program
    internals here, and never write features, docs or comments that assume a human player.
-   Creature minds belong to other repositories in the `ai-quokka-wannabe` organisation.
+   Programs belong to other repositories in the `ai-quokka-wannabe` organisation.
 2. **This is a fresh, independent project.** It reuses infrastructure and foundation code from
    the author's earlier [TronGrid](https://github.com/MatejGomboc/tron-grid) renderer (same
    author, same GPL v3 licence), but it is not a part, fork or component of any other project.
@@ -31,7 +31,7 @@ tron-grid-lite/
 ├── LICENCE              ← GPL v3
 ├── README.md            ← public-facing project overview
 ├── TODO.md              ← roadmap, active etapes and journal
-├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, PERCEPTION, AGENT_INTERFACE, RELATED_WORK, DEV_ENV_SETUP
+├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, PERCEPTION, PROGRAM_INTERFACE, RELATED_WORK, DEV_ENV_SETUP
 ├── images/              ← the flyby clips the README embeds
 ├── libs/                ← bvh, logging, math, signals, testing, window — static libraries
 ├── src/                 ← the renderer: main.cpp, Vulkan setup, tracer, postprocess, Slang shaders, tests/
@@ -43,6 +43,11 @@ tron-grid-lite/
 - **Language:** C++20. No exceptions.
 - **Platforms:** Windows (Win32) and Linux (X11) only. No macOS. No Wayland. No mobile.
 - **Spelling:** British English everywhere (colour, optimise, metres, synchronise, etc.). The LICENCE file content is untouchable (legal document).
+- **Vocabulary:** Tron terms, one word per concept — the Grid, Program, creature, User, tick, senses, actions.
+  Glossary in [README.md](../README.md#a-note-on-the-vocabulary); retired: brain, agent, entity, mind, spectator,
+  sensor data, motor commands. Tron words name events on the Grid, plain words name events in the OS — which is why
+  `library_init` and `library_shutdown` keep plain names. **Program** and **User** are capitalised only as Tron terms:
+  GPL boilerplate ("this program is free software") and British "programme" are both left exactly as they are.
 - **Formatting:** Run `.clang-format`. Allman braces for functions/namespaces, 4-space indent, 170 column limit.
 - **Vulkan loading:** Volk (dynamic). Always define `VK_NO_PROTOTYPES`. Never link Vulkan statically.
 - **Shaders:** Slang (not GLSL/HLSL directly).
@@ -82,15 +87,15 @@ machine: GTX 1650 Ti laptop (exposes zero VK RT extensions; that is the point).
 | Ray tracing        | Deterministic Whitted in compute shaders    | Perfect mirrors + emissives = no MC noise  |
 | Materials          | One continuous model: colour, index_of_refraction, emission, transmission | The aesthetic is the algorithm |
 | Creature vision    | Tiny sensor renders (≤ 800×600, often far less) | Animal eyes resolve little; cheap rays |
-| Acoustics          | Same BVH as visual rays                     | One world, two senses                      |
+| Acoustics          | Same BVH as visual rays                     | One Grid, two senses                       |
 | Shader language    | Slang                                       | Modern, modular, multi-target              |
 | Vulkan loader      | Volk                                        | Dynamic loading, no link dependency        |
 
 ## Roadmap
 
 Phases 0 to 4 are **Done** — toolchain, window and frame loop, compute BVH tracer, full ray tree,
-and post processing. **Phase 5 — acoustic rays** is beginning; Phase 6 opens the AI agent sensor
-interface.
+and post processing. **Phase 5 — acoustic rays** is beginning; Phase 6 opens the sensor interface
+Programs plug into.
 
 The phase table is canonical in [`TODO.md` § Roadmap](../TODO.md), which also holds the active
 etapes and the journal. Read it there rather than duplicating it here.

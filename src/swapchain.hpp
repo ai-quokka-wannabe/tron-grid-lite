@@ -27,7 +27,7 @@
 class Device; // forward declaration
 
 /*!
-    Owns the Vulkan swapchain of the spectator window and its per-image views.
+    Owns the Vulkan swapchain of the User's window and its per-image views.
     Supports recreation on window resize.
 */
 class Swapchain {
