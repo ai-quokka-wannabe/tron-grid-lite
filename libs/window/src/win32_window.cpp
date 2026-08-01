@@ -47,7 +47,6 @@ namespace WindowLib
             if (!RegisterClassExW(&wc)) {
                 m_logger.logFatal("Failed to register Win32 window class.");
                 std::abort();
-                return;
             }
             m_class_registered = true;
         }
@@ -103,7 +102,6 @@ namespace WindowLib
         if (!m_hwnd) {
             m_logger.logFatal("Failed to create Win32 window.");
             std::abort();
-            return;
         }
 
         ShowWindow(m_hwnd, SW_SHOW);

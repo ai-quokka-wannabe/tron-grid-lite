@@ -28,8 +28,13 @@ namespace
     //! Wraps a normalised time into [0, 1).
     [[nodiscard]] float wrap(float time)
     {
+        /*
+            The upper bound is exclusive and has to be enforced explicitly. For a negative input
+            smaller in magnitude than the float spacing at 1.0, `time - floor(time)` rounds up to
+            exactly 1.0f — wrap(-1e-9f) returns 1.0, not 0.0 — and clamping to [0, 1] preserves it.
+        */
         const float fractional{time - std::floor(time)};
-        return std::clamp(fractional, 0.0f, 1.0f);
+        return (fractional >= 1.0f) ? 0.0f : std::max(fractional, 0.0f);
     }
 
 } // namespace

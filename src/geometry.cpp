@@ -124,8 +124,15 @@ namespace
     //! Smoothly interpolated value noise over the unit lattice, in [0, 1].
     [[nodiscard]] float valueNoise(float x, float z, uint32_t seed)
     {
-        const float cell_x{std::floor(x)};
-        const float cell_z{std::floor(z)};
+        /*
+            Clamped before the cast. Converting a float outside the integer range is undefined
+            behaviour, and `gridSurfaceHeight` is public API documented as accepting any world-space
+            position. Every call site in this repository stays within a hundred metres or so, which
+            is why this is latent rather than live, but a documented domain of "anywhere" should
+            mean it.
+        */
+        const float cell_x{std::clamp(std::floor(x), -2.0e9f, 2.0e9f)};
+        const float cell_z{std::clamp(std::floor(z), -2.0e9f, 2.0e9f)};
         const int32_t lattice_x{static_cast<int32_t>(cell_x)};
         const int32_t lattice_z{static_cast<int32_t>(cell_z)};
 

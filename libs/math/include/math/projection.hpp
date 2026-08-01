@@ -62,7 +62,23 @@ namespace MathLib
     [[nodiscard]] inline Mat4 lookAt(const Vec3& eye, const Vec3& target, const Vec3& up)
     {
         Vec3 f = (target - eye).normalised(); // Forward
-        Vec3 r = f.cross(up).normalised(); // Right
+
+        /*
+            A view direction parallel to `up` has no defined right vector, and `normalised()`
+            returns the zero vector rather than a NaN — so the matrix would come back with two
+            all-zero basis rows, silently collapsing every X and Y coordinate, with no diagnostic
+            at all. Looking straight down is the commonest way to hit it.
+
+            The fallback matches the pattern already used for degenerate edges in the geometry
+            generators. The cross product is taken between vectors that are already unit length, so
+            the epsilon measures the angle between them rather than their magnitudes.
+        */
+        Vec3 axis = up;
+        if (f.cross(axis).lengthSquared() < 1e-6f) {
+            axis = (std::abs(f.y) > 0.9f) ? Vec3{0.0f, 0.0f, 1.0f} : Vec3{0.0f, 1.0f, 0.0f};
+        }
+
+        Vec3 r = f.cross(axis).normalised(); // Right
         Vec3 u = r.cross(f); // Recomputed up
 
         Mat4 result{Mat4::identity()};

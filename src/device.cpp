@@ -181,7 +181,6 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     if (physical_devices.empty()) {
         m_logger.logFatal("No Vulkan-capable GPU found.");
         std::abort();
-        return;
     }
 
     // Step 2: Score and pick the best device.
@@ -202,7 +201,6 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     if (best_score < 0) {
         m_logger.logFatal("No suitable GPU found (need Vulkan 1.3 with dynamic rendering and synchronisation2, graphics + present queues, and VK_KHR_swapchain).");
         std::abort();
-        return;
     }
 
     m_physical_device = std::move(physical_devices[best_index]);

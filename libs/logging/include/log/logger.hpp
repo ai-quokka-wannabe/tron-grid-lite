@@ -45,7 +45,12 @@ namespace LoggingLib
         Uses SignalsLib::Signal<LogMessage> as the internal queue. Any thread
         can call logDebug(), logInfo(), etc. The background worker drains
         the queue and writes to stdout (Debug, Info) or stderr (Warning,
-        Error, Fatal).
+        Error).
+
+        Fatal is the exception: it is written synchronously to stderr rather
+        than queued, because it exists to be read immediately before the
+        process dies. That makes it arrive out of order with respect to
+        anything still queued, so logFatal() flushes the queue first.
 
         RAII lifecycle: std::jthread auto-joins in the destructor and
         signals the stop_token to wake the worker.
@@ -78,6 +83,18 @@ namespace LoggingLib
 
         //! Log a fatal error message. Writes directly to stderr (synchronous).
         void logFatal(std::string_view message);
+
+        /*!
+            Blocks until every queued message has been written, then flushes stdout.
+
+            std::abort() joins no threads, runs no static destructors and is not required to flush
+            the standard streams — glibc and the MSVC CRT do not. Without this, everything the
+            program logged on its way to a fatal error is silently discarded, leaving a user with a
+            single line of context and no idea what led to it.
+
+            Called automatically by logFatal(), so a caller that is about to abort need do nothing.
+        */
+        void flush();
 
     private:
         //! Push a message onto the queue and wake the worker.
