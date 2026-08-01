@@ -119,6 +119,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Objects stood on the wrong floor. `plantOnFloor` asked `gridSurfaceHeight`, which is a step
+  function once the relief is terraced, but the mesh that is actually drawn ramps linearly across
+  whichever cell a riser passes through — so the two disagree by up to a full terrace step, and the
+  glowing column stood 0.29 m clear of its own reflection over a mirror. A new `gridMeshHeight`
+  returns the height of the floor *as drawn*, and everything standing in the world asks that
+  instead. `src/tests/` now exists to cover it, and the regression test was validated by reverting
+  the fix and confirming it fails.
+- Neon tubes dipped below the floor on terrace risers. The lift is vertical while the strip widens
+  horizontally, so on a slope the outer edge gains no clearance; at the shipped width the steepest
+  cell rose further across the half width than the lift allowed. The scene's lift is doubled and the
+  header no longer claims a tube "never" z-fights.
 - **No release has ever shipped.** The release workflow copied the binary from
   `build/<preset>/Release/`, a directory Ninja Multi-Config never writes — the executable lands in
   `build/<preset>/src/<Config>/`. Every tag push failed both matrix legs before producing anything.

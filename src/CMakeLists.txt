@@ -133,3 +133,5 @@ add_dependencies(copy_shaders shaders)
 # assembled from a directory that Ninja Multi-Config never writes.
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
 install(FILES ${SHADER_SPV_FILES} DESTINATION .)
+
+add_subdirectory(tests)

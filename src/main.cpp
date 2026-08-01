@@ -226,15 +226,40 @@ namespace
         /*
             The ground under a box is not one height: a terrace step can run straight through its
             footprint, and the wider the box the likelier that is. Sitting the base on the LOWEST
-            corner buries part of the box rather than leaving the rest of it hovering — something
-            set into the ground reads as deliberate, whereas something floating above it reads as
-            broken, which is what the first attempt at this looked like.
-        */
-        float ground{gridSurfaceHeight(world_x, world_z, floor_config)};
+            point of the footprint buries part of the box rather than leaving the rest of it
+            hovering — something set into the ground reads as deliberate, whereas something floating
+            above it reads as broken.
 
-        for (const float sample_x : {world_x - half_extents.x, world_x + half_extents.x}) {
-            for (const float sample_z : {world_z - half_extents.z, world_z + half_extents.z}) {
-                ground = std::min(ground, gridSurfaceHeight(sample_x, sample_z, floor_config));
+            The samples ask `gridMeshHeight` rather than `gridSurfaceHeight`, because the mesh ramps
+            across a cell where the analytic surface steps. Asking the analytic function left the
+            glowing column standing 0.29 m clear of its own reflection.
+
+            The drawn floor is piecewise linear, so the lowest point over a rectangle is always at a
+            corner of that rectangle or at a grid vertex inside it. Both are sampled.
+        */
+        const float min_x{world_x - half_extents.x};
+        const float max_x{world_x + half_extents.x};
+        const float min_z{world_z - half_extents.z};
+        const float max_z{world_z + half_extents.z};
+
+        float ground{gridMeshHeight(world_x, world_z, floor_config)};
+
+        for (const float sample_x : {min_x, max_x}) {
+            for (const float sample_z : {min_z, max_z}) {
+                ground = std::min(ground, gridMeshHeight(sample_x, sample_z, floor_config));
+            }
+        }
+
+        const float half_size{(static_cast<float>(floor_config.cells) * floor_config.cell_size) * 0.5f};
+        const auto firstVertexAbove = [&](float world_coordinate) {
+            return static_cast<int32_t>(std::ceil((world_coordinate + half_size) / floor_config.cell_size));
+        };
+
+        for (int32_t vertex_x{firstVertexAbove(min_x)}; (static_cast<float>(vertex_x) * floor_config.cell_size) - half_size <= max_x; ++vertex_x) {
+            for (int32_t vertex_z{firstVertexAbove(min_z)}; (static_cast<float>(vertex_z) * floor_config.cell_size) - half_size <= max_z; ++vertex_z) {
+                const float vertex_world_x{(static_cast<float>(vertex_x) * floor_config.cell_size) - half_size};
+                const float vertex_world_z{(static_cast<float>(vertex_z) * floor_config.cell_size) - half_size};
+                ground = std::min(ground, gridMeshHeight(vertex_world_x, vertex_world_z, floor_config));
             }
         }
 
@@ -532,7 +557,9 @@ int main(int argc, char** argv)
             neither problem: it samples geometry analytically and has no depth buffer at all, so
             the tubes can be the slender lines the aesthetic actually wants.
         */
-        const NeonTubeConfig tube_config{.half_width = 0.025f, .surface_offset = 0.01f};
+        // The lift clears the steepest terrace gradient across the tube's half width; at 0.01 m
+        // the outer edge of a strip dipped below the floor on riser cells.
+        const NeonTubeConfig tube_config{.half_width = 0.025f, .surface_offset = 0.02f};
 
         const Mesh floor{generateGridFloor(floor_config)};
         const NeonGrid neon{generateGridFloorNeon(floor_config, tube_config)};

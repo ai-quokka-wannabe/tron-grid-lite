@@ -13,6 +13,7 @@
 */
 
 #include "geometry.hpp"
+#include <algorithm>
 #include <array>
 #include <cmath>
 
@@ -237,6 +238,50 @@ float gridSurfaceHeight(float world_x, float world_z, const GridFloorConfig& con
     }
 
     return config.height + (relief * config.relief_amplitude);
+}
+
+float gridMeshHeight(float world_x, float world_z, const GridFloorConfig& config)
+{
+    if ((config.cells == 0u) || (config.cell_size <= 0.0f)) {
+        return gridSurfaceHeight(world_x, world_z, config);
+    }
+
+    const float half_size{(static_cast<float>(config.cells) * config.cell_size) * 0.5f};
+    const float cells{static_cast<float>(config.cells)};
+
+    // Positions outside the floor are clamped to its edge rather than extrapolated: there is no
+    // mesh out there to stand on, and the nearest edge is the honest answer.
+    const float grid_x{std::clamp((world_x + half_size) / config.cell_size, 0.0f, cells)};
+    const float grid_z{std::clamp((world_z + half_size) / config.cell_size, 0.0f, cells)};
+
+    // The far edge belongs to the last cell rather than to a cell that does not exist.
+    const uint32_t cell_x{std::min(static_cast<uint32_t>(grid_x), config.cells - 1u)};
+    const uint32_t cell_z{std::min(static_cast<uint32_t>(grid_z), config.cells - 1u)};
+
+    const float u{grid_x - static_cast<float>(cell_x)};
+    const float v{grid_z - static_cast<float>(cell_z)};
+
+    const auto cornerHeight = [&](uint32_t vertex_x, uint32_t vertex_z) {
+        const float corner_x{(static_cast<float>(vertex_x) * config.cell_size) - half_size};
+        const float corner_z{(static_cast<float>(vertex_z) * config.cell_size) - half_size};
+        return gridSurfaceHeight(corner_x, corner_z, config);
+    };
+
+    const float h00{cornerHeight(cell_x, cell_z)};
+    const float h10{cornerHeight(cell_x + 1u, cell_z)};
+    const float h01{cornerHeight(cell_x, cell_z + 1u)};
+    const float h11{cornerHeight(cell_x + 1u, cell_z + 1u)};
+
+    /*
+        Barycentric interpolation over whichever of the cell's two triangles contains the point.
+        emitSurfaceQuad splits the quad as {p00, p01, p10} and {p10, p01, p11}, so the diagonal runs
+        from p01 to p10 and u + v <= 1 selects the first.
+    */
+    if ((u + v) <= 1.0f) {
+        return (h00 * (1.0f - u - v)) + (h10 * u) + (h01 * v);
+    }
+
+    return (h10 * (1.0f - v)) + (h01 * (1.0f - u)) + (h11 * ((u + v) - 1.0f));
 }
 
 Mesh generateGridFloor(const GridFloorConfig& config)
