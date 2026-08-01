@@ -24,6 +24,7 @@ External dependencies are deliberately few:
 | Volk | Dynamic Vulkan function pointer loading |
 | vulkan-hpp (`vk::raii`) | Type-safe C++ bindings and RAII ownership |
 | Slang | Shader language, compiled ahead of time to SPIR-V |
+| Vulkan Memory Allocator | Compiled into the renderer executable, but nothing instantiates it yet |
 
 Everything else — maths, windowing, logging, signals, the test harness, the BVH builder, the tracer — is in-house.
 
@@ -39,7 +40,7 @@ Everything else — maths, windowing, logging, signals, the test harness, the BV
 │  Instance · Device · Swapchain · Buffers · Images · Command buffers  │
 ├──────────────────────────────────────────────────────────────────────┤
 │                        Internal Libraries (libs/)                    │
-│  testing · signals · logging · math · window                         │
+│  testing · signals · logging · math · bvh · window                   │
 ├──────────────────────────────────────────────────────────────────────┤
 │                            Volk (loader)                             │
 │  Dynamic Vulkan function pointer resolution, VK_NO_PROTOTYPES        │
@@ -60,11 +61,11 @@ Everything else — maths, windowing, logging, signals, the test harness, the BV
 |----------|--------|-----|
 | Vulkan loading | Volk, dynamic | No static link; `VK_NO_PROTOTYPES` defined globally by the build |
 | Vulkan C++ bindings | vulkan-hpp `vk::raii` | RAII ownership; no manual `vkDestroy*` or `device.destroy*` anywhere |
-| Rendering model | Dynamic rendering (`VK_KHR_dynamic_rendering`) | No `VkRenderPass`, no `VkFramebuffer`, no subpass bookkeeping |
+| Rendering model | Compute only | No graphics pipeline, no `VkRenderPass`, no `VkFramebuffer`, no subpass bookkeeping |
 | Ray tracing | Hand-written traversal in compute shaders | Reference GPU exposes zero ray-tracing extensions |
 | Acceleration structure | Self-built BVH in storage buffers | Fully inspectable, portable, reusable for acoustics |
 | Shading model | Whitted 1980, deterministic | Perfect mirrors plus emissive geometry need no Monte Carlo |
-| Materials | Mirror, emissive, glass | Three kinds of surface, a few floats each |
+| Materials | One continuous, branchless parameter space | Mirror, neon and glass are named points in it, four values each |
 | Shader language | Slang | Modern, modular, compiles to SPIR-V |
 | Creature vision | Dedicated small render targets, 64 x 64 to 256 x 256 | Biologically honest; keeps ray counts trivial |
 | Spectator output | Separate, larger swapchain window | Debugging and observation only |
@@ -89,17 +90,18 @@ libs/
 ├── signals/    # SignalsLib::Signal<T> — thread-safe typed message queues
 ├── logging/    # LoggingLib::Logger — background logging thread
 ├── math/       # MathLib — Vec2/3/4, Mat4, Quat, projection helpers (header-only)
+├── bvh/        # BvhLib — binned-SAH builder and the flattened Node/Triangle arrays the GPU reads
 └── window/     # WindowLib::Window — platform windowing (Win32 / XCB)
 ```
 
 Rules:
 
-- **PascalCase namespaces with a `Lib` suffix** — `TestingLib`, `SignalsLib`, `LoggingLib`, `MathLib`, `WindowLib`.
+- **PascalCase namespaces with a `Lib` suffix** — `TestingLib`, `SignalsLib`, `LoggingLib`, `MathLib`, `BvhLib`, `WindowLib`.
   They are general-purpose and could be extracted into their own repositories later.
 - **Each library is self-contained** — its own `CMakeLists.txt`, its own `include/<lib>/` directory, its own `tests/`
   directory linking against `testing`.
-- **Plain CMake target names** — `testing`, `signals`, `logging`, `math`, `window`.
-- **Static libraries only**, except `math`, which is a header-only `INTERFACE` target.
+- **Plain CMake target names** — `testing`, `signals`, `logging`, `math`, `bvh`, `window`.
+- **Static libraries only**, except `math` and `signals`, which are header-only `INTERFACE` targets.
 - **`testing` is the foundation brick** — every other library's tests link against it. No third-party test framework.
 
 ### Signal-Based Communication
@@ -164,18 +166,12 @@ Vulkan is loaded dynamically through Volk. `VK_NO_PROTOTYPES` is defined globall
 point is ever resolved by the linker. A single translation unit provides the Volk implementation; `volkInitialize` runs
 before instance creation and `volkLoadDevice` after device creation, so device-level calls bypass the loader trampoline.
 
-### Dynamic Rendering
+### No Render Passes
 
-There is no `VkRenderPass` and no `VkFramebuffer` in this codebase. Any graphics work — in practice only the early
-phases and any debug wireframe drawing — uses `vkCmdBeginRendering` with attachments specified inline, and pipelines
-declare their attachment formats through `vk::PipelineRenderingCreateInfo`.
-
-| Traditional | TronGrid Lite |
-|-------------|---------------|
-| Pre-declared `VkRenderPass` with subpasses | No render pass object at all |
-| `VkFramebuffer` per swapchain image | No framebuffer object at all |
-| `vkCmdBeginRenderPass` | `vkCmdBeginRendering` with `vk::RenderingInfo` |
-| Pipeline needs render pass and subpass index | Pipeline needs `vk::PipelineRenderingCreateInfo` |
+The renderer is compute-only: there is no graphics pipeline, no `VkRenderPass` and no `VkFramebuffer` in this
+codebase. Dynamic rendering is a Vulkan 1.3 core feature here rather than an extension — the only device extension
+requested is `VK_KHR_swapchain` — and `src/device.cpp` still demands `dynamicRendering` of the physical device and
+enables it alongside `synchronization2`, but nothing calls `vkCmdBeginRendering` today.
 
 ### Platform Layer
 
@@ -194,13 +190,18 @@ simplest thing that works.
 
 ### Material Model
 
-Exactly three kinds of surface exist. A material record is a handful of floats:
+There are no kinds of surface. Every surface is one perfectly smooth material that reflects, transmits and emits at
+once, and a material record is four values:
 
-| Material | Optical behaviour | Parameters |
-|----------|-------------------|------------|
-| Mirror | Perfect specular reflection, no diffuse term | Single colour, usually near-black |
-| Emissive | Mirror, plus radiance added on hit | Colour, emissive colour, emissive strength |
-| Glass | Snell refraction plus Fresnel-weighted reflection | Colour tint, index of refraction |
+| Parameter | Meaning |
+|-----------|---------|
+| `colour` | Tint applied to reflected and transmitted light. Usually near-black |
+| `index_of_refraction` | Drives Fresnel everywhere, and Snell refraction where light passes through |
+| `emission` | Radiance added on hit — this is the neon |
+| `transmission` | How much non-reflected light passes through rather than being absorbed |
+
+"Mirror", "neon" and "glass" are named points in that space rather than categories, so a glowing translucent surface
+is as ordinary as any of them and the shader never branches on a material type.
 
 There is no roughness, no metallic parameter, no microfacet distribution, no normal map, no texture of any kind. The
 reflection direction is `reflect(d, n)`; the refraction direction is `refract(d, n, eta)` with total internal
@@ -211,9 +212,19 @@ once and removed again: reserving two further std430 rows doubled the material b
 field nothing reads is a field nothing maintains. Worse, the stale acoustic members outlived their removal in the
 shader's copy of the struct and produced an out-of-bounds read that only GPU-assisted validation caught.
 
-Phase 5 will therefore **have to touch this layout**, and that is the intended cost. What it adds is settled in
-[ACOUSTICS.md](ACOUSTICS.md); the `static_assert`s on `Material` in `src/components.hpp` exist precisely so that the
-C++ and Slang definitions cannot drift apart again while it happens.
+Phase 5 will therefore **have to put those values somewhere**, and that is the intended cost. They go in a **parallel
+buffer indexed by the same material index**, not in a wider `Material`, for two reasons that both come out of the
+history above.
+
+The first is bandwidth, and it is the same argument that removed them. `Material` is exactly two std430 rows; two
+more floats round up to three, half again as wide. The visual pass reads a material at every hit of every ray of
+every pixel, and the acoustic pass re-solves at something closer to ten hertz — so widening the shared record makes
+the hot path carry cold data on every fetch, forever, to spare the cold path one buffer binding.
+
+The second is that a separate buffer cannot drift. The bug that made the first attempt memorable was the shader's
+copy of `Material` still declaring acoustic members after the C++ side had dropped them, which only GPU-assisted
+validation caught. Fields the visual shader never declares cannot come adrift from fields it never reads. The
+`static_assert`s on `Material` in `src/components.hpp` stay exactly as they are, and keep meaning what they say.
 
 ### BVH Construction and Layout
 
@@ -222,16 +233,21 @@ boxes, built by binned surface-area-heuristic splitting, and flattened into a li
 index and a small explicit stack.
 
 ```text
-Storage buffers consumed by the tracer:
+Descriptor set 0, as the tracer binds it:
 
-  binding 0  bvh_nodes      [ aabb_min, aabb_max, left_or_first_tri, count ]
-  binding 1  triangles      [ v0, v1, v2, normal, material_index ]
-  binding 2  materials      [ colour, emissive, ior, absorption, scattering, flags ]
+  binding 0  output_image   rgba16f storage image, linear radiance, one thread per pixel
+  binding 1  nodes          [ bounds_min, left_or_first, bounds_max, triangle_count ]
+  binding 2  triangles      [ v0, material, edge1, padding0, edge2, padding1 ]
+  binding 3  materials      [ colour, index_of_refraction, emission, transmission ]
 ```
 
-Traversal in the compute shader is an ordinary iterative loop: test the ray against the node's slab, push the two
-children in front-to-back order, pop until the stack empties. Leaf nodes run Möller-Trumbore against their triangle
-range. Nothing exotic, nothing vendor-specific, and every step of it is visible in a shader the author wrote.
+Triangles carry no normal: every face is flat-shaded, so the shader derives the geometric normal from the two stored
+edges.
+
+Traversal in the compute shader is an ordinary iterative loop: test the ray against both child slabs, descend into
+the nearer one immediately and push only the farther one when it was hit as well, pop until the stack empties. Leaf
+nodes run Möller-Trumbore against their triangle range. Nothing exotic, nothing vendor-specific, and every step of it
+is visible in a shader the author wrote.
 
 The same buffers will be bound by the acoustic pass in Phase 5. The BVH is built once per frame at most — in practice
 only when the world changes — and is shared by every sensor and by the spectator view.
@@ -246,10 +262,9 @@ One compute shader does the entire image. Each invocation owns one pixel of one 
 2. Traverse the BVH; find the closest hit.
 3. If nothing was hit, return black. The void is genuinely empty — there is no sky to sample.
 4. On a hit, add the surface's emissive radiance.
-5. Spawn the deterministic continuation:
-    - **Mirror** — one reflection ray.
-    - **Emissive** — one reflection ray, since emissive surfaces are mirrors that also glow.
-    - **Glass** — one refraction ray and one reflection ray, weighted by Schlick's Fresnel approximation.
+5. Spawn the deterministic continuation, unconditionally and with no branch on any material type: Schlick's Fresnel
+   approximation decides the reflected share, `transmission` takes what it wants of the remainder, the transmitted
+   branch is pushed onto the ray stack and the reflected branch is followed immediately.
 6. Repeat to a fixed maximum depth, then terminate. The ray tree is shallow and bounded by construction.
 
 Because there is no random sampling anywhere in this loop, the output is **noise-free and reproducible**. The same
@@ -342,9 +357,11 @@ Double buffering with the standard triple of primitives:
 - **Render-finished semaphore** — rendering into that image has completed.
 - **In-flight fence** — the CPU may not queue work for a frame whose GPU work is still outstanding.
 
-Compute-to-compute dependencies within a frame use `vk::MemoryBarrier2` with
-`eComputeShader`/`eShaderWrite` to `eComputeShader`/`eShaderRead`. There is no cross-frame state to synchronise,
-because there is no temporal accumulation anywhere in the pipeline.
+Compute-to-compute dependencies within a frame use `vk::ImageMemoryBarrier2` with
+`eComputeShader`/`eShaderStorageWrite` to `eComputeShader`/`eShaderStorageRead`. Several of them carry a layout
+transition as well: an image that the next pass overwrites completely is moved from `eUndefined` to `eGeneral`, which
+discards the old contents for free and which a plain memory barrier could not express. There is no cross-frame state
+to synchronise, because there is no temporal accumulation anywhere in the pipeline.
 
 ---
 
@@ -354,13 +371,36 @@ Sound is traced the same way light is, through the same structure:
 
 - The same BVH buffers are bound to an acoustic compute pass.
 - Rays are cast from a sound source, or gathered towards a listener, and traversal is bit-for-bit the same algorithm.
-- On hit, the material's **acoustic** absorption and scattering coefficients are applied instead of its optical
-  colour, and path length accumulates into a delay.
+- On hit, the material's **acoustic absorption** is applied instead of its optical colour, and path length
+  accumulates into a delay.
 - The output is a small set of arrival events — direction, delay, attenuation — delivered to a creature's hearing
   sensor, not an image.
 
-This works only because the material record was designed from the start to carry both sets of properties. Nothing about
-the BVH, the buffer layout, or the traversal code needs to change.
+Nothing about the BVH, its buffer layout or the traversal code has to change: none of it is specific to light. What
+does not exist yet is the pair of acoustic values per material, which § Material Model above places in a parallel
+buffer rather than in `Material` itself.
+
+### Two acoustic values, and specifically not a scattering coefficient
+
+The optical side asks two questions of a surface: what does it do to light that arrives, and what light does it
+originate. `colour` and `emission` answer them. The acoustic side asks exactly the same two questions, so it gets
+exactly the same shape — **absorption** and **source strength** — and nothing else.
+
+Room acoustics would normally add a third, a scattering coefficient splitting each reflection into a specular part
+and a diffuse one. This world does not need it, for the same reason the optical model carries no roughness. Roughness
+was dropped because a perfectly smooth surface is the analytic limit of the microfacet model rather than a
+simplification of it; scattering is dropped because the floor's terraces already **are** the scattering. Their risers
+stand a metre proud and their steps are metres across, against a wavelength of roughly eleven centimetres at the neon
+hum's fundamental — geometry far larger than the wave, redirecting it specularly in genuinely varied directions. A
+statistical coefficient would model a second time, and less honestly, what the triangles are already doing.
+
+Source strength is the value that has to exist instead, because otherwise nothing in the world makes a sound at all.
+The neon hums, so the same triangles that emit light emit sound, and the surface that carries `emission` carries its
+acoustic counterpart beside it.
+
+That leaves the material at two extra floats rather than four. The fields removed once for being read by nothing
+should come back only when something reads them, and a scattering coefficient would arrive with nothing to drive it
+and no diffuse tail to consume it — which is precisely how the first pair came to be deleted.
 
 ---
 
@@ -401,10 +441,10 @@ Each omission below is a design decision, and each one is what keeps the rendere
 | Bindless descriptor indexing | A handful of explicit bindings is easier to follow and has no capability requirement |
 | GPU-driven indirect pipeline | Nothing here is draw-call bound; indirect machinery would be cost without benefit |
 | Denoiser (SVGF, ReSTIR, temporal accumulation) | Deterministic Whitted shading produces no noise, so there is nothing to denoise |
-| Textures, samplers, asset pipeline | Three analytic materials describe the whole world |
+| Textures, samplers, asset pipeline | Four analytic parameters per surface describe the whole world |
 | Roughness, microfacets, full PBR | Perfect mirrors and emissive geometry are the aesthetic; anything more would blur it |
 | Volumetric fog, terrain, skybox | The world is infinite black; a missed ray costs nothing |
-| Third-party physics or audio libraries | The BVH already answers both, and in-house keeps the dependency list at four |
+| Third-party physics or audio libraries | The BVH already answers both, and in-house keeps the dependency list short |
 | Rendergraph, component system, resource handles | Not enough passes or entity variety to justify the abstraction. Revisit only with a concrete second use case |
 
 ---
@@ -437,8 +477,10 @@ tron-grid-lite/
 ├── .claude/          ← project instructions for AI assistants
 ├── .github/          ← CI workflows, Vulkan SDK setup actions
 ├── docs/             ← extended documentation (you are here)
-├── libs/             ← internal static libraries
+├── images/           ← recorded animations the README embeds
+├── libs/             ← internal libraries
 ├── src/              ← application and renderer sources, Slang shaders
+├── tools/            ← Python scripts that drive the renderer from outside the build
 ├── CMakeLists.txt    ← root build configuration
 ├── CMakePresets.json ← compiler and platform presets
 ├── .clang-format     ← formatting rules

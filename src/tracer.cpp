@@ -14,6 +14,7 @@
 
 #include "tracer.hpp"
 #include "device.hpp"
+#include "vulkan_helpers.hpp"
 #include <math/vector.hpp>
 #include <array>
 #include <cmath>
@@ -23,6 +24,9 @@
 
 namespace
 {
+
+    using VulkanHelpers::findMemoryType;
+    using VulkanHelpers::readSpirv;
 
     //! Workgroup size, matching the [numthreads(8, 8, 1)] in trace.slang.
     constexpr uint32_t WORKGROUP_SIZE{8u};
@@ -63,37 +67,6 @@ namespace
     static_assert(sizeof(Material) == 32u, "trace.slang declares Material as 32 bytes.");
     static_assert(sizeof(BvhLib::Node) == 32u, "trace.slang declares Node as 32 bytes.");
     static_assert(sizeof(BvhLib::Triangle) == 48u, "trace.slang declares Triangle as 48 bytes.");
-
-    //! Finds a memory type satisfying both the resource's requirements and the requested properties.
-    [[nodiscard]] uint32_t findMemoryType(const vk::raii::PhysicalDevice& physical_device, uint32_t type_bits, vk::MemoryPropertyFlags required)
-    {
-        const vk::PhysicalDeviceMemoryProperties properties{physical_device.getMemoryProperties()};
-        for (uint32_t index{0u}; index < properties.memoryTypeCount; ++index) {
-            if (((type_bits & (1u << index)) != 0u) && ((properties.memoryTypes[index].propertyFlags & required) == required)) {
-                return index;
-            }
-        }
-        throw std::runtime_error{"No memory type satisfies the requested properties."};
-    }
-
-    //! Reads a compiled SPIR-V module from disk.
-    [[nodiscard]] std::vector<uint32_t> readSpirv(const std::string& path)
-    {
-        std::ifstream file{path, std::ios::binary | std::ios::ate};
-        if (!file.is_open()) {
-            throw std::runtime_error{"Failed to open SPIR-V module: " + path};
-        }
-
-        const std::streamsize size_bytes{file.tellg()};
-        if ((size_bytes <= 0) || ((size_bytes % 4) != 0)) {
-            throw std::runtime_error{"SPIR-V module has an invalid size: " + path};
-        }
-
-        std::vector<uint32_t> words(static_cast<size_t>(size_bytes) / 4u);
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(words.data()), size_bytes);
-        return words;
-    }
 
 } // namespace
 

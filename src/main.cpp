@@ -39,6 +39,7 @@
 #include "surface.hpp"
 #include "swapchain.hpp"
 #include "tracer.hpp"
+#include "vulkan_helpers.hpp"
 #include <bvh/bvh.hpp>
 #include <log/logger.hpp>
 #include <math/vector.hpp>
@@ -58,6 +59,13 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <limits.h>
+#include <unistd.h>
+#endif
 
 namespace
 {
@@ -119,6 +127,50 @@ namespace
     }
 
     /*!
+        Returns the directory holding this executable.
+
+        The compiled shaders sit beside the binary, and they used to be opened by bare relative
+        name — which resolves against the *working* directory, not the executable's. That works
+        only when the program happens to be launched from its own output directory, and silently
+        fails everywhere else: every IDE debug configuration, every shortcut, and every user who
+        unpacks a release and runs it from anywhere but inside the folder.
+
+        Falls back to the working directory if the platform call fails, which restores exactly the
+        old behaviour rather than making a bad situation worse.
+    */
+    [[nodiscard]] std::filesystem::path executableDirectory()
+    {
+#ifdef _WIN32
+        std::wstring buffer(MAX_PATH, wchar_t{});
+        for (;;) {
+            const DWORD written{GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()))};
+            if (written == 0u) {
+                return std::filesystem::current_path();
+            }
+
+            // Truncation is reported by filling the buffer exactly, so grow and ask again.
+            if (written < buffer.size()) {
+                buffer.resize(written);
+                break;
+            }
+
+            buffer.resize(buffer.size() * 2u);
+        }
+
+        return std::filesystem::path{buffer}.parent_path();
+#else
+        std::string buffer(PATH_MAX, char{});
+        const ssize_t written{readlink("/proc/self/exe", buffer.data(), buffer.size())};
+        if (written <= 0) {
+            return std::filesystem::current_path();
+        }
+
+        buffer.resize(static_cast<size_t>(written));
+        return std::filesystem::path{buffer}.parent_path();
+#endif
+    }
+
+    /*!
         The world's material table.
 
         Three entries, all of them perfectly smooth. The floor carries no emission at all: every
@@ -175,15 +227,40 @@ namespace
         /*
             The ground under a box is not one height: a terrace step can run straight through its
             footprint, and the wider the box the likelier that is. Sitting the base on the LOWEST
-            corner buries part of the box rather than leaving the rest of it hovering — something
-            set into the ground reads as deliberate, whereas something floating above it reads as
-            broken, which is what the first attempt at this looked like.
-        */
-        float ground{gridSurfaceHeight(world_x, world_z, floor_config)};
+            point of the footprint buries part of the box rather than leaving the rest of it
+            hovering — something set into the ground reads as deliberate, whereas something floating
+            above it reads as broken.
 
-        for (const float sample_x : {world_x - half_extents.x, world_x + half_extents.x}) {
-            for (const float sample_z : {world_z - half_extents.z, world_z + half_extents.z}) {
-                ground = std::min(ground, gridSurfaceHeight(sample_x, sample_z, floor_config));
+            The samples ask `gridMeshHeight` rather than `gridSurfaceHeight`, because the mesh ramps
+            across a cell where the analytic surface steps. Asking the analytic function left the
+            glowing column standing 0.29 m clear of its own reflection.
+
+            The drawn floor is piecewise linear, so the lowest point over a rectangle is always at a
+            corner of that rectangle or at a grid vertex inside it. Both are sampled.
+        */
+        const float min_x{world_x - half_extents.x};
+        const float max_x{world_x + half_extents.x};
+        const float min_z{world_z - half_extents.z};
+        const float max_z{world_z + half_extents.z};
+
+        float ground{gridMeshHeight(world_x, world_z, floor_config)};
+
+        for (const float sample_x : {min_x, max_x}) {
+            for (const float sample_z : {min_z, max_z}) {
+                ground = std::min(ground, gridMeshHeight(sample_x, sample_z, floor_config));
+            }
+        }
+
+        const float half_size{(static_cast<float>(floor_config.cells) * floor_config.cell_size) * 0.5f};
+        const auto firstVertexAbove = [&](float world_coordinate) {
+            return static_cast<int32_t>(std::ceil((world_coordinate + half_size) / floor_config.cell_size));
+        };
+
+        for (int32_t vertex_x{firstVertexAbove(min_x)}; (static_cast<float>(vertex_x) * floor_config.cell_size) - half_size <= max_x; ++vertex_x) {
+            for (int32_t vertex_z{firstVertexAbove(min_z)}; (static_cast<float>(vertex_z) * floor_config.cell_size) - half_size <= max_z; ++vertex_z) {
+                const float vertex_world_x{(static_cast<float>(vertex_x) * floor_config.cell_size) - half_size};
+                const float vertex_world_z{(static_cast<float>(vertex_z) * floor_config.cell_size) - half_size};
+                ground = std::min(ground, gridMeshHeight(vertex_world_x, vertex_world_z, floor_config));
             }
         }
 
@@ -280,19 +357,6 @@ namespace
         }
     }
 
-    //! Finds a host-visible memory type for the frame readback buffer.
-    [[nodiscard]] uint32_t findHostVisibleMemoryType(const vk::raii::PhysicalDevice& physical_device, uint32_t type_bits)
-    {
-        const vk::PhysicalDeviceMemoryProperties properties{physical_device.getMemoryProperties()};
-        const vk::MemoryPropertyFlags required{vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent};
-        for (uint32_t index{0u}; index < properties.memoryTypeCount; ++index) {
-            if (((type_bits & (1u << index)) != 0u) && ((properties.memoryTypes[index].propertyFlags & required) == required)) {
-                return index;
-            }
-        }
-        throw std::runtime_error{"No host-visible memory type for the frame readback buffer."};
-    }
-
 } // namespace
 
 /*!
@@ -329,7 +393,9 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
         device.get(), vk::BufferCreateInfo{.size = frame_bytes, .usage = vk::BufferUsageFlagBits::eTransferDst, .sharingMode = vk::SharingMode::eExclusive}};
     const vk::MemoryRequirements requirements{readback.getMemoryRequirements()};
     const vk::raii::DeviceMemory readback_memory{device.get(),
-        vk::MemoryAllocateInfo{.allocationSize = requirements.size, .memoryTypeIndex = findHostVisibleMemoryType(device.physicalDevice(), requirements.memoryTypeBits)}};
+        vk::MemoryAllocateInfo{.allocationSize = requirements.size,
+            .memoryTypeIndex = VulkanHelpers::findMemoryType(device.physicalDevice(), requirements.memoryTypeBits,
+                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)}};
     readback.bindMemory(*readback_memory, 0u);
 
     const vk::raii::CommandPool command_pool{
@@ -481,7 +547,9 @@ int main(int argc, char** argv)
             neither problem: it samples geometry analytically and has no depth buffer at all, so
             the tubes can be the slender lines the aesthetic actually wants.
         */
-        const NeonTubeConfig tube_config{.half_width = 0.025f, .surface_offset = 0.01f};
+        // The lift clears the steepest terrace gradient across the tube's half width; at 0.01 m
+        // the outer edge of a strip dipped below the floor on riser cells.
+        const NeonTubeConfig tube_config{.half_width = 0.025f, .surface_offset = 0.02f};
 
         const Mesh floor{generateGridFloor(floor_config)};
         const NeonGrid neon{generateGridFloorNeon(floor_config, tube_config)};
@@ -507,10 +575,14 @@ int main(int argc, char** argv)
         logger.logInfo("Hierarchy built in " + std::to_string(static_cast<double>(build_milliseconds)) + " ms: " + std::to_string(bvh.triangles.size()) + " triangles, "
             + std::to_string(bvh.nodes.size()) + " nodes, depth " + std::to_string(bvh.depth()) + " of " + std::to_string(BvhLib::MAX_DEPTH) + ".");
 
-        Tracer tracer{device, bvh, makeMaterials(), MAX_FRAMES_IN_FLIGHT, "trace.spv", logger};
+        // Absolute paths, so the renderer runs from any working directory rather than only from
+        // its own output folder.
+        const std::filesystem::path shader_directory{executableDirectory()};
+
+        Tracer tracer{device, bvh, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
         tracer.resize(swapchain.extent());
 
-        PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, "bloom.spv", "postprocess.spv", logger};
+        PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};
         post_process.resize(swapchain.extent(), tracer.outputViews());
 
         if (recording) {
@@ -539,6 +611,35 @@ int main(int argc, char** argv)
         }
 
         GpuProfiler profiler{device, MAX_FRAMES_IN_FLIGHT, logger};
+
+        /*
+            Everything above this point is destroyed when the enclosing scope unwinds, and a great
+            deal of it may still be in use by a submission the GPU has not finished. On the ordinary
+            path the loop below exits and the device is idled first — but an exception escaping the
+            loop skipped that entirely. `vk::OutOfDateKHRError` is caught inside, yet surface-lost,
+            device-lost and out-of-device-memory are not, and any of them would run destructors for
+            the command pool, the semaphores, the query pool and every image while work was still
+            executing.
+
+            The guard makes the wait unconditional. Its own failure is swallowed deliberately: a
+            device that is already lost cannot be waited on, and throwing from a destructor during
+            unwinding would replace the real error with a call to std::terminate.
+        */
+        struct DeviceIdleGuard {
+            const Device* device;
+
+            ~DeviceIdleGuard()
+            {
+                try {
+                    device->get().waitIdle();
+                }
+                // NOLINTNEXTLINE(bugprone-empty-catch) — see above: this runs during unwinding.
+                catch (...) {
+                    // Deliberately swallowed. Throwing from a destructor while an exception is in
+                    // flight calls std::terminate and destroys the diagnostic that matters.
+                }
+            }
+        } idle_guard{&device};
 
         // The spectator: a free camera for the human observer. Creatures never use this.
         Camera camera{MathLib::Vec3{0.0f, 6.0f, 40.0f}};
@@ -577,8 +678,24 @@ int main(int argc, char** argv)
             }
 
             if (needs_recreate) {
-                device.get().waitIdle();
+                // Swapchain::recreate idles the device itself before rebuilding, which is also what
+                // the two resizes below require, so there is deliberately no waitIdle here: two
+                // calls would leave it ambiguous which layer owns the invariant.
                 swapchain.recreate(window->width(), window->height());
+
+                /*
+                    The semaphores must be rebuilt with the swapchain. There is one per image and
+                    they are indexed by the acquired image index, but vkGetSwapchainImagesKHR may
+                    legally return more images than were requested, and nothing requires two
+                    swapchains built from the same surface to return the same count. A grown
+                    swapchain would index past the end of this vector and hand the driver a garbage
+                    handle — before any validation layer could see it.
+                */
+                render_finished.clear();
+                for (uint32_t image{0u}; image < swapchain.imageCount(); ++image) {
+                    render_finished.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
+                }
+
                 tracer.resize(swapchain.extent());
                 post_process.resize(swapchain.extent(), tracer.outputViews());
                 needs_recreate = false;
@@ -718,10 +835,21 @@ int main(int argc, char** argv)
             frame_index = (frame_index + 1u) % MAX_FRAMES_IN_FLIGHT;
         }
 
-        device.get().waitIdle();
         logger.logInfo("Shutting down cleanly.");
     } catch (const std::exception& error) {
-        logger.logFatal(std::string{"Fatal error: "} + error.what());
+        /*
+            The report is itself allowed to fail. Building the message allocates, and the likeliest
+            reason to be down here in the first place is that allocation has stopped working — so an
+            exception escaping `main` would replace a described failure with a bare terminate.
+        */
+        try {
+            logger.logFatal(std::string{"Fatal error: "} + error.what());
+        }
+        // NOLINTNEXTLINE(bugprone-empty-catch) — the exit code below is the whole report now.
+        catch (...) {
+            // Deliberately swallowed: there is nothing left that could report anything.
+        }
+
         return EXIT_FAILURE;
     }
 

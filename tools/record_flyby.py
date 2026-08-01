@@ -27,6 +27,7 @@ Requires ffmpeg on PATH.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import shutil
 import subprocess
 import sys
@@ -176,8 +177,16 @@ def main() -> None:
 
     gif_path = REPOSITORY_ROOT / arguments.gif
 
-    with tempfile.TemporaryDirectory(prefix="tron-grid-lite-frames-") as temporary:
-        directory = Path(temporary) if not arguments.keep_frames else (REPOSITORY_ROOT / "build" / "flyby-frames")
+    # --keep-frames wants a directory that outlives this block, so the two cases differ in whether
+    # anything is cleaned up rather than in what is created.
+    frames_context = (
+        contextlib.nullcontext(REPOSITORY_ROOT / "build" / "flyby-frames")
+        if arguments.keep_frames
+        else tempfile.TemporaryDirectory(prefix="tron-grid-lite-frames-")
+    )
+
+    with frames_context as temporary:
+        directory = Path(temporary)
         directory.mkdir(parents=True, exist_ok=True)
 
         # --keep-frames reuses a fixed directory, so a shorter second run would still find the

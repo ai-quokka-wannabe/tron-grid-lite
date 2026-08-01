@@ -119,13 +119,41 @@ float linearToSrgb(float channel)
     return SRGB_POWER_SCALE * pow(channel, SRGB_POWER_EXPONENT) - SRGB_POWER_OFFSET;
 }
 
+/*!
+    Samples the half-resolution bloom mip with a hand-weighted bilinear fetch.
+
+    Integer division would send all four texels of a 2x2 destination block to the same source
+    position, which is exactly the staircase the downsample pass builds its own bilinear tap to
+    avoid. The pyramid is filtered smoothly all the way up, so stepping it at the very last hop
+    would put a 2x2 grid on every neon halo after all that care.
+
+    The weighting is done by hand because `bloom_texture` is a storage image with no sampler
+    attached.
+*/
+float3 sampleBloomBilinear(uint2 coord, uint2 bloom_extent)
+{
+    int2 max_coord = int2(bloom_extent) - int2(1, 1);
+
+    // Destination centre in source space: (coord + 0.5) * 0.5, less the half-texel that turns a
+    // texel centre into a corner-relative position.
+    float2 corner = ((float2(coord) + 0.5) * 0.5) - 0.5;
+    int2 base = int2(floor(corner));
+    float2 weight = corner - float2(base);
+
+    float3 c00 = bloom_texture[clamp(base + int2(0, 0), int2(0, 0), max_coord)].rgb;
+    float3 c10 = bloom_texture[clamp(base + int2(1, 0), int2(0, 0), max_coord)].rgb;
+    float3 c01 = bloom_texture[clamp(base + int2(0, 1), int2(0, 0), max_coord)].rgb;
+    float3 c11 = bloom_texture[clamp(base + int2(1, 1), int2(0, 0), max_coord)].rgb;
+
+    return lerp(lerp(c00, c10, weight.x), lerp(c01, c11, weight.x), weight.y);
+}
+
 //! Reads the HDR image at the given integer coordinate and adds the bloom contribution from the half-resolution bloom mip.
 float3 sampleHdrWithBloom(uint2 coord, uint2 hdr_extent, uint2 bloom_extent)
 {
     uint2 clamped = min(coord, hdr_extent - uint2(1, 1));
     float3 hdr = hdr_input[clamped].rgb;
-    uint2 bloom_coord = min(clamped / 2, bloom_extent - uint2(1, 1));
-    return hdr + push.bloom_strength * bloom_texture[bloom_coord].rgb;
+    return hdr + push.bloom_strength * sampleBloomBilinear(clamped, bloom_extent);
 }
 
 //! Tonemaps one pixel of the HDR image into the destination storage image.

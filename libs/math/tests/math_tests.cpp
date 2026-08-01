@@ -314,6 +314,59 @@ TEST_CASE(quat_multiply_combines_rotations)
     TEST_CHECK(approxVec3(result, {-1.0f, 0.0f, 0.0f}, 1e-4f));
 }
 
+/*
+    The test above cannot detect a swapped composition order, because it multiplies two identical
+    rotations about the same axis and those commute. It was the only use of the quaternion product
+    in this file, and `Quat::rotate` is implemented directly rather than through `operator*`, so
+    nothing else covered it either — a conjugated Hamilton product would have passed the whole suite.
+
+    These two rotations do not commute. Taken in the order written, the result is (0, 1, 0); reversed
+    it is (-1, 0, 0), so the assertion distinguishes them.
+*/
+TEST_CASE(quat_multiply_does_not_commute)
+{
+    const MathLib::Quat yaw{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, MathLib::PI / 2.0f)};
+    const MathLib::Quat pitch{MathLib::Quat::fromAxisAngle({1.0f, 0.0f, 0.0f}, MathLib::PI / 2.0f)};
+
+    const MathLib::Vec3 forward{0.0f, 0.0f, -1.0f};
+    TEST_CHECK(approxVec3((yaw * pitch).rotate(forward), {0.0f, 1.0f, 0.0f}, 1e-4f));
+    TEST_CHECK(approxVec3((pitch * yaw).rotate(forward), {-1.0f, 0.0f, 0.0f}, 1e-4f));
+}
+
+/*
+    Mat4::inversed() is sixteen hand-transcribed cofactor expressions called by production code
+    (src/components.hpp) and, until now, exercised by nothing at all. A sign or index error in any
+    one of them produces a silently wrong inverse.
+*/
+TEST_CASE(mat4_inversed_round_trips)
+{
+    const MathLib::Mat4 composite{
+        MathLib::Mat4::translate({3.0f, -4.0f, 5.0f}) * MathLib::Mat4::rotate({0.3f, 0.9f, 0.2f}, 0.7f) * MathLib::Mat4::scale({2.0f, 0.5f, 3.0f})};
+
+    const MathLib::Mat4 identity{composite * composite.inversed()};
+
+    for (int row{0}; row < 4; ++row) {
+        for (int column{0}; column < 4; ++column) {
+            const float expected{(row == column) ? 1.0f : 0.0f};
+            TEST_CHECK(std::abs(identity(row, column) - expected) < 1e-4f);
+        }
+    }
+}
+
+//! A point taken through a transform and back must arrive where it started.
+TEST_CASE(mat4_inversed_undoes_a_transform)
+{
+    const MathLib::Mat4 composite{
+        MathLib::Mat4::translate({-7.0f, 2.5f, 11.0f}) * MathLib::Mat4::rotate({0.0f, 1.0f, 0.0f}, MathLib::PI / 3.0f) * MathLib::Mat4::scale({1.5f, 1.5f, 1.5f})};
+    const MathLib::Mat4 inverse{composite.inversed()};
+
+    for (const MathLib::Vec3& point : {MathLib::Vec3{1.0f, 2.0f, 3.0f}, MathLib::Vec3{-4.0f, 0.5f, 6.0f}, MathLib::Vec3{0.0f, 0.0f, 0.0f}}) {
+        const MathLib::Vec4 transformed{composite * MathLib::Vec4{point.x, point.y, point.z, 1.0f}};
+        const MathLib::Vec4 restored{inverse * transformed};
+        TEST_CHECK(approxVec3({restored.x, restored.y, restored.z}, point, 1e-3f));
+    }
+}
+
 TEST_CASE(quat_normalised)
 {
     MathLib::Quat q{2.0f, 0.0f, 0.0f, 0.0f};

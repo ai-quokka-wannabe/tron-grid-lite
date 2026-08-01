@@ -70,7 +70,6 @@ Instance::Instance(bool enable_validation, const std::vector<const char*>& requi
     if (volkInitialize() != VK_SUCCESS) {
         m_logger.logFatal("Vulkan not found on this system.");
         std::abort();
-        return;
     }
 
     // Feed Volk's vkGetInstanceProcAddr to the vulkan-hpp dynamic dispatcher.
@@ -82,7 +81,6 @@ Instance::Instance(bool enable_validation, const std::vector<const char*>& requi
         m_logger.logFatal("Vulkan 1.3 or later required (found " + std::to_string(VK_API_VERSION_MAJOR(api_version)) + "."
             + std::to_string(VK_API_VERSION_MINOR(api_version)) + ").");
         std::abort();
-        return;
     }
 
     // Step 3: Gather required instance extensions.
@@ -98,7 +96,6 @@ Instance::Instance(bool enable_validation, const std::vector<const char*>& requi
         if (!isExtensionAvailable(available_extensions, ext)) {
             m_logger.logFatal(std::string("Required Vulkan instance extension not available: ") + ext + ".");
             std::abort();
-            return;
         }
     }
 

@@ -12,7 +12,7 @@ installed into the system interpreter:
 python -m venv tools/.venv
 
 # Windows
-tools/.venv/Scripts/activate
+source tools/.venv/Scripts/activate
 
 # Linux
 source tools/.venv/bin/activate

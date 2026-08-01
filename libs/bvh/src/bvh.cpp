@@ -14,6 +14,7 @@
 
 #include <bvh/bvh.hpp>
 #include <algorithm>
+#include <cmath>
 #include <array>
 #include <cstddef>
 #include <limits>
@@ -188,6 +189,23 @@ namespace BvhLib
 
             const float axis_min{component(centroid_bounds.min, axis)};
             const float bin_scale{static_cast<float>(BIN_COUNT) / axis_extent};
+
+            /*
+                The extent test above rejects zero but not the denormal range just above it, where
+                the division overflows to infinity. A centroid sitting exactly at axis_min then
+                computes 0 * inf, which is NaN, and casting NaN to int32_t is undefined behaviour
+                that the clamp below cannot repair. Worse, the same lambda is the predicate of a
+                std::partition, and a predicate that answers inconsistently is undefined behaviour
+                in its own right.
+
+                Guarding the scale rather than picking a threshold on the extent is what makes this
+                correct: comparing the extent against the smallest normal float does not help,
+                because twelve divided by that is still infinity.
+            */
+            if (!std::isfinite(bin_scale)) {
+                makeLeaf(node_index, first, count);
+                return;
+            }
 
             const auto binOf = [&](const Triangle& triangle) -> uint32_t {
                 const float offset{component(triangle.centroid(), axis) - axis_min};

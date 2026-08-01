@@ -59,7 +59,7 @@ Recommended commands:
 clang-format -i src/*.cpp src/*.hpp
 
 # Or for a specific set of files
-clang-format -i src/main.cpp src/pipeline.cpp src/pipeline.hpp
+clang-format -i src/main.cpp src/tracer.cpp src/tracer.hpp
 ```
 
 Slang files follow the conventions in § Slang Shaders by hand (Allman braces for functions, 4-space indent, 170 column limit).
@@ -88,14 +88,27 @@ Key settings:
 
 ### Language Standard
 
-C++20 (and **NOT** beyond it!). Do not throw exceptions in project code. Catch exceptions from third-party libraries
-(e.g., vulkan-hpp `vk::raii`) at API boundaries only. For unrecoverable errors in project code,
-log via `LoggingLib::Logger::logFatal()` and call `std::abort()` followed by a return statement to exit that function.
+C++20 (and **NOT** beyond it!).
+
+### Error Handling
+
+Two mechanisms, chosen by whether the failure can still unwind cleanly:
+
+- **`throw std::runtime_error`** for unrecoverable failures in normal call flow — a bad command-line
+  argument, an unreadable SPIR-V module, no suitable memory type. `main()` wraps the whole run in one
+  `catch (const std::exception&)` that logs via `LoggingLib::Logger::logFatal()` and returns
+  `EXIT_FAILURE`, so destructors still run and Vulkan objects are released in order.
+- **`logFatal()` then `std::abort()`** (followed by a `return` statement) in the Vulkan setup types —
+  `Instance`, `Device`, `Swapchain`, `Allocator` — where the object cannot be left half-built and
+  there is nothing useful to unwind to.
+
+Library exceptions are caught where they can be acted on: `vk::OutOfDateKHRError` from `vk::raii`
+acquire/present is handled at the call site by recreating the swapchain.
 
 ### Type Explicitness
 
-Do not use `auto` — write the explicit type so the reader never has to guess. The only exception
-is where the type is impossible to spell (lambdas).
+Do not use `auto` — write the explicit type so the reader never has to guess. The exceptions are
+lambdas, whose types cannot be spelled, and structured bindings, which require `auto` by grammar.
 
 ```cpp
 // Correct
@@ -108,6 +121,9 @@ auto count = static_cast<uint32_t>(items.size());
 
 // Exception — lambdas have unspellable types
 auto on_resize = [&](const WindowLib::WindowEvent& ev) { ... };
+
+// Exception — structured bindings cannot name their type
+const auto [acquire_result, acquired_index] = swapchain.get().acquireNextImage(...);
 ```
 
 ### Attributes
@@ -180,20 +196,30 @@ std::find_if(devices.begin(), devices.end(), predicate);
 Prefer `std::string_view` for read-only string parameters and comparisons — avoids
 unnecessary heap allocations.
 
-Use vulkan-hpp setter methods instead of C-style count+pointer or `pFoo` field assignment:
+Fill vulkan-hpp structs at the point of construction, with designated initialisers. The build defines
+`VULKAN_HPP_NO_STRUCT_CONSTRUCTORS` (see `src/CMakeLists.txt`) precisely so this is possible: the
+structs become aggregates, `sType` keeps its default, and a temporary can be passed straight into a call.
 
 ```cpp
-// Correct — vulkan-hpp setters handle count+pointer automatically
-create_info.setPApplicationInfo(&app_info);
-create_info.setPEnabledLayerNames(layers);
-create_info.setPEnabledExtensionNames(extensions);
-layout_info.setBindings(bindings);
-dep.setImageMemoryBarriers(barriers);
+// Correct — designated initialisers on a temporary
+command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-// Wrong — manual count + pointer (C style)
-create_info.enabledLayerCount = static_cast<uint32_t>(layers.size());
-create_info.ppEnabledLayerNames = layers.data();
+m_set_layout = vk::raii::DescriptorSetLayout{m_device->get(),
+    vk::DescriptorSetLayoutCreateInfo{.bindingCount = static_cast<uint32_t>(bindings.size()), .pBindings = bindings.data()}};
 ```
+
+Where a struct must be built up over several statements — a `pNext` chain, or an array whose count
+would otherwise be written by hand — use the setters, which derive the count from the container:
+
+```cpp
+// Correct — setters on a named local that is assembled in stages
+create_info.setPEnabledExtensionNames(extensions);
+validation_features.setEnabledValidationFeatures(ENABLED_VALIDATION_FEATURES);
+validation_features.setPNext(&debug_create_info);
+```
+
+Never assign `count` and `pFoo` members one at a time after construction — that is the C style the
+two forms above exist to avoid.
 
 ### Include Order
 
@@ -420,11 +446,16 @@ jobs:
 
         steps:
             - name: Checkout
-              uses: actions/checkout@v6
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
             - name: Build
               run: cmake --workflow --preset=linux-x11-gcc
 ```
+
+### Action Pinning
+
+Third-party and GitHub-owned actions alike are pinned to a full commit SHA with a trailing
+`# vX.Y.Z` comment. Dependabot bumps the SHA and rewrites the comment.
 
 ### List Item Indentation
 
@@ -552,12 +583,37 @@ Warnings are errors on all compilers — zero-warning policy:
 
 ### Static Analysis (Clang-Tidy)
 
-Configuration in `.clang-tidy`. Runs via `clangd` in VS Code. Bugprone, analyser, and
-concurrency checks are promoted to errors. To suppress a specific check on a line:
+Configuration in `.clang-tidy`. Bugprone, analyser and concurrency checks are promoted to errors;
+everything else is advisory. To run it over the whole project:
+
+```bash
+cmake --preset linux-x11-clang -DTGL_ENABLE_CLANG_TIDY=ON
+cmake --build build/linux-x11-clang --config Debug
+```
+
+It is **off by default** because it roughly doubles build time, and it is **not yet a CI gate** —
+which is worth saying plainly, because this section previously implied it was enforced when nothing
+executed it at all. `src/` currently passes with zero errors, so promoting it to a gate is a small
+change rather than a cleanup project; it has simply not been done.
+
+`clangd` in VS Code also reads the same configuration, which is where the advisory checks surface
+day to day.
+
+Two of the enabled checks are deliberately overridden:
+
+- `bugprone-easily-swappable-parameters` is disabled outright. It is an opinion about API shape
+  rather than a bug detector, and it fires on every function here that takes an x and a z.
+- `readability-uppercase-literal-suffix` wants `1.0F`. This project writes `1.0f` everywhere, so the
+  check is left advisory rather than being allowed to rewrite the entire codebase.
+
+To suppress a specific check on a line:
 
 ```cpp
 int x = legacy_function(); // NOLINT(bugprone-unused-return-value)
 ```
+
+Note that for a diagnostic reported on a `catch` clause, `NOLINTNEXTLINE` must sit on its own line
+*before* the `catch` keyword — putting it inside the block does not suppress anything.
 
 ### Runtime Sanitisers
 
@@ -584,11 +640,6 @@ Enabled automatically in debug builds via `VkValidationFeaturesEXT`:
 - **Synchronisation Validation** — deep barrier analysis
 - **Best Practices** — non-optimal API usage warnings
 
-### MSVC Debug Leak Detection
-
-`_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF)` is enabled at startup in
-MSVC debug builds. Reports C++ heap leaks on exit.
-
 ---
 
-*Last updated: 2026-04-23*
+*Last updated: 2026-08-01*

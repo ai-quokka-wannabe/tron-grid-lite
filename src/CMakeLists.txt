@@ -1,12 +1,10 @@
 add_executable(${PROJECT_NAME}
     main.cpp
     volk.cpp
-    vma.cpp
     instance.cpp
     device.cpp
     surface.cpp
     swapchain.cpp
-    allocator.cpp
     tracer.cpp
     postprocess.cpp
     geometry.cpp
@@ -17,10 +15,11 @@ add_executable(${PROJECT_NAME}
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${Vulkan_INCLUDE_DIRS}
-)
+target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+# SYSTEM so that warnings from the Vulkan SDK's own headers cannot fail this build under /WX and
+# -Werror. A future SDK release is not something this repository can fix.
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${Vulkan_INCLUDE_DIRS})
 
 # Vulkan-specific definitions — scoped to this target only.
 # VULKAN_HPP_NO_STRUCT_CONSTRUCTORS is defined here rather than per-header so that every
@@ -30,8 +29,6 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     VK_NO_PROTOTYPES
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
-    VMA_STATIC_VULKAN_FUNCTIONS=0
-    VMA_DYNAMIC_VULKAN_FUNCTIONS=0
     $<$<PLATFORM_ID:Windows>:VK_USE_PLATFORM_WIN32_KHR NOMINMAX WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR>
 )
@@ -72,7 +69,6 @@ function(add_slang_shader name source)
             -profile spirv_1_4
             -emit-spirv-directly
             -fvk-use-entrypoint-name
-            -fvk-invert-y
             -warnings-as-errors all
             ${entry_args}
             -o ${SHADER_OUTPUT_DIR}/${name}.spv
@@ -126,3 +122,12 @@ add_custom_target(copy_shaders ALL
     VERBATIM
 )
 add_dependencies(copy_shaders shaders)
+
+# Install rules. The release workflow stages the archive with `cmake --install`, so that the
+# knowledge of where the binary and its shaders actually land lives here rather than being
+# duplicated as a hand-written path in a YAML file — which is how the release archive came to be
+# assembled from a directory that Ninja Multi-Config never writes.
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
+install(FILES ${SHADER_SPV_FILES} DESTINATION .)
+
+add_subdirectory(tests)

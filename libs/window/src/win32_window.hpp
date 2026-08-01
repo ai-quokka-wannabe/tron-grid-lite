@@ -68,6 +68,18 @@ namespace WindowLib
         bool m_warp_pending{
             false}; //!< True after a SetCursorPos warp; the next WM_MOUSEMOVE is the synthetic recentre and is consumed without emitting a duplicate event.
 
+        /*
+            Where the pointer was warped to.
+
+            The flag alone is not enough. Neither platform generates a motion event when the pointer
+            is already at the destination — which happens routinely, because the window is created
+            centred and the user clicks near its middle to focus it. The flag then stays set and
+            swallows the user's next genuine movement instead. Matching the position as well means a
+            warp that moved nothing consumes nothing.
+        */
+        int32_t m_warp_target_x{0};
+        int32_t m_warp_target_y{0};
+
         static constexpr const wchar_t* CLASS_NAME = L"TronGridLiteWindowClass"; //!< Win32 window class name.
         static bool m_class_registered; //!< Tracks whether the Win32 window class has been registered.
     };

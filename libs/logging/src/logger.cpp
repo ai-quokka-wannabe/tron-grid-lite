@@ -14,6 +14,7 @@
 
 #include "log/logger.hpp"
 #include <iostream>
+#include <thread>
 
 namespace LoggingLib
 {
@@ -74,9 +75,37 @@ namespace LoggingLib
 
     void Logger::logFatal(std::string_view message)
     {
-        // Write directly to stderr — fatal messages must be visible
-        // before std::abort(), so we bypass the async queue entirely.
+        /*
+            Everything the program logged on its way here is still sitting in the queue, and the
+            caller is almost certainly about to abort — which joins no threads and is not required
+            to flush the standard streams. Draining first means the fatal line arrives last, after
+            the context that explains it, rather than first and alone.
+        */
+        flush();
+
+        // Written directly to stderr rather than queued: this must be visible before the process
+        // dies, and there may be no worker left to drain a queue by then.
         std::cerr << "[FATAL] " << message << "\n";
+        std::cerr.flush();
+    }
+
+    void Logger::flush()
+    {
+        /*
+            Waits for the worker to empty the queue rather than draining it here, because two
+            threads writing the same stream would interleave mid-line.
+
+            This guarantees nothing is left unconsumed; it does not synchronise with the worker's
+            final write, which may still be in flight for a few microseconds after the queue reports
+            empty. Closing that window would need a second condition variable for a pre-abort path
+            that is already about to lose the process, which is not a trade this repository makes.
+        */
+        while (!m_queue.empty()) {
+            m_cv.notify_one();
+            std::this_thread::yield();
+        }
+
+        std::cout.flush();
     }
 
     void Logger::enqueue(Severity severity, std::string_view message)

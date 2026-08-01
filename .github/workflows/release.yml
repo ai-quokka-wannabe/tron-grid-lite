@@ -142,12 +142,18 @@ jobs:
             - name: Build release binary
               run: cmake --build build/${{ matrix.preset }} --config Release --verbose
 
+            # A tag can be pushed from any commit, including one that never reached main or that
+            # sat between a red CI run and its fix. Without this the workflow would happily build,
+            # sign, attest and publish binaries whose tests fail — and the attestation would then
+            # vouch for the provenance of an untested artefact.
+            - name: Test release build
+              run: ctest --test-dir build/${{ matrix.preset }} --build-config Release --output-on-failure
+
             - name: Prepare artifact (Unix)
               if: runner.os != 'Windows'
               shell: bash
               run: |
-                mkdir -p dist
-                cp build/${{ matrix.preset }}/Release/${{ matrix.binary }} dist/
+                cmake --install build/${{ matrix.preset }} --config Release --prefix dist
                 cp README.md LICENCE CHANGELOG.md dist/
                 cd dist
                 tar -czvf ../${{ matrix.artifact }}.tar.gz *
@@ -156,8 +162,7 @@ jobs:
               if: runner.os == 'Windows'
               shell: bash
               run: |
-                mkdir -p dist
-                cp build/${{ matrix.preset }}/Release/${{ matrix.binary }} dist/
+                cmake --install build/${{ matrix.preset }} --config Release --prefix dist
                 cp README.md LICENCE CHANGELOG.md dist/
                 cd dist
                 7z a -tzip ../${{ matrix.artifact }}.zip *

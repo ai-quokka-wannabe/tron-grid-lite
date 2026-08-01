@@ -61,7 +61,19 @@ namespace WindowLib
         int32_t m_last_mouse_y{0}; //!< Last known mouse y for delta computation.
         bool m_mouse_tracked{false}; //!< True after the first mouse event has been received.
         bool m_warp_pending{
-            false}; //!< True after an xcb_warp_pointer; the next XCB_MOTION_NOTIFY is the synthetic recentre and is consumed without emitting a duplicate event.
+            false}; //!< True after a xcb_warp_pointer; the next XCB_MOTION_NOTIFY is the synthetic recentre and is consumed without emitting a duplicate event.
+
+        /*
+            Where the pointer was warped to.
+
+            The flag alone is not enough. Neither platform generates a motion event when the pointer
+            is already at the destination — which happens routinely, because the window is created
+            centred and the user clicks near its middle to focus it. The flag then stays set and
+            swallows the user's next genuine movement instead. Matching the position as well means a
+            warp that moved nothing consumes nothing.
+        */
+        int32_t m_warp_target_x{0};
+        int32_t m_warp_target_y{0};
 
         xcb_cursor_t m_invisible_cursor{
             0}; //!< Invisible cursor used during pointer capture; lives for the duration of the grab so the X server can dereference it on demand.

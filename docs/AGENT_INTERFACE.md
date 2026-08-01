@@ -113,7 +113,7 @@ exactly one `creature_destroy`.
   fixed-width members, so MSVC, GCC and Clang lay it out identically on both supported platforms.
   Members are grouped by modality for legibility rather than shuffled to eliminate the odd padding
   word, and no padding members are written by hand: the compiler's own padding is part of the ABI
-  and both sides are compiled from the same header.
+  and both sides will be compiled from the same header once it ships.
 
 ### Vtable
 
@@ -211,9 +211,10 @@ cognition, and bodies are the world's business.
 
 ## Sensory Input
 
-A creature senses through one small render target of its own, rendered by the same ray-tracing
-compute path that renders the spectator window, from the creature's own eye position, at the
-creature's own resolution. Typical sizes are 64x64 to 256x256 — deliberately tiny, because animal
+A creature senses through zero or more small render targets, one per eye, each rendered by the same
+ray-tracing compute path that renders the spectator window, from that eye's own position. Sizes,
+channel counts and layouts vary by preset, and some eyes are sample-direction lists rather than
+rasters. They are deliberately tiny — a few samples to a few tens of thousands — because animal
 eyes are also modest in the terms that matter here, and because a creature must be cheap enough to
 simulate in numbers. See `docs/PERCEPTION.md` for the reasoning behind the sizes and the sensor
 model.
@@ -449,8 +450,11 @@ Practical advice while the interface is pre-1.0: rebuild your brain whenever the
 
 ## Writing a Brain
 
-1. Take `tgl_brain_abi.h` from the world repository. It is a single self-contained C header with no
-   dependency on any world internals.
+**Status: `tgl_brain_abi.h` does not exist yet — it lands with Phase 6. Everything declared above
+is the design, not a shipped API, and it may still change before the header is written.**
+
+1. Transcribe the vtable and the structs from this document until the header ships. It is intended
+   to be a single self-contained C header with no dependency on any world internals.
 2. Implement the five vtable functions and export `tglGetBrainVTable`.
 3. Build as a shared library with C-linkage exports, in whichever language you prefer.
 4. Point the world's creature roster at the resulting `.dll` or `.so`.

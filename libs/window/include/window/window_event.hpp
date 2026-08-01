@@ -72,17 +72,23 @@ namespace WindowLib
             MouseButtonData mouse_button; //!< Mouse button event data.
         };
 
-        //! Default constructor; initialises to Type::None with zeroed union.
+        /*!
+            Default constructor; initialises to Type::None with a zeroed union.
+
+            The largest member is initialised deliberately. Initialising a smaller one leaves the
+            remaining bytes indeterminate, so reading `mouse_move` from a default-constructed event
+            would have read rubbish — and the comment claiming a zeroed union would have been false.
+        */
         WindowEvent() :
             type(Type::None),
-            resize{}
+            mouse_move{}
         {
         }
 
-        //! Constructs an event with the given type and zeroed union.
+        //! Constructs an event with the given type and a zeroed union. See above on the member chosen.
         explicit WindowEvent(Type t) :
             type(t),
-            resize{}
+            mouse_move{}
         {
         }
     };

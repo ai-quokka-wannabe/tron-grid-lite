@@ -53,4 +53,4 @@ For each issue found, report:
 3. **Description** of the issue
 4. **Suggested fix**
 
-If no files are specified via $ARGUMENTS, audit all `.cpp` and `.h` files in `src/`. Summarise with a count of issues by severity at the end.
+If no files are specified via $ARGUMENTS, audit all `.cpp` and `.hpp` files in `src/`. Summarise with a count of issues by severity at the end.

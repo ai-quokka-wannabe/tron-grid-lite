@@ -162,7 +162,14 @@ struct GridFloorConfig {
 */
 struct NeonTubeConfig {
     float half_width{0.01f}; //!< Half the tube width, in metres. The default gives a 2 cm wide strip.
-    float surface_offset{0.005f}; //!< Vertical lift above the surface, in metres, so the tube never z-fights with the floor beneath it.
+    /*!
+        Vertical lift above the surface, in metres, so a tube does not z-fight with the floor.
+
+        The lift is purely vertical while the strip widens horizontally, so on sloping ground the
+        outer edge of a tube gains no extra height. It must therefore exceed `half_width` times the
+        steepest floor gradient, or the strip's outer millimetre sinks below the terrace it crosses.
+    */
+    float surface_offset{0.005f};
     uint32_t major_interval{8u}; //!< Every Nth grid line gets the accent colour. Zero puts every line in the primary sub-mesh.
 };
 
@@ -196,6 +203,26 @@ struct NeonGrid {
     \return World-space Y of the surface at that point, in metres.
 */
 [[nodiscard]] float gridSurfaceHeight(float world_x, float world_z, const GridFloorConfig& config);
+
+/*!
+    Returns the height of the floor **as it is actually drawn**, at a world-space position.
+
+    This is not the same thing as `gridSurfaceHeight`, and the difference is the whole reason this
+    function exists. `gridSurfaceHeight` is the analytic surface, and with terracing it is a step
+    function; the mesh only samples it at grid vertices and interpolates linearly between them, so
+    across a cell that a riser passes through, the drawn triangle is a ramp where the analytic
+    function is a cliff. Anything that must sit *on* the floor has to ask where the floor is, not
+    where the function that generated it would have been — otherwise it hovers or sinks by up to a
+    full terrace step.
+
+    Positions beyond the floor's extent are clamped to its edge.
+
+    \param world_x World-space X, in metres.
+    \param world_z World-space Z, in metres.
+    \param config Floor dimensions and relief.
+    \return World-space Y of the drawn surface at that point, in metres.
+*/
+[[nodiscard]] float gridMeshHeight(float world_x, float world_z, const GridFloorConfig& config);
 
 /*!
     Generates the grid floor: a subdivided plane displaced by `gridSurfaceHeight`.

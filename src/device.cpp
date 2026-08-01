@@ -58,8 +58,19 @@ struct QueueFamilyIndices {
     for (uint32_t i{0}; i < static_cast<uint32_t>(families.size()); ++i) {
         // Graphics support.
         if (families[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-            indices.graphics = i;
-            indices.graphics_has_compute = static_cast<bool>(families[i].queueFlags & vk::QueueFlagBits::eCompute);
+            const bool has_compute{static_cast<bool>(families[i].queueFlags & vk::QueueFlagBits::eCompute)};
+
+            /*
+                A later graphics family never displaces an earlier one that also does compute. This
+                loop used to overwrite unconditionally, so a device whose first family was
+                graphics-plus-compute and whose second was graphics-without-compute would end up
+                selecting the one that cannot dispatch — and this renderer is nothing but compute
+                dispatches.
+            */
+            if ((indices.graphics == UINT32_MAX) || has_compute || !indices.graphics_has_compute) {
+                indices.graphics = i;
+                indices.graphics_has_compute = has_compute;
+            }
         }
 
         // Present support.
@@ -170,7 +181,6 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     if (physical_devices.empty()) {
         m_logger.logFatal("No Vulkan-capable GPU found.");
         std::abort();
-        return;
     }
 
     // Step 2: Score and pick the best device.
@@ -191,7 +201,6 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     if (best_score < 0) {
         m_logger.logFatal("No suitable GPU found (need Vulkan 1.3 with dynamic rendering and synchronisation2, graphics + present queues, and VK_KHR_swapchain).");
         std::abort();
-        return;
     }
 
     m_physical_device = std::move(physical_devices[best_index]);
@@ -210,9 +219,15 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     m_graphics_queue_supports_compute = indices.graphics_has_compute;
 
     if (!m_graphics_queue_supports_compute) {
-        // Every target GPU exposes compute on its graphics family, so this is a warning rather
-        // than a fatal error — but the ray traversal passes cannot be dispatched without it.
-        m_logger.logWarning("Graphics queue family does not support compute; the ray traversal passes will not be dispatchable.");
+        /*
+            Fatal, not a warning. The warning this replaces said in its own words that the traversal
+            passes could not be dispatched — and then execution carried on to record a compute
+            dispatch into a pool created on this very family, which is
+            VUID-vkCmdDispatch-commandBuffer-cmdpool. The outcome is a garbled or hung GPU rather
+            than a clean refusal, and the log line that predicted it scrolls away unread.
+        */
+        m_logger.logFatal("Graphics queue family does not support compute; this renderer is nothing but compute dispatches.");
+        std::abort();
     }
 
     // Step 4: Create the logical device.

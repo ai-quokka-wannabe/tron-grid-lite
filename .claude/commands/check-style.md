@@ -12,12 +12,7 @@ Check against these rules (from `STYLE.md` and `.clang-format`):
 
 ## C++ Naming
 
-- Namespaces: `snake_case`
-- Types/Classes: `PascalCase`
-- Functions: `snake_case`
-- Constants: `SCREAMING_SNAKE_CASE`
-- Variables/Members: `snake_case`
-- Macros: `SCREAMING_SNAKE_CASE`
+- Check against the table in `STYLE.md` § Naming Conventions. It is the only copy; do not restate it here.
 
 ## YAML (GitHub Actions)
 

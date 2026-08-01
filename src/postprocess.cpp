@@ -14,6 +14,7 @@
 
 #include "postprocess.hpp"
 #include "device.hpp"
+#include "vulkan_helpers.hpp"
 #include <algorithm>
 #include <array>
 #include <fstream>
@@ -21,6 +22,9 @@
 
 namespace
 {
+
+    using VulkanHelpers::findMemoryType;
+    using VulkanHelpers::readSpirv;
 
     //! Workgroup size, matching [numthreads(8, 8, 1)] in both post-processing shaders.
     constexpr uint32_t WORKGROUP_SIZE{8u};
@@ -51,37 +55,6 @@ namespace
 
     static_assert(sizeof(BloomPushConstants) == 4u, "bloom_downsample.slang declares a 4-byte push constant block.");
     static_assert(sizeof(PostProcessPushConstants) == 12u, "postprocess.slang declares a 12-byte push constant block.");
-
-    //! Finds a memory type satisfying both the resource's requirements and the requested properties.
-    [[nodiscard]] uint32_t findMemoryType(const vk::raii::PhysicalDevice& physical_device, uint32_t type_bits, vk::MemoryPropertyFlags required)
-    {
-        const vk::PhysicalDeviceMemoryProperties properties{physical_device.getMemoryProperties()};
-        for (uint32_t index{0u}; index < properties.memoryTypeCount; ++index) {
-            if (((type_bits & (1u << index)) != 0u) && ((properties.memoryTypes[index].propertyFlags & required) == required)) {
-                return index;
-            }
-        }
-        throw std::runtime_error{"No memory type satisfies the requested properties."};
-    }
-
-    //! Reads a compiled SPIR-V module from disk.
-    [[nodiscard]] std::vector<uint32_t> readSpirv(const std::string& path)
-    {
-        std::ifstream file{path, std::ios::binary | std::ios::ate};
-        if (!file.is_open()) {
-            throw std::runtime_error{"Failed to open SPIR-V module: " + path};
-        }
-
-        const std::streamsize size_bytes{file.tellg()};
-        if ((size_bytes <= 0) || ((size_bytes % 4) != 0)) {
-            throw std::runtime_error{"SPIR-V module has an invalid size: " + path};
-        }
-
-        std::vector<uint32_t> words(static_cast<size_t>(size_bytes) / 4u);
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(words.data()), size_bytes);
-        return words;
-    }
 
     //! Builds one compute pipeline from a module and an entry point name.
     [[nodiscard]] vk::raii::Pipeline makeComputePipeline(const vk::raii::Device& device, const vk::raii::ShaderModule& module, const char* entry_point,
@@ -192,14 +165,21 @@ void PostProcess::computeBloomExtents()
 {
     m_bloom_extents.clear();
 
-    // Mip 0 is half the output, which is where the extract pass writes. Each level halves again.
-    vk::Extent2D size{std::max(m_extent.width / 2u, 1u), std::max(m_extent.height / 2u, 1u)};
+    /*
+        Mip 0 is half the output, which is where the extract pass writes. Each level halves again.
+
+        Rounded up rather than truncated. At an odd width the truncated mip is one texel short, and
+        the last column of the source is then gathered by no thread at all — a neon tube whose only
+        bright pixels sit in that column contributes no bloom. The window is resizable, so odd
+        extents are reachable, and the truncation repeats at every level.
+    */
+    vk::Extent2D size{std::max((m_extent.width + 1u) / 2u, 1u), std::max((m_extent.height + 1u) / 2u, 1u)};
 
     while (m_bloom_extents.size() < MAX_BLOOM_MIPS) {
         m_bloom_extents.push_back(size);
 
-        const uint32_t next_width{size.width / 2u};
-        const uint32_t next_height{size.height / 2u};
+        const uint32_t next_width{(size.width + 1u) / 2u};
+        const uint32_t next_height{(size.height + 1u) / 2u};
         if ((next_width < MIN_BLOOM_EXTENT) || (next_height < MIN_BLOOM_EXTENT)) {
             break;
         }

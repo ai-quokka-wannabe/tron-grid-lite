@@ -107,8 +107,9 @@ there.
 Habitat, DeepMind Lab, VizDoom, Procgen, MineRL and the vision-language-action robot policies are
 covered in [PERCEPTION.md](PERCEPTION.md#what-embodied-ai-practice-actually-feeds-to-networks),
 where their observation resolutions supply the empirical argument for tiny sensors. The short
-version: a decade of that research converged on observations of 64×64 to roughly 112×112 pixels,
-and published null results show that raising the resolution frequently changes nothing.
+version: a decade of that research converged on observations between 60×45 and 300×300, with a
+mode of 64×64 and a median of 84×84, and published null results show that raising the resolution
+frequently changes nothing.
 
 ## What is actually unusual here
 

@@ -18,7 +18,7 @@ Fixes #(issue number)
 ## Testing
 
 - [ ] I have tested these changes locally
-- [ ] Builds pass on all relevant presets (`cmake --preset <name>`)
+- [ ] Builds and tests pass on all relevant presets (`cmake --workflow --preset=<name>`)
 - [ ] No Vulkan validation layer errors
 
 ## Code Quality
