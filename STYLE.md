@@ -583,12 +583,37 @@ Warnings are errors on all compilers — zero-warning policy:
 
 ### Static Analysis (Clang-Tidy)
 
-Configuration in `.clang-tidy`. Runs via `clangd` in VS Code. Bugprone, analyser, and
-concurrency checks are promoted to errors. To suppress a specific check on a line:
+Configuration in `.clang-tidy`. Bugprone, analyser and concurrency checks are promoted to errors;
+everything else is advisory. To run it over the whole project:
+
+```bash
+cmake --preset linux-x11-clang -DTGL_ENABLE_CLANG_TIDY=ON
+cmake --build build/linux-x11-clang --config Debug
+```
+
+It is **off by default** because it roughly doubles build time, and it is **not yet a CI gate** —
+which is worth saying plainly, because this section previously implied it was enforced when nothing
+executed it at all. `src/` currently passes with zero errors, so promoting it to a gate is a small
+change rather than a cleanup project; it has simply not been done.
+
+`clangd` in VS Code also reads the same configuration, which is where the advisory checks surface
+day to day.
+
+Two of the enabled checks are deliberately overridden:
+
+- `bugprone-easily-swappable-parameters` is disabled outright. It is an opinion about API shape
+  rather than a bug detector, and it fires on every function here that takes an x and a z.
+- `readability-uppercase-literal-suffix` wants `1.0F`. This project writes `1.0f` everywhere, so the
+  check is left advisory rather than being allowed to rewrite the entire codebase.
+
+To suppress a specific check on a line:
 
 ```cpp
 int x = legacy_function(); // NOLINT(bugprone-unused-return-value)
 ```
+
+Note that for a diagnostic reported on a `catch` clause, `NOLINTNEXTLINE` must sit on its own line
+*before* the `catch` keyword — putting it inside the block does not suppress anything.
 
 ### Runtime Sanitisers
 

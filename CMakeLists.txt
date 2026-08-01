@@ -8,9 +8,23 @@ project(TronGridLite
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# STYLE.md described a clang-tidy error gate that nothing executed — no CI step, no CMake
+# integration, no pre-commit hook. Off by default because it roughly doubles build time; the CI
+# quick-checks job turns it on, which is what makes the claim in STYLE.md true.
+option(TGL_ENABLE_CLANG_TIDY "Run clang-tidy as part of the build" OFF)
+
+if(TGL_ENABLE_CLANG_TIDY)
+    find_program(CLANG_TIDY_EXE NAMES clang-tidy REQUIRED)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+    message(STATUS "clang-tidy enabled: ${CLANG_TIDY_EXE}")
+endif()
+
 # Compiler warnings — high level, warnings as errors, all compilers
 if(MSVC)
-    add_compile_options(/EHsc /W4 /WX)
+    # /utf-8 because the sources are UTF-8 without a BOM and MSVC would otherwise decode them in the
+    # active code page — which on this project's own development machine is Windows-1250, and which
+    # has silently mangled em dashes in these files before.
+    add_compile_options(/EHsc /W4 /WX /utf-8)
 else()
     add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 endif()

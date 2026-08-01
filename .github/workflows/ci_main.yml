@@ -2,7 +2,12 @@ name: CI - Main Branch
 
 permissions:
     contents: read
-    actions: write
+
+# Runs are queued rather than cancelled here: unlike a pull request, every commit that lands on main
+# should keep a result of its own.
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: false
 
 on:
     push:
@@ -40,7 +45,7 @@ jobs:
                 key: npm-markdownlint-${{ runner.os }}-node-${{ steps.setup-node.outputs.node-version }}-mdlint-${{ steps.mdlint-version.outputs.version }}
 
             - name: Install markdownlint-cli2
-              run: npm install -g markdownlint-cli2
+              run: npm install -g markdownlint-cli2@${{ steps.mdlint-version.outputs.version }}
 
             - name: Lint markdown
               run: markdownlint-cli2 "**/*.md"
@@ -174,6 +179,11 @@ jobs:
         needs: [quick-checks, build, sanitisers]
         runs-on: ubuntu-latest
         if: always()
+
+        # The only job that needs to delete caches, so the only job that may.
+        permissions:
+            contents: read
+            actions: write
 
         steps:
             - name: Check if all jobs succeeded

@@ -642,8 +642,11 @@ int main(int argc, char** argv)
             {
                 try {
                     device->get().waitIdle();
-                } catch (...) {
-                    // Nothing useful can be done here, and the original exception matters more.
+                }
+                // NOLINTNEXTLINE(bugprone-empty-catch) — see above: this runs during unwinding.
+                catch (...) {
+                    // Deliberately swallowed. Throwing from a destructor while an exception is in
+                    // flight calls std::terminate and destroys the diagnostic that matters.
                 }
             }
         } idle_guard{&device};
@@ -844,7 +847,19 @@ int main(int argc, char** argv)
 
         logger.logInfo("Shutting down cleanly.");
     } catch (const std::exception& error) {
-        logger.logFatal(std::string{"Fatal error: "} + error.what());
+        /*
+            The report is itself allowed to fail. Building the message allocates, and the likeliest
+            reason to be down here in the first place is that allocation has stopped working — so an
+            exception escaping `main` would replace a described failure with a bare terminate.
+        */
+        try {
+            logger.logFatal(std::string{"Fatal error: "} + error.what());
+        }
+        // NOLINTNEXTLINE(bugprone-empty-catch) — the exit code below is the whole report now.
+        catch (...) {
+            // Deliberately swallowed: there is nothing left that could report anything.
+        }
+
         return EXIT_FAILURE;
     }
 
