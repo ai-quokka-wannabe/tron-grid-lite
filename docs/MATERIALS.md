@@ -29,7 +29,9 @@ it:
   spawns two children (reflected and refracted), and the tree is capped at a shallow fixed depth,
   so the total ray count per pixel is a small constant known in advance.
 - **A deterministic ray tree has no Monte Carlo variance.** There is nothing to average, so there
-  is no noise. Two consecutive frames from the same camera pose are bit-identical.
+  is no noise. Two consecutive frames from the same camera pose are bit-identical on the same device;
+  across GPUs they are close but not identical, which
+  [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md#determinism-is-per-device-and-this-is-measured-rather-than-assumed) measures.
 - **Therefore there is no denoiser.** No temporal accumulation, no à-trous wavelet passes, no
   history buffers, no reprojection, no disocclusion handling, no warm-up phase — and none of the
   ghosting, lag or edge-leak artefacts that come with them.

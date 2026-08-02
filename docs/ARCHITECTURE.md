@@ -287,7 +287,8 @@ One compute shader does the entire image. Each invocation owns one pixel of one 
 6. Repeat to a fixed maximum depth, then terminate. The ray tree is shallow and bounded by construction.
 
 Because there is no random sampling anywhere in this loop, the output is **noise-free and reproducible**. The same
-Grid state and the same camera produce a bit-identical image. That is what makes a denoiser unnecessary and what makes
+Grid state and the same camera produce a bit-identical image **on the same device** — see PROGRAM_INTERFACE.md § Determinism
+and Replay for what changes across GPUs, which is measured rather than assumed. That is what makes a denoiser unnecessary and what makes
 creature training runs reproducible.
 
 The recursion is written as an explicit iterative loop with a small ray stack — compute shaders have no recursion, and

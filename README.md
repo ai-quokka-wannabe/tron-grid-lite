@@ -56,6 +56,24 @@ against delay — at an ear. One Grid, two senses, one traversal.
 What remains is Phase 6: the interface a Program plugs into, so that something can finally perceive
 any of it.
 
+## Choosing a GPU
+
+`--list-gpus` reports every Vulkan device on the machine, whether it can run the renderer, and why
+not if it cannot. `--gpu <index>` forces one, overriding the score that otherwise always prefers a
+discrete device.
+
+```text
+Vulkan devices on this machine: 2.
+  [0] AMD Radeon(TM) Graphics — integrated, Vulkan 1.3.260 — USABLE, score 1100. Run with --gpu 0.
+  [1] NVIDIA GeForce GTX 1650 Ti — discrete, Vulkan 1.4.341 — USABLE, score 10100. Run with --gpu 1.
+```
+
+Both of those are exercised on every change worth the name. **Pixels are bit-identical on one
+device and close but not identical across two** — cross-device identity is not reachable, because
+IEEE-754 pins neither fused-multiply-add contraction nor the transcendentals. The difference is
+measured rather than assumed; see [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md)
+§ Determinism and Replay.
+
 ## Platforms
 
 | Platform | Windowing | Status |

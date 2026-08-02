@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole thing remains deterministic. Glass slabs and a glowing translucent column now stand in the
   scene. 13.7 ms at 1280x720 on a GTX 1650 Ti — but see the note below on how that was measured.
 
+- **`--list-gpus`** reports every Vulkan device on the machine, whether it can run the renderer, and
+  **why not** if it cannot — "no suitable GPU found" being about the least actionable message a
+  renderer can print. **`--gpu <index>`** forces one, overriding a score that otherwise always prefers
+  the discrete device. Both exist for cross-vendor testing rather than for configuration.
+
 ### Changed
 
 - **Device memory is sub-allocated** (`src/memory_arena.hpp`). A bump allocator hands out offsets into
@@ -272,6 +277,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tools/` gained a README, a requirements file and a `.venv` placeholder.
 
 ### Fixed
+
+- **Device scoring rewarded compute on the graphics family instead of requiring it**, which was a
+  real selection bug rather than a cosmetic one. This renderer is nothing but compute dispatches, and
+  the constructor aborts on a device that cannot dispatch them — but scoring gave such a device 10,000
+  points for being discrete, so it beat a perfectly capable integrated device on 1,110, got selected,
+  and killed the process while a working GPU sat unused. Now rejected during scoring, so the loop
+  simply passes over it.
+- **The ABI promised bit-identical pixels without saying on what.** `docs/PROGRAM_INTERFACE.md` stated
+  that "the same camera pose on the same Grid yields bit-identical pixels", and concluded that
+  replaying a recorded run must reproduce the same actions. Measured across this machine's two GPUs on
+  the same twelve frames: **16.4 % of colour channels differ, the largest by 224 of 255.** The
+  guarantee holds per device and does not survive changing one, which matters because it is exactly
+  the sort of promise a training pipeline gets built on.
+
+  Cross-device identity is not reachable and is now stated as a non-goal: IEEE-754 pins the four
+  arithmetic operations and `sqrt`, but pins neither fused-multiply-add contraction nor how `sin`,
+  `cos` and `pow` are implemented, and two vendors' shader compilers choose differently. The target is
+  small and measured rather than zero. The replay conclusion survives intact, because replaying
+  recorded senses feeds back *pixels*, not poses — so the rule is **record senses, never poses**. And
+  the divergence has a use: a Program whose behaviour changes when a pixel moves by two parts in 255
+  has learned the graphics card rather than the Grid, which running both devices makes cheap to find
+  out.
+- **`tools/record_flyby.py` no longer takes a path at all.** `--executable <path>` is replaced by
+  `--preset` and `--config`, both checked against constant tuples, so nothing from the command line
+  is ever resolved on the filesystem or handed to a subprocess. The build layout is fixed by
+  `CMakePresets.json`, so a preset and a configuration say everything a path could — and the flag it
+  replaces could name any binary on the machine, which is a sharper tool than recording a flyby
+  needs. This is what CodeQL had been objecting to, twice; the objection was right about the shape
+  even though the previously-dismissed alerts were correctly dismissed as unexploitable.
+- **`tools/record_flyby.py` validated none of its numeric options.** `--frames -5 --render-width 0`
+  was accepted, announced as "Rendering -5 frames at 0x720", and then failed inside the renderer as a
+  bare exit code — the complaint arriving from the wrong process, about a value the script had held
+  all along. Every numeric flag now carries an inclusive range, checked by `argparse` before anything
+  is launched, and says what it wanted when it refuses.
+- **The recorder preferred the Debug build over Release.** Both produce byte-identical recordings —
+  verified — but Debug runs several times slower with the validation layers instrumenting every
+  dispatch, so the old ordering merely wasted minutes. Release is now tried first.
+- `tools/record_flyby.py` forced the renderer's working directory to the executable's own, justified by
+  a comment saying it "loads its compiled shaders from beside itself". It does — from its *executable*
+  path, deliberately, so that the working directory does not matter. The workaround outlived its
+  reason by some months and is gone.
 
 - **`docs/ARCHITECTURE.md` claimed `SignalsLib::Signal<T>` was "lifetime-safe via `weak_ptr`".** The
   class contains no `weak_ptr` at all — it is a mutex and a `std::queue`. That comment described an
