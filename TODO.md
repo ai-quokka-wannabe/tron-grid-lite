@@ -172,6 +172,36 @@ keeps the output bit-identical between runs, which a reproducible recording requ
 
 ## Journal
 
+### 2026-08-02 (evening)
+
+- **Every acoustic surface is now a perfect mirror.** Absorption removed, transmission stated as a
+  decision rather than a deferral. `acoustics.cpp` 225 → 122 lines, and the ray payload lost its
+  throughput scalar — it carries accumulated path length and nothing else, which makes the trace
+  fully band-agnostic and so lets one gather serve any listener's band edges.
+- `airAbsorptionDbPerKm` went too, and with it an extrapolation above 8 kHz I had flagged as
+  untrustworthy the same day I wrote it. Per-band air absorption is authored per listener beside the
+  band edges from the same audiogram. Nothing simulates air.
+- Recorded the rule that **nothing on the Grid sounds continuously**. The compute saving is smaller
+  than it looks — the gather was already cacheable, being a pure function — but the perceptual reason
+  is decisive: a continuous tone carries almost no delay information, since every arrival overlaps
+  every other. Onsets are what make a delay measurable. The worm scrape falls out correctly as easy to
+  detect and hard to range, which nobody designed in.
+- **A test that had never tested what it claimed.** The parallel-plate scene used a 200 m sounding
+  floor, so a shallow *direct* ray reached fifteen metres exactly as the ceiling echo did — the
+  "reflected arrival" assertion was satisfied by direct rays and proved nothing about reflection. The
+  sounding patch is now 3 m, which separates direct (bins 14–19) from reflected (43–45) by arithmetic,
+  and the tests now assert the gap between them is empty.
+- **A docs/code disagreement found while rewriting.** `ACOUSTICS.md` gave spreading as `1/(4πd²)`;
+  the code implements `1/max(d², 1)`. Both departures are deliberate and neither was written down —
+  the `4π` folds into a source scale that is relative by construction, and the one-metre floor is the
+  Grid's own unit and is what makes "no arrival exceeds its source strength" a checkable invariant.
+- **The documentation debt is paid.** `ACOUSTICS.md` had carried a checklist of nine documents
+  describing states the code had left behind; eight were already fixed and the last two — `VISION.md`
+  claiming sound passes through glass, and `README.md` principle 5 — are done. Its correction to
+  `PERCEPTION.md` is applied in both places it named. The checklist is kept as a record of the
+  pattern: every entry was a document confidently asserting a *layout* it did not own, and unlike code
+  a stale layout claim does not fail to compile.
+
 ### 2026-08-02 (afternoon)
 
 - **Phase 5 has a model.** The CPU gather, the acoustic material table, the ISO 9613-2 air absorption

@@ -407,25 +407,105 @@ floats**: three absorption coefficients, one scattering scalar, three transmissi
 materials lens concluded that the honest minimum is **one authored float** — a broadband absorption
 coefficient — with a scattering coefficient alongside it defaulted to zero.
 
-### The resolution: one authored float for the surface, one for the source, and no scattering at all
+### The resolution: no surface response at all, and one authored float for the source
 
-This document goes further than either lens in one direction and one step back in another.
-**`acoustic_absorption`, one broadband float per material, is the whole of the *surface response*
-model.** No bands, no scattering, no transmission.
+This document goes further than either lens, in the direction of less. **Every surface on the Grid is
+a perfect acoustic mirror: no absorption, no scattering, no transmission and no frequency dependence.**
+There is no acoustic surface-response model, and therefore no acoustic material table.
 
-One further float is unavoidable and is not a surface response at all: **`acoustic_source_strength`,
-the acoustic counterpart of `emission`**, because the neon hums and because optical emission is the
-wrong selector — the six pillars are `makeEmissive` and the glowing column is `makeGlowingGlass`, and
+One float per material remains and it is not a surface response: **`acoustic_source_strength`, the
+acoustic counterpart of `emission`**, because the neon hums and because optical emission is the wrong
+selector — the six pillars are `makeEmissive` and the glowing column is `makeGlowingGlass`, and
 neither is meant to sing. A gather keyed on `material.emission` would find 16,724 triangles where the
-design calls for 16,640. So: **two floats per material, twelve floats, 48 bytes for the entire
-acoustic material table.**
+design calls for 16,640. So: **one float per material, six floats, 24 bytes for the entire acoustic
+table**, and it is a source table rather than a material one.
 
-The argument for keeping it at two is the same argument `components.hpp` already makes for the optical
-model, and it is worth stating in the same shape. The optical model is not a simplification of
-physically-based rendering; it is PBR at the smooth limit, where the microfacet distribution collapses
-to a delta function and the BRDF reduces analytically to Fresnel-weighted mirror reflection plus Snell
-refraction. **The acoustic model should have the same character: not a cheap approximation, but the
-correct closed form for the geometry the Grid actually contains.**
+The argument is the same argument `components.hpp` already makes for the optical model, and it is
+worth stating in the same shape. The optical model is not a simplification of physically-based
+rendering; it is PBR at the smooth limit, where the microfacet distribution collapses to a delta
+function and the BRDF reduces analytically to Fresnel-weighted mirror reflection plus Snell refraction.
+**The acoustic model has the same character: not a cheap approximation, but the correct closed form for
+the geometry the Grid actually contains**, which is flat hard specular surfaces and nothing else.
+
+#### Absorption was modelled, and then removed on its own numbers
+
+An earlier revision of this document authored one broadband absorption coefficient per material —
+0.02 for the floor and the tubes, 0.03 for the pillars, slabs and column. The analysis that produced
+those values is preserved in the subsections below, because it is what justifies deleting them.
+
+Three of its own findings point the same way:
+
+- **The term is the smallest in the model by an order of magnitude.** At `alpha = 0.02` ten bounces
+  cost `0.98¹⁰ = 0.817`, which is 0.88 dB. Over the same distance spherical spreading costs tens of
+  decibels. And ten bounces is already generous: on an open plane rays escape after one or two, so the
+  realistic figure is nearer **0.2 dB**.
+- **The measurement uncertainty exceeds the value.** Treble's documentation states that measured
+  absorption coefficients "can have errors of about ±0.2" — for a hard surface at 0.03, a nominal
+  uncertainty several times the number itself. Vorländer's 2013 review concludes that predicting
+  reverberation times better than the just-noticeable difference "requires input data in a quality
+  which is not available from reverberation room measurements". **A term whose error bar exceeds its
+  value is decoration rather than physics.**
+- **The impedance model already said "perfect mirror".** Air is about 415 rayl against glass at some
+  `13 × 10⁶` rayl, and `R = (Z2 - Z1)/(Z2 + Z1)` gives `|R| = 0.99994`, an absorption of order
+  `1.3 × 10⁻⁴`. That figure was previously cited as a reason absorption must be *authored* rather than
+  derived. With authoring removed, **the model now uses the derived answer** — which is the one the
+  physics of a hard planar interface actually gives.
+
+What bounds the response instead is the range cap, the reflection order cap, spherical spreading and
+air absorption. Each of those is larger than the term removed, and the first two are hard bounds
+rather than attenuations.
+
+**The regime in which this is correct, stated so it can be checked later.** A lossless reflector is
+safe only because the Grid is an open half-space: rays leave and do not return, total accumulated path
+is capped at 20 m, and reflection order is capped at 4, so nothing can accumulate without bound.
+Enclose any part of the Grid — a room, a tunnel, a lid over a terrace hollow — and perfect mirrors
+would ring forever. **That is the trigger for reopening this decision, and it is a geometry decision
+rather than an acoustic one.**
+
+#### What the ray actually carries
+
+With no surface term at all, the energy delivered along one path in band `b` is:
+
+```text
+E_b = S_b * spreading(d) * 10^(-a_b * d / 10)
+```
+
+where `d` is the total accumulated path. **Every band-dependent factor now depends only on `d`**, so
+a ray carries exactly one number — its accumulated path length — and populates an N-band histogram
+exactly, not approximately, at a cost of N multiplies per recorded arrival. The earlier revision
+needed a throughput scalar beside the path length; it no longer exists.
+
+That has a payoff worth naming, because it settles an architectural question the roster raises. The
+presets do not share band edges: `elegans`, `rodent` and `macropod` have three disjoint sets. Because
+the trace is band-agnostic, **the same gather serves any band set**, and the band edges are applied
+only where the arrival is deposited. One solve per ear, each ear using its own edges, is therefore
+both the biologically correct answer and the cheap one — which is exactly what the budget table
+assumes.
+
+#### Spreading: explicit, and floored at one metre
+
+Spreading is applied **explicitly**, never as a detection sphere. The two are mutually exclusive and
+mixing them double-counts; detection spheres exist to make a stochastic ray count converge in a closed
+room, and the Grid is an open plane with a point receiver it can afford. The failure mode of getting
+this wrong is a silent 6 dB per doubling that reads as a material problem.
+
+The implemented form is `1 / max(d², 1)` rather than `1 / (4 π d²)`, and both departures are
+deliberate:
+
+- **The `4π` is dropped** because it is a constant factor and there is no reference level anywhere on
+  the Grid — source strength is relative by construction, so the constant is already inside it.
+  Restoring it would rescale every arrival by the same amount and change nothing a creature could
+  detect.
+- **The one-metre floor is not cosmetic, and one metre is not arbitrary.** The metre is the Grid's
+  unit: the world is right-handed, Y-up and measured in metres, the floor is built on a two-metre
+  cell, and every dimension in this document is quoted in them. Taking the reference at one unit is
+  therefore the natural choice rather than a tuned one.
+
+  It also earns its place mechanically. Without a floor, a ray grazing a tube it is almost touching
+  divides by an arbitrarily small number and deposits an arbitrarily large amount of energy into a
+  single bin. With it, a unit source at one metre arrives at unit strength and nothing closer is
+  amplified — which turns "no arrival exceeds the source strength" into a checkable invariant, and it
+  is checked in `src/tests/acoustics_tests.cpp`.
 
 #### Why the source term is a scalar and not a spectrum
 
@@ -440,47 +520,6 @@ It also keeps the door open honestly. A creature vocalisation is a point source 
 carries its own spectrum in its own descriptor, and never touches the material table. If a second
 *surface* spectrum is ever wanted — a machine that whines where the tubes hum — that is the concrete
 second use case, and a `float4` per material is what it costs. Not before.
-
-#### Why not per-band absorption
-
-Frequency dependence is real for porous and resonant absorbers and negligible for everything on the
-Grid. The pyroomacoustics materials database gives smooth unpainted concrete `0.01 … 0.05` across
-125 Hz to 8 kHz, rendered brickwork `0.01 … 0.04`, 3 mm glass `0.08 … 0.02`. Converted to what a
-renderer multiplies by, those are losses of **under 0.3 dB per bounce**, and under about 3 dB after
-ten bounces, most of it concentrated in the 125 Hz band where the geometry is invalid anyway. The one
-material in that table that genuinely needs bands is carpet, which swings by a factor of eleven. There
-is no carpet here, no drape, no porous absorber, and by design there never will be.
-
-The decisive argument is structural rather than numerical. Write the energy delivered along one path
-in band `b`:
-
-```text
-E_b = S_b * prod_i (1 - alpha_i) * (1 / (4 * pi * d^2)) * 10^(-a_b * d / 10)
-```
-
-If `alpha` is band-independent, the bounce product and the spreading term are shared by every band, and
-**the only band-dependent factors are the source spectrum `S_b`, applied once at emission, and the air
-term `a_b`, which depends only on the total path length `d`.** Both can be applied at the moment the
-arrival is written into the histogram. So a single broadband ray, carrying one throughput scalar and
-one accumulated path length, populates an N-band histogram **exactly** — not approximately — at a cost
-of N multiplies per recorded arrival.
-
-That has a second payoff worth naming, because it settles an architectural question the roster raises.
-The presets do not share band edges: `elegans`, `rodent` and `macropod` have three disjoint sets. With
-band-independent absorption the *trace* is band-agnostic, so the same gather serves any band set, and
-the band edges are applied only where the arrival is deposited. One solve per ear, each ear using its
-own edges, is therefore both the biologically correct answer and the cheap one — which is exactly what
-the budget table assumes.
-
-Make `alpha` banded and both collapse: the product differs per band, must be carried down the ray, the
-payload becomes N floats with N multiplies per bounce, and a ray becomes specific to one listener's
-band edges. In this renderer that is the expensive direction, and it is expensive for a reason the
-repository has already measured. The sweep table in `trace.slang` shows the task stack rising from 3
-to 6 costing 15.24 ms to 19.00 ms at depth six, with the note that the two axes "cost roughly a
-doubling across the range, and they multiply rather than add". Register-resident per-thread state is
-the measured cost driver here. **Bands belong in the histogram, not in the material and not in the
-ray.** That decision is also reversible without touching the trace or the material buffer, which is
-exactly the kind of decision this repository likes to keep cheap.
 
 #### Why not a scattering coefficient
 
@@ -546,58 +585,59 @@ a transmitted energy fraction near `5 × 10⁻⁴` against a reflected fraction 
 magnitude down. It only ever matters when the direct path *and* every reflected path are simultaneously
 blocked, which on an open floor with strong terrace bounces essentially cannot happen. Even Steam
 Audio, which does carry a three-band transmission array, documents it as "only used for direct
-occlusion calculations" and never carries it through the reflection tree. Defer it, and if it is ever
-added, follow that precedent exactly.
+occlusion calculations" and never carries it through the reflection tree.
+
+**This is now a decision rather than a deferral.** Representing transmission honestly needs a
+thickness, a transmission coefficient and an interface model — the acoustic counterpart of exactly the
+microfacet machinery the optical side deliberately does without. On the Grid a slab is an obstacle,
+and behind one there is quiet. If it is ever added, follow Steam Audio's precedent exactly: direct
+occlusion only, never through the reflection tree.
 
 There is a pleasing inversion worth recording. Optically, glass is the most interesting material on
 the Grid: transmission towards 1, Snell refraction, total internal reflection, the whole apparatus of
-[MATERIALS.md](MATERIALS.md). Acoustically the same slab is a near-perfect mirror with `alpha ≈ 0.03`
-and `tau ≈ 0.0005`. **The one surface the optical renderer treats as transparent is the one the
-acoustic renderer treats as most opaque** — which means a creature with both senses gets information
-neither alone provides. That is "one Grid, two senses" earning its keep rather than merely being
-asserted.
+[MATERIALS.md](MATERIALS.md). Acoustically the same slab is a perfect mirror. **The one surface the
+optical renderer treats as transparent is the one the acoustic renderer treats as most opaque** —
+which means a creature with both senses gets information neither alone provides. That is "one Grid,
+two senses" earning its keep rather than merely being asserted.
 
-#### There is no acoustic Fresnel, and this is the genuine asymmetry
+#### There is no acoustic Fresnel, and the impedance model is why the mirror is perfect
 
 The optical model authors one number, the index of refraction, and derives both `F0 = ((n-1)/(n+1))²`
-and the refraction direction from it. The acoustic version of that derivation collapses. Air's
-characteristic impedance is about 415 rayl; glass is around `13 × 10⁶` rayl, a mismatch of some 30,000
-to 1. Feeding those into `R = (Z2 - Z1)/(Z2 + Z1)` gives `|R| = 0.99994` and `alpha` of order
-`1.3 × 10⁻⁴` — a perfect acoustic mirror. The measured coefficient for a 3 mm pane is 0.02 to 0.08,
-two to three orders of magnitude higher, because real absorption at a hard surface comes from panel
-flexure, resonance, mounting and edge losses that a bulk impedance model knows nothing about.
+and the refraction direction from it. The acoustic version of that derivation does not collapse — it
+answers, and the answer is the model this document now uses.
 
-So absorption must be **authored**, not derived. It is the one acoustic parameter with no optical
-counterpart, and any attempt to compute it from a "sonic IOR" would produce a world in which nothing
-ever decays. The documentation should say this plainly rather than pretending the symmetry between the
-two senses is complete. The source strength is authored for the same reason and one further one: there
-is no reference level on the Grid at all, so the number is relative by construction.
+Air's characteristic impedance is about 415 rayl; glass is around `13 × 10⁶` rayl, a mismatch of some
+30,000 to 1. Feeding those into `R = (Z2 - Z1)/(Z2 + Z1)` gives `|R| = 0.99994`, an absorption of
+order `1.3 × 10⁻⁴`. **A hard planar interface between air and anything on the Grid is a perfect
+acoustic mirror**, and that is what the Grid implements.
 
-#### Values, and how uncertain they are
+The measured coefficient for a real 3 mm pane is 0.02 to 0.08, two to three orders of magnitude
+higher, because real absorption at a hard surface comes from panel flexure, resonance, mounting and
+edge losses that a bulk impedance model knows nothing about. **The Grid has none of those.** Its
+surfaces are mathematical planes: no panel to flex, no frame to mount in, no edges but the ones the
+triangulation draws. Adopting a measured coefficient would have imported the losses of a physical
+installation into a world that has no installation, which is a stranger choice than it first looks.
 
-| Material | `acoustic_absorption` | `acoustic_source_strength` | Basis |
-|----------|----------------------|----------------------------|-------|
-| Floor | 0.02 | 0 | Polished hard surface; the most consequential number in the model, because every path touches it |
-| Pillar | 0.03 | 0 | Hard surfaces, average. Optically emissive, acoustically silent — the whole reason the source term is authored separately |
-| Glass slab | 0.03 | 0 | 3 mm glass, mid-band |
-| Glowing glass column | 0.03 | 0 | As the slabs; likewise emissive and likewise silent |
-| Neon primary | 0.02 | 1.0 | Glass envelope. The unit of the scale: every other strength is relative to a primary tube |
-| Neon accent | 0.02 | 1.0 | Identical hardware to the primary; the two differ in gas colour, which is an optical property and not an acoustic one |
+So the asymmetry with the optical side is real but it runs the other way from what was expected. The
+optical model derives Fresnel from an authored index and gets a *partial* reflector; the acoustic
+model derives its reflectance from published impedances and gets a *total* one. Neither authors a
+loss. What must still be authored is the source strength, and for a reason with no optical
+counterpart: there is no reference level anywhere on the Grid, so the number is relative by
+construction.
 
-Six materials, two floats each: **48 bytes for the entire acoustic material model.**
+#### Values
 
-Two honesty notes belong beside those numbers. Treble's documentation states that measured absorption
-coefficients "can have errors of about ±0.2" — for a hard surface at 0.03 that is a nominal uncertainty
-several times the value itself. Vorländer's 2013 review concludes that predicting reverberation times
-better than the just-noticeable difference "requires input data in a quality which is not available
-from reverberation room measurements". **The input data are worse than the algorithms**, and that is a
-licence to keep the model small, not a defect to engineer around. MATERIALS.md accepts Schlick's
-approximation on a 1 % error budget; the acoustic equivalent is roughly twenty times more permissive.
+| Material | `acoustic_source_strength` | Basis |
+|----------|----------------------------|-------|
+| Floor | 0 | Reflects; does not sing |
+| Pillar | 0 | Optically emissive, acoustically silent — the whole reason this table is authored rather than derived from `emission` |
+| Glass slab | 0 | Reflects; does not sing |
+| Glowing glass column | 0 | Likewise emissive and likewise silent |
+| Neon primary | 1.0 | The unit of the scale: every other strength is relative to a primary tube |
+| Neon accent | 1.0 | Identical hardware to the primary; the two differ in gas colour, which is an optical property and not an acoustic one |
 
-Put the decay in proportion while the numbers are in hand. At `alpha = 0.02`, ten bounces cost
-`0.98¹⁰ = 0.817`, which is **0.88 dB**. Over the same 128 m, spherical spreading costs about 42 dB from
-a one-metre reference and air absorption at 8 kHz costs 9.8 dB. **Surface absorption is the smallest
-term in the entire model by an order of magnitude**, which is the final reason one float carries it.
+Six materials, one float each: **24 bytes for the entire acoustic table**, and every reflective
+property that used to sit beside them is gone. The implementation is `Acoustics::makeAcousticSourceStrengths`.
 
 ### Where it lives: a parallel buffer, not a third row on `Material`
 
@@ -613,10 +653,10 @@ buffer and which GPU-assisted validation reported. The reverse — host wider th
 reads the wrong material for every triangle, with no validation error and no assert that fires.
 Nothing in the repository guards that direction.
 
-**Recommendation: put the two acoustic floats in a separate `StructuredBuffer<float2>` indexed by the
-same material index, bound only by the acoustic pass.** `Material` stays 32 bytes, its asserts stay
+**Recommendation: put the acoustic source strength in a separate `StructuredBuffer<float>` indexed by
+the same material index, bound only by the acoustic pass.** `Material` stays 32 bytes, its asserts stay
 untouched, `trace.slang` is not modified at all, the visual pass never binds the acoustic table, and
-the buffer is twelve floats. The silent-failure window never opens.
+the buffer is six floats. The silent-failure window never opens.
 
 This does brush against design principle 5 as README.md currently words it — "surfaces carry optical
 and acoustic properties together" — and that wording should be adjusted rather than the design bent to
@@ -666,11 +706,17 @@ to move the edges — they come from the audiogram, not from convention — but 
 that below about 500 Hz the Grid delivers `elegans` an energy figure whose spatial structure it cannot
 vouch for.
 
-This is the one correction to PERCEPTION.md this document proposes, and it must be made in two places:
-the acoustic section, which quotes "6–9 octave bands" as the real-time tolerance, and binding rule 10,
-which repeats it and also prescribes "per-block interpolation" that a repository with no waveform never
-performs. The offline figure is right for offline work; the shipping systems are tighter, and the
-reason is an engineering one this project shares exactly.
+This was the one correction this document asked of PERCEPTION.md, and **it has been made**, in the two
+places it needed making: the acoustic tolerances section, which quoted "6–9 octave bands" as the
+real-time figure, and binding rule 10, which repeated it and additionally prescribed "per-block
+interpolation". The offline figure is right for offline work; the shipping systems are tighter, and
+the reason is an engineering one this project shares exactly.
+
+The interpolation clause was the worse of the two, because it prescribed a technique this repository
+cannot perform: there are no blocks, no waveform, no sample stream and no audio rate — an energy
+histogram is delivered per tick and nothing between ticks is interpolated. It would also have collided
+with binding rule 6, which forbids adding temporal smoothing for a Program's benefit unless the
+biology has an equivalent.
 
 ### Time bins: 1 ms, not 4 ms
 
@@ -896,9 +942,11 @@ transients. Shooting from 16,640 triangles is not merely expensive, it is the wr
 **Gathering finds them by hitting them**, which is exactly what `trace.slang` already does with
 `material.emission`, and the cost is completely independent of how many tubes there are.
 
-Air absorption barely touches the fundamental: interpolating ISO 9613-2's 20 °C / 70 % table between
-2 kHz (9.0 dB/km) and 4 kHz (22.9 dB/km) gives roughly 14 dB/km at 3 kHz, so about 1.8 dB across the
-entire 128 m of the Grid. The harmonics are where the spectral tilt appears — 8 kHz loses 9.8 dB over
+Air absorption barely touches the fundamental. ISO 9613-2's 20 °C / 70 % row gives 9.0 dB/km at 2 kHz
+and 22.9 dB/km at 4 kHz, which places 3 kHz at roughly 14 dB/km — about 1.8 dB across the entire 128 m
+of the Grid. (That figure is quoted here to size the effect; the renderer does not interpolate the
+table at all, because per-band absorption is authored per listener rather than computed. See
+[The Build Proposal](#the-build-proposal).) The harmonics are where the spectral tilt appears — 8 kHz loses 9.8 dB over
 the same span — and that tilt is a genuine, learnable distance cue on the Grid, where vision is
 deliberately unreliable.
 
@@ -912,6 +960,66 @@ delivers echolocation for free once hearing exists, and it is the case that exer
 enumeration path. It is Phase 5b, not a competitor.
 
 ---
+
+### The hum pulses, and nothing on the Grid sounds continuously
+
+**Decision: every source on the Grid is pulsed, one-shot or modulated. There is no steady tone
+anywhere.** The neon does not hold a 3 kHz sine; it pulses — an electric *wroom … wroom … wroom*
+rather than a test tone. A creature vocalising emits a call and stops, as an animal does. A worm
+dragging itself across the floor scrapes, which is sustained but noisy and modulated by its own gait
+rather than held at a level.
+
+This costs nothing to honour, and the reason is structural. **The gather computes an impulse response,
+and a source's behaviour in time is not part of it.** The histogram answers "if this source fired an
+impulse now, where in time does its energy arrive" — a property of the geometry alone. What the source
+actually does in time is an envelope multiplying that response at delivery. A pulse, a one-shot call
+and a scrape are therefore the same object with three different envelopes, and none of them changes a
+line of the traversal, a byte of the histogram layout, or anything in `Acoustics::gather`.
+
+#### Why it matters, which is not the reason it first looks like
+
+The obvious argument is that a source which is silent most of the time is cheaper. That argument is
+weak here and should not be leaned on: the gather is a pure function of the Grid, the ear and the
+config, so a solve whose inputs have not changed is already skippable whether the source is sounding
+or not. Pulsing saves nothing in the traversal. Where it does save is further downstream, in Phase 6
+delivery — on a tick where nothing is sounding and no echo is in flight there is no buffer to write,
+no ABI traffic and no Program-side work at all.
+
+**The real argument is perceptual, and it is much stronger.** A continuous tone carries almost no
+delay information. Every arrival overlaps every other, so a listener receives a steady level with no
+temporal structure to measure, and the 1 ms bins with their 17.2 cm of range resolution would be
+describing something no creature could extract from the signal. **Onsets are what make a delay
+measurable**, which is precisely why bats emit pulses rather than tones, and why Schnitzler and Kalko
+describe the terminal buzz as a *repetition rate* climbing to 180–200 Hz rather than as a sound
+getting louder.
+
+Put plainly: a continuously humming Grid would compute a beautiful impulse response that no creature
+on the roster could use. Pulsing is what makes the histogram worth computing at all.
+
+#### The asymmetry it produces, which is correct and was not designed in
+
+A sharp onset carries range information; a soft or sustained one does not. So the three source types
+on the Grid are not equally informative, and the ordering falls out of the physics rather than out of
+a design decision:
+
+| Source | Onset | What a creature can get from it |
+|--------|-------|---------------------------------|
+| Creature vocalisation | Sharp | Direction and range. This is echolocation, and it is why Phase 5b exists |
+| Pulsed neon | Moderate | Direction well, range coarsely — a rhythmic bed that says where the Grid's furniture is |
+| Worm scrape | None to speak of | Direction, and presence. Range is genuinely unavailable |
+
+**A scraping worm is easy to detect and hard to range.** That is exactly true of a scraping animal in
+the real world, and it is worth stating explicitly that nothing in the model was written to produce
+it. It falls out of a sustained source having no onset to measure a delay from — the same arithmetic,
+applied to a different envelope.
+
+#### What is deliberately not specified here
+
+The envelope shapes themselves — the neon's period and duty cycle, a call's attack and decay, the
+scrape's modulation depth — are **not** settled in this document and must not be guessed at in code.
+They are a scene-and-creature decision belonging to whoever authors the pulse and the creature, in the
+same way band edges belong to the audiogram. What this section fixes is only the rule that no source
+is ever a constant, and the architecture that makes honouring it free.
 
 ## What Phase 5 Rejects
 
@@ -1043,19 +1151,28 @@ Each of these has a written trigger, so that "later" means something checkable.
   currently private members of `Tracer` with no accessor; the acoustic pass is the concrete second use
   case the repository's own rule demands before a small extraction, so either add three accessors or
   hoist buffer ownership into a small `World` holder.
-- **Acoustic materials.** A new `StructuredBuffer<float2>` of six `(absorption, source strength)`
-  pairs, indexed by the same material index, bound only by the acoustic pipeline. `Material`,
-  `trace.slang` and all six `static_assert`s are untouched.
+- **Acoustic source strengths.** A new `StructuredBuffer<float>` of six source strengths, indexed by
+  the same material index, bound only by the acoustic pipeline. There is no absorption term and no
+  acoustic material table: every surface is a perfect mirror. `Material`, `trace.slang` and all six
+  `static_assert`s are untouched. Implemented as `Acoustics::makeAcousticSourceStrengths`.
 - **The hum spectrum.** One `float4` per solve, the Grid's 3 kHz fundamental and its harmonics resolved
   into the listening ear's four bands. It is a push constant, not a material field, because every
   sounding surface on the Grid shares it.
-- **Air absorption.** An eight-entry constant table from ISO 9613-2's 20 °C / 70 % row (0.1, 0.3, 1.1,
-  2.8, 5.0, 9.0, 22.9, 76.6 dB/km at 63 Hz to 8 kHz), extended above 8 kHz by evaluating ISO 9613-1's
-  formulae **once, offline**, and pasting the resulting constants in beside the tabulated ones — the
-  standard notes explicitly that its formulae extend to ultrasonic frequencies. Nothing evaluates a
-  relaxation-frequency model at run time while the Grid is fixed at 20 °C and 70 %; if temperature
-  ever becomes a scene parameter, that is when the formulae move into the code. The numbers must
-  appear in the documentation rather than living silently in a constant.
+- **Air absorption.** Four constants per listener, in dB/km, one per band — **authored beside the band
+  edges rather than computed**, because both follow from the same audiogram and a creature that hears
+  in a different place needs different numbers in both. There is deliberately no function turning a
+  frequency into an absorption: the Grid is fixed at 20 °C and 70 %, so these are constants, and a
+  constant is better written where somebody can see it than derived by an interpolation that has to be
+  trusted.
+
+  ISO 9613-2's row for those conditions is the source: 0.1, 0.3, 1.1, 2.8, 5.0, 9.0, 22.9 and
+  76.6 dB/km at the octave centres from 63 Hz to 8 kHz. **Above 8 kHz the standard tabulates nothing**,
+  and ISO 9613-1's formulae must be evaluated once, offline, and the results written down — not
+  guessed at and not extrapolated. That matters for anything ultrasonic, because this is the term that
+  gives the Grid its acoustic horizon: past about 7 m a 100 kHz call loses more to the air than to the
+  inverse square law, while at 8 kHz the same crossover lies beyond 400 m. An earlier revision shipped
+  an `airAbsorptionDbPerKm` helper that extrapolated above 8 kHz on an `f²` law; it was removed
+  precisely because a plausible wrong number is worse than an absent one.
 - **Per-listener ring buffer.** The Grid owns the delay line. Sixty-four bins of 1 ms per band per ear
   covers the proposed 20 m total-path cap with room to spare: 2 KiB per two-eared creature, 40 KiB for
   twenty of them.
@@ -1102,9 +1219,9 @@ until Phase 5b.
    this design does not need them.
 
 The fixed-point scale is a real question and it is answered by the range cap rather than dodged by it.
-With total path capped at 20 m, spreading costs at most 26 dB relative to a one-metre reference, air
-absorption at 8 kHz adds 1.5 dB over that distance, and ten bounces at `alpha = 0.02` add 0.9 dB. **The
-whole delivered response therefore spans under about 30 dB — a factor of a thousand, not many orders of
+With total path capped at 20 m, spreading costs at most 26 dB relative to a one-metre reference and air
+absorption at 8 kHz adds 1.5 dB over that distance. Surfaces contribute nothing, being lossless. **The
+whole delivered response therefore spans under about 28 dB — a factor of a thousand, not many orders of
 magnitude.** So one scale suffices: put a unit relative arrival at `2^18`, which leaves roughly eight
 bits of resolution on the quietest arrival the cap permits and, against a worst case of 2,048 directions
 by four orders, 8,192 full-strength deposits landing in one bin — `2^18 × 2^13 = 2^31`, inside a `uint`
@@ -1143,9 +1260,12 @@ acceptance criteria, in increasing order of what they prove:
 3. **One analytic case.** A single listener over a single flat terrace level with one sounding triangle
    directly above has a direct arrival and exactly one image arrival, both at delays computable by
    hand. If the two bins are not where arithmetic says they are, the delay accumulation is wrong.
-4. **Energy sanity.** With `alpha` set to zero and the range cap set beyond the Grid, no path may gain
-   energy, and the sum over all bins must fall monotonically as absorption rises. This catches the
-   double-counted spreading the convention note above warns about.
+4. **Energy sanity.** No arrival may exceed the source strength that produced it, which the one-metre
+   spreading floor makes exactly checkable. And because reflection is lossless, **raising the
+   reflection order cap may only ever add energy — never move or diminish an arrival already found**;
+   if a later order changes an earlier bin, energy is leaking backwards through the model. Between
+   them these catch the double-counted spreading the convention note above warns about, and they
+   replace an earlier criterion that swept an absorption coefficient which no longer exists.
 
 None of these needs a reference implementation from the literature, which is the point: the model is
 small enough that its own arithmetic is the specification.
@@ -1226,28 +1346,29 @@ that frame, so a headless creature-only run frees essentially the whole budget.
   acoustic transmission is a coefficient rather than a Snell bend, and there is no acoustic Fresnel to
   weight it with.
 
-### Documentation that must be corrected in the same commit
+### Documentation this document required corrected, and its state
 
-Several documents still describe a state the code left behind, and a design written against them would
-inherit a false premise.
+This section was a checklist of documents describing a state the code had left behind. **All of it is
+now done**, and it is kept as a record rather than deleted, because the pattern it caught is the one
+worth watching for.
 
-`docs/ARCHITECTURE.md` § Material Model has already been corrected once, but two of its sentences are
-made false by this document rather than by the code: it says "Phase 5 will therefore **have to touch
-this layout**, and that is the intended cost", which the parallel-buffer recommendation above makes
-untrue, and its Phase 5 section applies "acoustic absorption and scattering coefficients", when
-scattering is resolved here to zero and given no field at all. Its buffer-binding block also still lists
-`binding 0 bvh_nodes / 1 triangles / 2 materials` with `absorption, scattering, flags` — the real set is
-`0` output image, `1` nodes, `2` triangles, `3` materials — and describes triangles as
-`[v0, v1, v2, normal, material_index]` when they are `v0, material, edge1, pad, edge2, pad`. Its Phase 5
-section also still claims "the material record was designed from the start to carry both sets of
-properties".
+- `docs/ARCHITECTURE.md` § Material Model no longer claims Phase 5 "will have to touch this layout";
+  the parallel table means it never did. Its Phase 5 section no longer applies "acoustic absorption
+  and scattering coefficients", both of which are resolved to nothing here. Its buffer-binding block
+  and triangle layout now match the code, and the claim that "the material record was designed from
+  the start to carry both sets of properties" is gone.
+- `docs/VISION.md` no longer says surfaces carry optical and acoustic properties "side by side in the
+  same material record", and no longer says sound "passes through the same glass" — it does not; a
+  slab is an obstacle and behind one there is quiet.
+- `README.md` design principle 5 now describes coupling by material slot rather than by struct row.
+- `src/tracer.hpp` no longer comments the material table as "64 bytes each"; it is 32, and it is
+  named the *optical* material table.
+- `TODO.md` no longer names `hearing_samples`, which never existed.
 
-`docs/VISION.md` says every surface carries "both optical and acoustic properties" "stored side by
-side", and `README.md` design principle 5 says surfaces "carry optical and acoustic properties
-together"; both need the wording adjusted to coupling by material index rather than by struct row.
-`src/tracer.hpp` still comments the material table as "64 bytes each", the last code-side fossil of the
-four-row struct. `TODO.md` still names `hearing_samples`, which has never existed and which this
-document recommends replacing with the per-ear view above.
+**The pattern.** Every one of these was a document confidently describing an implementation detail it
+did not own, written before the detail existed. The lesson is not to write less documentation but to
+be sparing about asserting *layout* — a claim about how a struct is packed is a claim that has to be
+maintained in lockstep with the struct, and unlike code it does not fail to compile when it drifts.
 
 ---
 

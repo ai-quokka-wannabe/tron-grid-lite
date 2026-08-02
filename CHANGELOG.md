@@ -61,6 +61,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Every surface on the Grid is a perfect acoustic mirror.** Absorption removed, transmission
+  confirmed absent as a decision rather than a deferral, scattering already absent — so there is no
+  acoustic *material* model at all, only a source-strength table of one float per material, non-zero
+  only for the two neon tubes. `src/acoustics.cpp` drops from 225 lines to 122 and the ray payload
+  loses its throughput scalar, carrying nothing but accumulated path length. Absorption went on its
+  own numbers: 0.88 dB over ten bounces at the authored `alpha = 0.02`, nearer 0.2 dB in practice
+  because rays on an open plane escape after one or two, against spreading's 26 dB across the range
+  cap — and Treble's stated ±0.2 measurement uncertainty on such a coefficient is larger than the
+  effect it produced. The impedance model had already said as much: air at 415 rayl against glass at
+  13 × 10⁶ gives `|R| = 0.99994`, so the Grid now uses the *derived* answer rather than an authored
+  one borrowed from real panes whose losses come from flexure, mounting and edges the Grid does not
+  have. This is safe only because the Grid is an open half-space, and that condition is written down
+  as the trigger for reopening it.
+- **`airAbsorptionDbPerKm` removed**, and with it the extrapolation above 8 kHz that had to be
+  flagged as untrustworthy. The four per-band values were always a parameter of the gather; they are
+  now authored per listener beside the band edges that come from the same audiogram. Nothing
+  simulates air, and the ISO 9613-2 row is cited for whoever authors them.
+- **Nothing on the Grid sounds continuously** — the neon pulses, a vocalisation is a call that stops,
+  a worm's scrape is sustained but modulated. This costs nothing to honour because the gather computes
+  an *impulse response* and a source's behaviour in time is an envelope applied at delivery, so all
+  three are one object with different envelopes and the traversal never sees any of it. The reason it
+  matters is perceptual rather than computational: a continuous tone carries almost no delay
+  information, because every arrival overlaps every other. Onsets are what make a delay measurable,
+  which is why bats pulse rather than hum. It yields the right asymmetry for free — a scraping worm is
+  easy to detect and hard to range.
+- **The documentation debt `docs/ACOUSTICS.md` had been tracking is paid off.** Its correction to
+  `docs/PERCEPTION.md` is applied in both places it named: the 6–9 octave band figure is the offline
+  one and the Grid uses four, and the prescribed "per-block interpolation" describes a technique this
+  repository cannot perform, having no waveform, no blocks and no audio rate — it would also have
+  collided with binding rule 6. `docs/VISION.md` no longer claims sound "passes through the same
+  glass"; it does not, and behind a slab there is quiet. `README.md` design principle 5 now describes
+  coupling by material slot rather than by struct row. The spreading formula in `ACOUSTICS.md` said
+  `1/(4πd²)` where the code implements `1/max(d², 1)`; both departures are now documented — the
+  constant folds into a relative source scale, and the one-metre floor is the Grid's own unit and is
+  what makes "no arrival exceeds its source strength" checkable.
+
 - **Nothing runs without a reason.** The renderer no longer spins at the GPU's maximum rate redrawing
   an image identical to the previous one. It compares the state a frame was drawn from — camera
   position, orientation, field of view, surface size — and sleeps on the render channel's condition
