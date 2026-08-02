@@ -61,6 +61,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Phase 5 milestone reached: the Grid can be heard.** Sound is traced through the same hierarchy as
+  light, by the same traversal module, and delivered as an impulse response per ear — energy against
+  delay, in that ear's own frequency bands. `TglEarDesc`, `TglEarView` and a `vocalisation_strength`
+  action are written into `docs/PROGRAM_INTERFACE.md`, which is where the ABI lives until there is a
+  header. Hearing and vocalisation arrive together rather than in two breaking changes, because
+  **echolocation needs no new sense**: a creature that can emit a sound and hear the reflections
+  already has it, so splitting them would have been a change that did nothing on its own.
+  `TGL_PROGRAM_ABI_VERSION` does not move — it is pinned at `1u` until 0.1.0.
+
 - **Phase 5's acoustic pass runs on the GPU.** `src/acoustics.slang` mirrors `src/acoustics.hpp` as
   `trace.slang` mirrors `libs/bvh`, importing the same `grid_bvh` module and binding the same two
   `World` buffers with no rebuild and no second structure. **One workgroup owns one ear**, keeping
@@ -249,6 +258,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tools/` gained a README, a requirements file and a `.venv` placeholder.
 
 ### Fixed
+
+- `docs/ACOUSTICS.md` specified a bump of `TGL_PROGRAM_ABI_VERSION` from `1u` to `2u`. That was
+  written before the pre-0.1.0 versioning rule was settled and had been contradicted ever since by
+  `docs/PROGRAM_INTERFACE.md` § Versioning, which pins it at `1u`. A design document specifying a
+  version bump that the authoritative document forbids is exactly the sort of contradiction that gets
+  implemented by whoever reads the wrong one first.
+- Documents that still described Phase 5 as planned now describe it as built: the roadmap in
+  `TODO.md`, the orientation in `.claude/CLAUDE.md`, `docs/ARCHITECTURE.md` § Acoustic Rays and its
+  Material Model section, `docs/VISION.md`, and the doc index in `README.md`.
 
 - **The host and the device disagreed by 1.2 % at one ear, and it was a real bug rather than float
   divergence.** `--verify-acoustics` found it on its first run. Both implementations built their ray

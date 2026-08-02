@@ -337,7 +337,7 @@ typedef struct TglSenses
 | Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has | Phase 6 |
 | Touch | `touch_*` | Short contact queries against the same BVH | Phase 6 |
 | Thermoreception | `irradiance` | One unresolved radiance sample | Phase 6 |
-| Hearing | not yet in the struct | Acoustic rays through the same BVH | Phase 5 onwards |
+| Hearing | `ears` | Acoustic rays through the same BVH, delivered as an impulse response per ear | Phase 6 |
 
 Every one of them is a **consequence of the creature's position on the Grid**, computed by the
 same machinery that draws the picture. That is the test a modality has to pass to belong here.
@@ -357,26 +357,97 @@ Points worth stating plainly, because they are the whole design:
   the Program's business, and pain is cognition wearing a sensory costume.
 - Every field is populated. A modality that does not exist yet has no field waiting for it — the
   struct describes what the Grid can currently sense, and gains members when that changes.
+- **An ear delivers an impulse response, not a sound.** It says how much energy arrived in each
+  frequency band at each delay. Working out that two arrivals four milliseconds apart mean a surface
+  seventy centimetres away is the Program's job, exactly as it is the Program's job to decide that a
+  bright cyan band is a wall.
 
-### Hearing, and the thing it still needs
+### Hearing
 
-Acoustic sensing is the next modality planned. The same hand-built BVH is intended to serve acoustic
-rays, so hearing will arrive as sample buffers rather than as a channel bolted on elsewhere.
+Acoustic sensing is **built**. The same hand-built BVH that answers visual rays answers acoustic ones,
+through the same traversal module, so hearing arrives as sample buffers rather than as a channel
+bolted on elsewhere. What a Program receives is an **impulse response per ear**: energy against delay,
+resolved into that ear's own frequency bands.
 
-Surfaces do **not** yet carry acoustic properties: the fields were reserved once, removed as bloat
-because nothing read them, and will return in Phase 5 when something does. See
-[ACOUSTICS.md](ACOUSTICS.md).
+The prerequisite that used to be open is closed. The Grid now has a sound source, and it is the neon:
+light and sound come from the very same geometry, which is "one Grid, two senses" earning its keep
+rather than being asserted. Surfaces carry one authored acoustic number — how loudly they sing — and
+nothing else, because acoustically every surface on the Grid is a perfect mirror. See
+[ACOUSTICS.md](ACOUSTICS.md) for why, and for the open-half-space assumption that makes it safe.
 
-One prerequisite is still open, and it is not a technical one: **nothing on the Grid currently
-makes a sound.** Surfaces emit light; none of them emit anything audible. Before a hearing field
-can carry meaning the Grid needs sources, and there are two natural candidates — the creatures
-themselves, through movement and collision, and the neon itself, humming as gas-discharge tubes do.
-The second is appealing because it would make the Grid's light and its sound come from the very
-same geometry.
+```c
+/*! Geometry of one ear. Fixed for the creature's lifetime. */
+typedef struct TglEarDesc
+{
+    float position[3];        /*!< Ear position in body frame, metres. */
+    float direction[3];       /*!< Ear axis in body frame, unit length. */
 
-A pleasant consequence follows once hearing exists: **echolocation needs no new sense at all.** A
-creature that can emit a sound and hear the reflections has it already, so the decision to add a
-vocalisation action belongs with the decision to add hearing.
+    /*! Band edges in hertz, band_count + 1 values, ascending. Borrowed for the call only.
+        Chosen from this body's audiogram, not from room-acoustics convention. */
+    const float* band_edges_hz;
+    uint32_t band_count;
+
+    uint32_t bin_count;       /*!< Time bins delivered per tick. */
+    float bin_seconds;        /*!< Width of one bin. */
+
+    /*! Atmospheric absorption per band, decibels per kilometre, band_count values.
+        Borrowed for the call only. Authored beside the band edges because both follow from the
+        same audiogram: a creature that hears in a different place needs different numbers in
+        both. There is deliberately no function on the Grid that turns a frequency into an
+        absorption — the Grid is fixed at 20 C and 70 % humidity, so these are constants. */
+    const float* air_absorption_db_per_km;
+} TglEarDesc;
+
+/*! One ear's arrivals for this tick. */
+typedef struct TglEarView
+{
+    /*! Energy per (bin, band), bin-major, bin_count * band_count floats. Never NULL.
+        Relative to the emitting source's energy; there is no absolute reference level.
+        A bin no sound has reached yet reads zero, which is the physical answer and not a
+        sentinel: there is no "not yet filled" state to flag. */
+    const float* energy;
+
+    uint32_t bin_count;       /*!< Repeated from TglEarDesc so a tick handler needs nothing else. */
+    uint32_t band_count;
+} TglEarView;
+```
+
+`TglCreatureDesc` gains `const TglEarDesc* ears; uint32_t ear_count;`, and `TglSenses` gains
+`const TglEarView* ears; uint32_t ear_count;` under the `/* -- Hearing -- */` banner, keeping the
+modality grouping this document commits to. An `ear_count` of zero is a legitimate body, and is the
+correct specification for all three insect presets.
+
+The direction of control is the same as for eyes: **the Grid decides how many ears a body has, where
+they sit, and what bands they resolve.** A Program does not request an ear.
+
+#### Nothing on the Grid sounds continuously
+
+Every source is pulsed, one-shot or modulated: the neon pulses rather than holding a tone, a
+vocalisation is a call that stops, and a body dragging along the floor scrapes — sustained, but
+modulated by its own gait rather than held at a level.
+
+This matters to a Program rather than only to the Grid, because **a continuous tone would carry almost
+no delay information.** Every arrival would overlap every other and the ear would receive a steady
+level with nothing to measure, which would make the millisecond bins above describe something no
+Program could extract. Onsets are what make a delay measurable, which is why bats pulse rather than
+hum, and it is why the response is worth delivering at this resolution at all.
+
+One consequence is worth stating because it is physically correct and was not designed in: a sustained
+noisy source is **easy to detect and hard to range**. A Program that expects every sound to be
+localisable will be wrong about the quiet ones, and that is the Grid being honest rather than
+incomplete.
+
+#### Echolocation, and the scope line
+
+**Echolocation needs no new sense.** A creature that can emit a sound and hear the reflections has it
+already, which is why the vocalisation action and the hearing sense arrive together rather than in
+two separate breaking changes — see [Actions](#actions).
+
+One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
+time bin per ear, and stops.** Anything that names a source, separates streams, reports "a wall is
+three metres to your left", or performs auditory scene analysis of any kind belongs in a Program
+repository. The Grid makes localisation *possible* by delivering two ears with their own signals; it
+does not perform it.
 
 ### Chemoreception: deliberately absent, and worth revisiting
 
@@ -408,6 +479,19 @@ typedef struct TglActions
 
     /*! Desired vertical speed in metres per second, body frame. Clamped by the Grid. */
     float desired_vertical_speed;
+
+    /* -- Vocalisation -- */
+
+    /*! Loudness of a call emitted this tick, relative to a primary neon tube. Zero is silent.
+        Clamped by the Grid to what this body can produce.
+
+        A **call**, not a channel: the Grid emits it as a single burst from the creature's own
+        position and it is over. There is no field for its duration, spectrum or waveform, because
+        there is no waveform anywhere on the Grid — the body's descriptor carries what its voice
+        sounds like, and this says only whether it used it and how hard. Setting it every tick
+        produces a train of calls, which is what an echolocating animal does; it does not produce a
+        continuous tone, and nothing on the Grid can. */
+    float vocalisation_strength;
 } TglActions;
 ```
 
@@ -416,9 +500,20 @@ physics step as intent, not as a teleport. A Program asking for one hundred metr
 whatever its body can actually manage. Non-finite values (`NaN`, infinities) are treated as zero
 and logged.
 
-There are no fields for "interact with object X", "pick up", "attack", or "speak", and adding them
-would defeat the purpose. If a creature is to do something to the Grid, it must do it by moving a
-body through space.
+There are no fields for "interact with object X", "pick up" or "attack", and adding them would defeat
+the purpose. If a creature is to do something to the Grid, it must do it by moving a body through
+space — or, now, by making a noise in it.
+
+**Vocalisation is the one exception, and it earns the exception by being physical.** A call is a
+pressure wave leaving a position, propagating through the same geometry every other sound does, and
+arriving at ears that are subject to the same delays and the same inverse square law. It is not
+speech, it carries no message and it addresses nobody: it is the acoustic counterpart of a body
+occupying space. It is deliberately *not* "speak", and a Program that wants to signal another Program
+must do it the way animals do — by making a noise whose meaning the listener has to learn.
+
+It arrives together with hearing rather than after it, because **echolocation needs no new sense**:
+a creature that can emit a sound and hear the reflections already has it, so splitting the two into
+separate breaking changes would have been a change that did nothing on its own.
 
 ---
 

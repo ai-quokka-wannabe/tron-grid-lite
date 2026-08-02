@@ -164,7 +164,7 @@ tracing, 1980 edition, running in compute.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the renderer is put together |
 | [docs/MATERIALS.md](docs/MATERIALS.md) | The material model, the Fresnel and refraction maths, and the HDR path |
 | [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
-| [docs/ACOUSTICS.md](docs/ACOUSTICS.md) | What Phase 5 will build, and the decisions behind it |
+| [docs/ACOUSTICS.md](docs/ACOUSTICS.md) | How hearing works on the Grid, and the decisions behind it |
 | [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md) | The plugin contract between the Grid and a Program |
 | [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | What research labs build in this area, and what is genuinely unusual here |
 | [docs/research/](docs/research/) | Literature surveys and citations that design decisions rest on |

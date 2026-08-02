@@ -133,7 +133,7 @@ and should run on a laptop GPU from 2020. That rules out a long list of otherwis
 - **No volumetric fog, no skybox** — the Grid is infinite black by design. The floor's terraced relief is the one
   departure from flatness, and it earns its place acoustically rather than scenically: a flat mirror sends every
   reflection away and returns none of it, whereas terrace risers standing square to the ground throw sound back across
-  the Grid, which is where Phase 5's echoes will come from.
+  the Grid, which is where the Grid's echoes come from.
 - **No textures, no roughness, no microfacets, no PBR material system** — three materials, each described by a few
   numbers.
 
