@@ -15,6 +15,7 @@
 #include <bvh/bvh.hpp>
 #include <testing/testing.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -425,6 +426,163 @@ TEST_CASE(bvh_material_indices_survive_the_reordering)
     }
 
     TEST_CHECK(expected_material_counts == actual_material_counts);
+}
+
+TEST_CASE(scene_with_one_identity_instance_matches_the_single_level_trace)
+{
+    /*
+        The property the renderer depends on while nothing moves: wrapping the Grid in a scene as a
+        single instance at the identity must not change one answer. If this drifts, every recorded
+        frame drifts with it.
+    */
+    Rng rng{20260803u};
+    BvhLib::Bvh geometry{BvhLib::build(randomCloud(600u, 20260803u))};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, MathLib::Mat4::identity()));
+    scene.geometries.push_back(std::move(geometry));
+
+    for (uint32_t index{0u}; index < 2000u; ++index) {
+        const MathLib::Vec3 origin{rng.vector(-80.0f, 80.0f)};
+        const MathLib::Vec3 direction{rng.vector(-1.0f, 1.0f).normalised()};
+
+        const BvhLib::Hit single{BvhLib::intersect(scene.geometries[0], origin, direction, 400.0f)};
+        const BvhLib::Hit scened{BvhLib::intersectScene(scene, origin, direction, 400.0f)};
+
+        TEST_CHECK(single.valid == scened.valid);
+        if (single.valid) {
+            TEST_CHECK_EQUAL(single.triangle, scened.triangle);
+            TEST_CHECK(single.distance == scened.distance);
+            TEST_CHECK_EQUAL(scened.instance, 0u);
+        }
+    }
+}
+
+TEST_CASE(an_instance_transform_moves_the_geometry_and_not_the_ray)
+{
+    /*
+        Translating an instance by T must answer exactly as translating the ray by -T against the
+        untransformed geometry. Exactly, not approximately: a translation is representable and the
+        ray parameter is preserved because the transformed direction is deliberately not normalised.
+    */
+    Rng rng{7u};
+    BvhLib::Bvh geometry{BvhLib::build(randomCloud(400u, 7u))};
+
+    const MathLib::Vec3 offset{12.0f, -3.5f, 7.25f};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, MathLib::Mat4::translate(offset)));
+    scene.geometries.push_back(std::move(geometry));
+
+    for (uint32_t index{0u}; index < 1500u; ++index) {
+        const MathLib::Vec3 origin{rng.vector(-80.0f, 80.0f)};
+        const MathLib::Vec3 direction{rng.vector(-1.0f, 1.0f).normalised()};
+
+        const BvhLib::Hit moved_ray{BvhLib::intersect(scene.geometries[0], origin - offset, direction, 400.0f)};
+        const BvhLib::Hit moved_instance{BvhLib::intersectScene(scene, origin, direction, 400.0f)};
+
+        TEST_CHECK(moved_ray.valid == moved_instance.valid);
+        if (moved_ray.valid) {
+            TEST_CHECK_EQUAL(moved_ray.triangle, moved_instance.triangle);
+            TEST_CHECK(moved_ray.distance == moved_instance.distance);
+        }
+    }
+}
+
+TEST_CASE(the_nearest_instance_wins_and_names_itself)
+{
+    // Two copies of one geometry, one behind the other along the ray. The near one must win, and the
+    // hit must say which it was — a traversal that returned the right distance from the wrong
+    // instance would transform the normal by the wrong matrix and shade nonsense.
+    std::vector<BvhLib::Triangle> quad{makeTriangle(MathLib::Vec3{-1.0f, -1.0f, 0.0f}, MathLib::Vec3{1.0f, -1.0f, 0.0f}, MathLib::Vec3{0.0f, 1.0f, 0.0f})};
+    BvhLib::Bvh geometry{BvhLib::build(std::move(quad))};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, MathLib::Mat4::translate(MathLib::Vec3{0.0f, 0.0f, -20.0f})));
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, MathLib::Mat4::translate(MathLib::Vec3{0.0f, 0.0f, -5.0f})));
+    scene.geometries.push_back(std::move(geometry));
+
+    const BvhLib::Hit hit{BvhLib::intersectScene(scene, MathLib::Vec3{0.0f, 0.0f, 0.0f}, MathLib::Vec3{0.0f, 0.0f, -1.0f}, 100.0f)};
+
+    TEST_CHECK(hit.valid);
+    TEST_CHECK_EQUAL(hit.instance, 1u);
+    TEST_CHECK(std::fabs(hit.distance - 5.0f) < 1e-4f);
+
+    // And from the other side the far one becomes the near one, so the answer must swap.
+    const BvhLib::Hit behind{BvhLib::intersectScene(scene, MathLib::Vec3{0.0f, 0.0f, -40.0f}, MathLib::Vec3{0.0f, 0.0f, 1.0f}, 100.0f)};
+    TEST_CHECK(behind.valid);
+    TEST_CHECK_EQUAL(behind.instance, 0u);
+    TEST_CHECK(std::fabs(behind.distance - 20.0f) < 1e-4f);
+}
+
+TEST_CASE(scene_traversal_agrees_with_brute_force_over_transformed_geometry)
+{
+    /*
+        The load-bearing one, and the same shape as the single-level test above it: build a scene of
+        rotated and translated instances, then check every ray against a brute-force sweep of the
+        triangles transformed into world space by hand. Any disagreement is a bug in the transform,
+        the rejection test, or the nearest-hit bookkeeping — and brute force has none of those.
+    */
+    Rng rng{99u};
+    BvhLib::Bvh geometry{BvhLib::build(randomCloud(1500u, 99u))};
+
+    const std::array<MathLib::Mat4, 3> placements{MathLib::Mat4::identity(),
+        MathLib::Mat4::translate(MathLib::Vec3{60.0f, 0.0f, 0.0f}) * MathLib::Mat4::rotate(MathLib::Vec3{0.0f, 1.0f, 0.0f}, 0.9f),
+        MathLib::Mat4::translate(MathLib::Vec3{-60.0f, 30.0f, 20.0f}) * MathLib::Mat4::rotate(MathLib::Vec3{1.0f, 0.0f, 0.0f}, -1.3f)};
+
+    BvhLib::Scene scene{};
+    for (const MathLib::Mat4& placement : placements) {
+        scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, placement));
+    }
+    scene.geometries.push_back(geometry);
+
+    // The same geometry, flattened into world space, for the reference sweep.
+    std::vector<BvhLib::Triangle> flattened;
+    for (const MathLib::Mat4& placement : placements) {
+        for (const BvhLib::Triangle& triangle : scene.geometries[0].triangles) {
+            const auto point = [&placement](const MathLib::Vec3& v) {
+                const MathLib::Vec4 t{placement * MathLib::Vec4::fromVec3(v, 1.0f)};
+                return MathLib::Vec3{t.x, t.y, t.z};
+            };
+            flattened.push_back(makeTriangle(point(triangle.v0), point(triangle.v1()), point(triangle.v2()), triangle.material));
+        }
+    }
+
+    uint32_t agreements{0u};
+    uint32_t hits{0u};
+    constexpr uint32_t RAY_COUNT{3000u};
+
+    for (uint32_t index{0u}; index < RAY_COUNT; ++index) {
+        /*
+            Aimed at the scene rather than fired at random. Three small clouds scattered across a
+            wide span are mostly missed by random directions, and a sweep that misses everything
+            agrees with brute force perfectly while proving nothing — which the hit floor below
+            caught on the first run of this very test.
+        */
+        const MathLib::Vec3 origin{rng.vector(-160.0f, 160.0f)};
+        const MathLib::Vec3 target{rng.vector(-60.0f, 60.0f)};
+        const MathLib::Vec3 direction{(target - origin).normalised()};
+
+        const BvhLib::Hit accelerated{BvhLib::intersectScene(scene, origin, direction, 600.0f)};
+        const BvhLib::Hit reference{BvhLib::intersectBruteForce(flattened, origin, direction, 600.0f)};
+
+        if (accelerated.valid == reference.valid) {
+            // Distances rather than triangle indices: the flattened array numbers them differently,
+            // and two coincident surfaces would make an index comparison fail for no real reason.
+            if ((!accelerated.valid) || (std::fabs(accelerated.distance - reference.distance) < 1e-3f)) {
+                ++agreements;
+            }
+        }
+        if (reference.valid) {
+            ++hits;
+        }
+    }
+
+    TEST_CHECK_EQUAL(agreements, RAY_COUNT);
+
+    // Prove the comparison had something to compare. A scene the rays all miss agrees perfectly and
+    // says nothing, which is a trap this suite has fallen into once already.
+    TEST_CHECK(hits > (RAY_COUNT / 20u));
 }
 
 int main()

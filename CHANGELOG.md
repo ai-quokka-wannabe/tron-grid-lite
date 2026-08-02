@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The two-level hierarchy exists on the host** (`BvhLib::Scene`, `Instance`, `makeInstance`,
+  `intersectScene`). Geometries are built once and shared; instances place them; nothing rebuilds when
+  something moves. This is the specification the shader will mirror, in the same relationship
+  `intersect` has with the single-level shader path — the arrangement that made `--verify-acoustics`
+  possible.
+
+  **The ray is transformed into instance space without being normalised**, and that is the invariant
+  the whole design rests on: leaving the transformed direction alone makes the ray parameter identical
+  in both frames, so a distance found in instance space is already a world distance and no rescaling
+  is needed. It is also what lets a scaled instance work at all. Normalising it "for tidiness" breaks
+  two tests, which is deliberate.
+
+  What a scale does still cost is the normal — under a non-uniform scale the world normal is the
+  inverse-transpose, not the transform — so `Hit` returns the instance index and lets the caller
+  decide, rather than returning a normal it would have to guess the frame for.
+
+  Four tests, two of them validated by mutation: pointing the transform the wrong way is caught by
+  three of them, normalising the direction by two.
+
 - Initial project scaffold: build system, CI, editor config, and hello world.
 - Full project infrastructure inherited from [TronGrid](https://github.com/MatejGomboc/tron_grid):
   linting configs (clang-tidy, markdownlint), governance documents (contributing guide,

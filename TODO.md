@@ -59,9 +59,25 @@ Parallelising the old build across sixteen cores might have reached 3 ms — a r
 times worse than not rebuilding at all, and achieved by occupying the whole machine to recompute
 something unchanged. **A good solution to a problem that should not exist.**
 
-- [ ] Give the Grid a top-level structure over instances, with one bottom-level structure per body
-- [ ] Transform the ray into an instance's local frame in the traversal, rather than transforming geometry
-- [ ] Keep the single-level path working while nothing moves, since it is what every pass uses today
+- [x] Give the Grid a top-level structure over instances, with one bottom-level structure per body
+- [x] Transform the ray into an instance's local frame in the traversal, rather than transforming geometry
+- [x] Keep the single-level path working while nothing moves, since it is what every pass uses today
+- [ ] Mirror the two-level traversal in `grid_bvh.slang`, so both senses inherit it
+- [ ] Bind instances and per-geometry hierarchies as buffers, and dispatch against them
+
+**Host side done.** `BvhLib::Scene`, `BvhLib::Instance`, `makeInstance` and `intersectScene` are the
+specification, in the same relationship to the shader that `intersect` has with the single-level path
+— which is what made `--verify-acoustics` possible and is expected to do the same here.
+
+Four tests, two of them proved by mutation: pointing the transform the wrong way is caught by three,
+and normalising the transformed direction is caught by two. That second one is the invariant the
+design rests on and it is easy to "tidy" away — **the transformed direction must not be normalised**,
+because leaving it alone is what makes the ray parameter identical in both frames, so a distance found
+in instance space is already a world distance.
+
+The top level is a **linear sweep over instance boxes**, not a hierarchy over them. Twenty-odd boxes
+against a few instructions each is not worth a tree, and the crossover is somewhere in the hundreds.
+That is a decision to revisit with a measurement rather than a guess when creature counts are real.
 
 Three things to hold on to when this is built:
 

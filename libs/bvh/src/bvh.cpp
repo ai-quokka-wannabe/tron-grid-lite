@@ -519,4 +519,89 @@ namespace BvhLib
         return nearest;
     }
 
+    Instance makeInstance(const Bvh& geometry, uint32_t geometry_index, const MathLib::Mat4& to_world)
+    {
+        Instance instance{};
+        instance.to_world = to_world;
+        instance.to_instance = to_world.inversed();
+        instance.geometry = geometry_index;
+
+        if (geometry.nodes.empty()) {
+            // An empty geometry has no bounds to transform. Leaving them equal makes the rejection
+            // test below reject everything, which is the right answer for geometry that is not there.
+            return instance;
+        }
+
+        /*
+            All eight corners are transformed, not just the two extremes. Transforming a box by its
+            min and max alone is only correct for an axis-aligned scale-and-translate; under any
+            rotation it produces a box that does not contain the rotated geometry, and rays that
+            should have hit are rejected before they ever reach the hierarchy.
+        */
+        const MathLib::Vec3& low{geometry.nodes[0].bounds_min};
+        const MathLib::Vec3& high{geometry.nodes[0].bounds_max};
+
+        Aabb world{};
+        for (uint32_t corner{0u}; corner < 8u; ++corner) {
+            const MathLib::Vec3 local{((corner & 1u) != 0u) ? high.x : low.x, ((corner & 2u) != 0u) ? high.y : low.y, ((corner & 4u) != 0u) ? high.z : low.z};
+            const MathLib::Vec4 transformed{to_world * MathLib::Vec4::fromVec3(local, 1.0f)};
+            world.grow(MathLib::Vec3{transformed.x, transformed.y, transformed.z});
+        }
+
+        instance.bounds_min = world.min;
+        instance.bounds_max = world.max;
+        return instance;
+    }
+
+    Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance)
+    {
+        Hit nearest{};
+
+        constexpr float TINY{1e-30f};
+        const auto safeInverse = [](float value) {
+            return 1.0f / ((value == 0.0f) ? TINY : value);
+        };
+        const MathLib::Vec3 inverse_direction{safeInverse(direction.x), safeInverse(direction.y), safeInverse(direction.z)};
+
+        for (uint32_t index{0u}; index < static_cast<uint32_t>(scene.instances.size()); ++index) {
+            const Instance& instance{scene.instances[index]};
+
+            if (instance.geometry >= scene.geometries.size()) {
+                continue; // An instance naming a geometry that is not there contributes nothing.
+            }
+
+            /*
+                The top level is a linear sweep over instance boxes rather than a hierarchy over them.
+
+                That is a deliberate choice for the counts involved: a handful of creatures plus the
+                Grid is twenty-odd boxes, and a slab test is a few instructions. Building a hierarchy
+                over twenty objects would cost more to maintain than it saves to traverse. It becomes
+                the wrong choice somewhere in the hundreds, and the measurement that decides when is
+                in docs/ARCHITECTURE.md rather than in a guess here.
+            */
+            const float limit{nearest.valid ? nearest.distance : max_distance};
+            if (intersectAabb(origin, inverse_direction, instance.bounds_min, instance.bounds_max, limit) >= MISS) {
+                continue;
+            }
+
+            /*
+                Into the instance's own frame, and deliberately without normalising the direction: the
+                ray parameter is then the same number in both frames, so the distance that comes back
+                is already a world distance and max_distance can be passed straight through.
+            */
+            const MathLib::Vec4 local_origin{instance.to_instance * MathLib::Vec4::fromVec3(origin, 1.0f)};
+            const MathLib::Vec4 local_direction{instance.to_instance * MathLib::Vec4::fromVec3(direction, 0.0f)};
+
+            const Hit hit{intersect(scene.geometries[instance.geometry], MathLib::Vec3{local_origin.x, local_origin.y, local_origin.z},
+                MathLib::Vec3{local_direction.x, local_direction.y, local_direction.z}, limit)};
+
+            if (hit.valid && ((!nearest.valid) || (hit.distance < nearest.distance))) {
+                nearest = hit;
+                nearest.instance = index;
+            }
+        }
+
+        return nearest;
+    }
+
 } // namespace BvhLib
