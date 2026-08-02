@@ -24,14 +24,13 @@ External dependencies are deliberately few:
 | Volk | Dynamic Vulkan function pointer loading |
 | vulkan-hpp (`vk::raii`) | Type-safe C++ bindings and RAII ownership |
 | Slang | Shader language, compiled ahead of time to SPIR-V |
-| Vulkan Memory Allocator | Compiled into the renderer executable, but nothing instantiates it yet |
 
 Everything else — maths, windowing, logging, signals, the test harness, the BVH builder, the tracer — is in-house.
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
 │                            Application                               │
-│  Main loop · Debug camera · Scene · Program hosting                  │
+│  Main loop · User camera · Grid geometry · Program hosting           │
 ├──────────────────────────────────────────────────────────────────────┤
 │                            Renderer                                  │
 │  BVH builder · Compute Whitted tracer · Post-process · Present       │
@@ -106,17 +105,21 @@ Rules:
 
 ### Signal-Based Communication
 
-Systems that do not need to know about each other communicate through `SignalsLib::Signal<T>`, a thread-safe typed
-queue. The ownership rule is:
+`SignalsLib::Signal<T>` is a mutex-protected typed queue. It exists to carry messages **across a thread boundary**,
+and that is the only place it belongs — a lock per message buys nothing when both ends run on the same thread.
 
-- The **receiver owns** the signal, as `std::shared_ptr<SignalsLib::Signal<T>>`.
-- The **sender holds** a `std::weak_ptr` to it.
+**Today it has exactly one user:** `LoggingLib::Logger` holds one as the queue its background writer drains. It is
+held as a plain member, because the logger owns both ends and outlives both.
 
-When the receiver dies the weak pointer expires and the sender simply stops emitting. No dangling pointers, no manual
-unregistration. Window resize events, log messages, and render-thread wake-ups all travel this way.
+**It gains a second when rendering moves onto its own thread.** That is a decided piece of work, not a hypothetical:
+the main thread will pump window events and the render thread will own the Vulkan timeline, with a
+`Signal<RenderEvent>` between them — the same shape the earlier TronGrid used, and for the same reason. On Win32 a
+modal resize drag blocks the message loop, so a renderer sharing that thread simply stops until the user lets go.
+Phase 5's acoustic solve, which runs at roughly a tenth of the visual rate, is the third user waiting behind it.
 
-Direct calls remain the right answer for same-tick, same-system data access; RAII members remain the right answer for
-parent-child ownership such as device to swapchain.
+Until those land, this section describes a queue with one customer. Direct calls remain the right answer for
+same-tick, same-system data access, and RAII members remain the right answer for parent-child ownership such as
+device to swapchain.
 
 ---
 
@@ -180,7 +183,7 @@ share. Surface creation uses `VK_USE_PLATFORM_WIN32_KHR` or `VK_USE_PLATFORM_XCB
 
 ---
 
-## The Scene and the BVH
+## The Grid and the BVH
 
 ### Geometry Representation
 

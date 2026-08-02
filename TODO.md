@@ -69,7 +69,28 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 - [ ] Energy histogram per listener, banded by octave
 - [ ] Add ears to the Program interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md`. No version bump: `TGL_PROGRAM_ABI_VERSION` stays at 1 until 0.1.0
 
-## Etape 8 — Phase 6 prerequisite: sub-allocate device memory
+## Etape 8 — Move rendering onto its own thread
+
+The frame loop and the window message pump currently share a thread, and on Win32 that has a
+concrete consequence: a modal resize drag blocks the message loop, so the renderer stops until the
+user lets go of the window edge. `WindowLib::Window` already carries an `EventCallback` hook whose
+comment says exactly this — it exists "to react to events during modal operations when the main loop
+is blocked" — which is a workaround for the missing thread rather than a design.
+
+The earlier TronGrid solved this the straightforward way: the main thread pumps events and a render
+thread owns the Vulkan timeline, with a `SignalsLib::Signal<RenderEvent>` between them. That is the
+one place a mutex-protected queue earns its lock, and it is why `libs/signals` exists.
+
+- [ ] Move the frame loop onto a render thread, with `Signal<RenderEvent>` carrying resize, input
+      and stop from the event thread
+- [ ] Retire the `EventCallback` hook if the thread makes it redundant
+- [ ] Update `docs/ARCHITECTURE.md` § Signal-Based Communication, which currently records this as
+      decided-but-unbuilt
+
+Phase 5's acoustic solve is the next user after that: it runs at roughly a tenth of the visual rate,
+which is a second thread boundary and a second queue.
+
+## Etape 9 — Phase 6 prerequisite: sub-allocate device memory
 
 Deferred deliberately, and this entry exists so that deferral does not become forgetting.
 
