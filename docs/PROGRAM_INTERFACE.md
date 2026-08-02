@@ -562,12 +562,61 @@ The interface is designed so that a run can be reproduced:
   the clock.
 - The Grid's ray tracing is Whitted-style and deterministic: three surface kinds (mirror, emissive
   and simple glass), no Monte Carlo sampling, no temporal accumulation, no denoiser. The same
-  camera pose on the same Grid yields bit-identical pixels.
+  camera pose on the same Grid yields bit-identical pixels — **on the same device**. See below.
 - `dt_seconds` is supplied explicitly rather than measured by the Program.
 
 Consequently, recording every `TglSenses` a Program saw and replaying the sequence into the same
 Program build must reproduce the same `TglActions` sequence. A Program that fails this is
 non-deterministic internally, which is allowed but should be a deliberate choice.
+
+### Determinism is per device, and this is measured rather than assumed
+
+**The pixel guarantee is bounded by the GPU, its driver, and the build.** Hold those fixed and the
+same pose gives the same bits, every time — that part is real, and worth keeping. Change the GPU and
+it does not.
+
+**Cross-device bit-identity is not a goal, because it is not reachable.** IEEE-754 pins `+`, `−`,
+`×`, `÷` and `sqrt` exactly; it pins neither whether a multiply-add is *contracted* into a single
+fused instruction nor how `sin`, `cos`, `pow` and friends are implemented. Two vendors' shader
+compilers make different choices there, both valid, and the difference is a fraction of an ulp per
+operation. A ray tracer then multiplies that by every operation along a path. Forbidding contraction
+and hand-rolling the transcendentals would narrow the gap and would cost real performance for a
+property nothing here needs — which is a trade this repository does not make.
+
+So the honest target is **small and measured, not zero**, and the measurement is below.
+
+Measured on the reference machine, the same twelve frames at 640x360 rendered on an integrated AMD
+Radeon and on a discrete GTX 1650 Ti:
+
+| Difference per colour channel | Share of bytes |
+|-------------------------------|---------------:|
+| Identical | 83.6 % |
+| 1–2 | 8.9 % |
+| 3–8 | 3.9 % |
+| 9–32 | 3.1 % |
+| More than 32 | 0.5 % |
+
+The largest single-channel difference was 224 of 255. The long tail is not noise in the shading: it
+is a handful of rays at grazing angles striking a two-centimetre neon tube on one device and missing
+it on the other, then a tone curve and a bloom chain amplifying the disagreement. The acoustic
+gather behaves the same way and to the same degree — its agreement with the host reference is
+0.000046 % on one device and 0.000069 % on the other, which are different numbers.
+
+**What this does and does not break.** It does *not* break the replay conclusion above, and the
+reason is worth being precise about: replaying recorded `TglSenses` feeds a Program the *pixels that
+were recorded*, so no rendering happens and no device is involved. What it breaks is the different
+and tempting idea of recording a *camera pose* and re-rendering it elsewhere to reconstruct what a
+creature saw. That reconstruction is not the original, and on a different GPU it is visibly not the
+original.
+
+So: **record senses, never poses**, if a run must be reproducible on another machine.
+
+One consequence is worth stating because it points the other way. A Program whose behaviour changes
+when a pixel moves by two parts in 255 has learned the *graphics card*, not the Grid — and running
+the same Program on both devices is a cheap way to find that out. Cross-device divergence is
+therefore a robustness check that costs nothing to perform, and it sits squarely with
+[PERCEPTION.md](PERCEPTION.md) rule 6: blur, aliasing and noise are the creature's problem to cope
+with, not artefacts for the Grid to sand away.
 
 ---
 

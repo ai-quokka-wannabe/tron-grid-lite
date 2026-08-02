@@ -78,8 +78,25 @@ and building the second preset locally costs about a minute against a round trip
 
 ## Target Hardware
 
-Any Vulkan 1.3 GPU — **no ray tracing extensions required or used**. Reference dev
-machine: GTX 1650 Ti laptop (exposes zero VK RT extensions; that is the point).
+Any Vulkan 1.3 GPU — **no ray tracing extensions required or used**.
+
+The reference machine has two, and **both are exercised**, which is the point of having them:
+
+| # | Device | Type | Vulkan |
+|---|--------|------|--------|
+| 0 | AMD Radeon(TM) Graphics | integrated | 1.3.260 |
+| 1 | NVIDIA GeForce GTX 1650 Ti | discrete | 1.4.341 |
+
+Neither exposes a ray-tracing extension. Device scoring always picks the discrete one, so
+`--gpu <index>` exists to force the other, and `--list-gpus` reports every device with the reason
+any unusable one is unusable. **Verify on both before claiming anything about correctness**: this
+repository has already shipped one piece of reasoning whose only evidence was that it worked on the
+driver in front of us, and cross-vendor testing is what turns that into evidence.
+
+Determinism is bounded by the device: bit-identical on one GPU, *close* across two. Cross-device
+bit-identity is not a goal because it is not reachable — IEEE-754 pins the four operations and
+`sqrt`, but not fused-multiply-add contraction and not the transcendentals. The target is small and
+measured. See [PROGRAM_INTERFACE.md](../docs/PROGRAM_INTERFACE.md) § Determinism and Replay.
 
 ## Key Design Decisions
 

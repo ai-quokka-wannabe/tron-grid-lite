@@ -91,8 +91,11 @@ def render_frames(executable: Path, directory: Path, width: int, height: int, fr
     ]
     print(f"Rendering {frames} frames at {width}x{height} ...")
 
-    # Run from the executable's own directory: it loads its compiled shaders from beside itself.
-    result = subprocess.run(command, cwd=executable.parent)
+    # No working directory is forced. The renderer resolves its shaders against its own executable
+    # path rather than against the working directory, so it runs correctly from anywhere; this used
+    # to pass cwd=executable.parent and the comment justifying it outlived the need by some months.
+    # The output directory is absolute either way, so nothing here depends on where we stand.
+    result = subprocess.run(command)
     if result.returncode != 0:
         sys.exit(f"The renderer exited with code {result.returncode}")
 

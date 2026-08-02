@@ -136,6 +136,21 @@ struct QueueFamilyIndices {
         return -1;
     }
 
+    /*
+        Must be able to dispatch compute on the graphics family, because this renderer is nothing
+        but compute dispatches.
+
+        This used to be a *bonus* of ten points rather than a requirement, which was a real
+        selection bug and not a cosmetic one. A discrete GPU whose graphics family lacks compute
+        scores 10,000 for being discrete and beats a perfectly capable integrated device on 1,110 —
+        so it gets selected, and the constructor below then aborts with the fatal message about
+        compute while a GPU that would have worked sits unused. Rejecting here means the scoring
+        loop simply passes over it.
+    */
+    if (!indices.graphics_has_compute) {
+        return -1;
+    }
+
     int score{0};
 
     // Strongly prefer discrete GPUs.
@@ -150,13 +165,24 @@ struct QueueFamilyIndices {
         score += 100;
     }
 
-    // Bonus for compute on the graphics family — it avoids cross-queue ownership transfers
-    // for the ray traversal passes.
-    if (indices.graphics_has_compute) {
-        score += 10;
-    }
-
     return score;
+}
+
+//! Returns a human-readable name for a physical device type.
+[[nodiscard]] static const char* deviceTypeName(vk::PhysicalDeviceType type)
+{
+    switch (type) {
+    case vk::PhysicalDeviceType::eDiscreteGpu:
+        return "discrete";
+    case vk::PhysicalDeviceType::eIntegratedGpu:
+        return "integrated";
+    case vk::PhysicalDeviceType::eVirtualGpu:
+        return "virtual";
+    case vk::PhysicalDeviceType::eCpu:
+        return "CPU";
+    default:
+        return "other";
+    }
 }
 
 //! Formats a packed Vulkan version number as "major.minor.patch".
@@ -173,7 +199,65 @@ struct QueueFamilyIndices {
     return stream.str();
 }
 
-Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logger& logger) :
+//! Returns why a device cannot run this renderer, or an empty string if it can.
+[[nodiscard]] static std::string rejectionReason(const vk::raii::PhysicalDevice& device, VkSurfaceKHR surface)
+{
+    const vk::PhysicalDeviceProperties properties{device.getProperties()};
+    if (properties.apiVersion < VK_API_VERSION_1_3) {
+        return "reports Vulkan " + formatVersion(properties.apiVersion) + ", needs 1.3";
+    }
+
+    const QueueFamilyIndices indices{findQueueFamilies(device, surface)};
+    if (indices.graphics == UINT32_MAX) {
+        return "no graphics queue family";
+    }
+    if (indices.present == UINT32_MAX) {
+        return "cannot present to this surface";
+    }
+    if (!indices.graphics_has_compute) {
+        return "graphics queue family cannot dispatch compute, and this renderer is only compute";
+    }
+    if (!hasRequiredExtensions(device)) {
+        return "missing VK_KHR_swapchain";
+    }
+    if (!hasRequiredVulkan13Features(device)) {
+        return "missing dynamic rendering or synchronisation2";
+    }
+
+    return {};
+}
+
+uint32_t Device::survey(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logger& logger)
+{
+    const std::vector<vk::raii::PhysicalDevice> physical_devices{instance.get().enumeratePhysicalDevices()};
+
+    logger.logInfo("Vulkan devices on this machine: " + std::to_string(physical_devices.size()) + ".");
+
+    uint32_t usable{0u};
+    for (size_t index{0u}; index < physical_devices.size(); ++index) {
+        const vk::PhysicalDeviceProperties properties{physical_devices[index].getProperties()};
+        const std::string reason{rejectionReason(physical_devices[index], surface)};
+        const int score{rateDevice(physical_devices[index], surface)};
+
+        std::string line{"  [" + std::to_string(index) + "] " + properties.deviceName.data() + " — " + deviceTypeName(properties.deviceType) + ", Vulkan "
+            + formatVersion(properties.apiVersion)};
+
+        if (reason.empty()) {
+            ++usable;
+            logger.logInfo(line + " — USABLE, score " + std::to_string(score) + ". Run with --gpu " + std::to_string(index) + ".");
+        } else {
+            logger.logInfo(line + " — unusable: " + reason + ".");
+        }
+    }
+
+    if (usable == 0u) {
+        logger.logWarning("No device on this machine can run TronGrid Lite.");
+    }
+
+    return usable;
+}
+
+Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logger& logger, uint32_t preferred_index) :
     m_logger(logger)
 {
     // Step 1: Enumerate physical devices.
@@ -201,6 +285,27 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     if (best_score < 0) {
         m_logger.logFatal("No suitable GPU found (need Vulkan 1.3 with dynamic rendering and synchronisation2, graphics + present queues, and VK_KHR_swapchain).");
         std::abort();
+    }
+
+    /*
+        An explicit choice overrides the score, but never the suitability check: a device that cannot
+        present, or lacks the Vulkan 1.3 features this renderer enables, is refused however loudly it
+        was asked for. Refusing with a clear reason beats honouring the request and failing later
+        inside a call that does not mention the GPU at all.
+    */
+    if (preferred_index != NO_PREFERENCE) {
+        if (preferred_index >= physical_devices.size()) {
+            m_logger.logFatal("Requested GPU " + std::to_string(preferred_index) + " but only " + std::to_string(physical_devices.size()) + " are present.");
+            std::abort();
+        }
+
+        if (rateDevice(physical_devices[preferred_index], surface) < 0) {
+            m_logger.logFatal("Requested GPU " + std::to_string(preferred_index) + " cannot run this renderer; see the scores above.");
+            std::abort();
+        }
+
+        best_index = preferred_index;
+        m_logger.logInfo("GPU " + std::to_string(preferred_index) + " chosen explicitly, overriding the score.");
     }
 
     m_physical_device = std::move(physical_devices[best_index]);

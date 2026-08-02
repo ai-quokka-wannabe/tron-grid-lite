@@ -1063,6 +1063,19 @@ int main(int argc, char** argv)
             machine that has one.
         */
         bool verify_acoustics{false};
+
+        /*
+            Which GPU to run on, overriding the score.
+
+            Exists for cross-vendor testing rather than for configuration. Scoring always picks the
+            discrete GPU on a switchable-graphics laptop, so a bug that only shows on the integrated
+            driver would otherwise never be seen — and this repository has already shipped one piece
+            of reasoning whose only evidence was that it worked on the driver in front of us.
+        */
+        uint32_t preferred_gpu{Device::NO_PREFERENCE};
+
+        //! List every Vulkan device and whether it can run this renderer, then exit.
+        bool list_gpus{false};
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -1096,6 +1109,10 @@ int main(int argc, char** argv)
                 recording = true;
             } else if (argument == "--verify-acoustics") {
                 verify_acoustics = true;
+            } else if (argument == "--gpu") {
+                preferred_gpu = value(preferred_gpu);
+            } else if (argument == "--list-gpus") {
+                list_gpus = true;
             } else if (argument == "--width") {
                 record_width = value(record_width);
             } else if (argument == "--height") {
@@ -1118,7 +1135,13 @@ int main(int argc, char** argv)
 
         const Instance instance{enable_validation, requiredSurfaceExtensions(), logger};
         const vk::raii::SurfaceKHR surface{createSurface(instance.get(), *window)};
-        const Device device{instance, *surface, logger};
+        if (list_gpus) {
+            // Surveys and returns without creating a logical device, so it works even when nothing
+            // on the machine can run the renderer — which is exactly when somebody needs it.
+            return (Device::survey(instance, *surface, logger) > 0u) ? EXIT_SUCCESS : EXIT_FAILURE;
+        }
+
+        const Device device{instance, *surface, logger, preferred_gpu};
 
         Swapchain swapchain{device, *surface, window->width(), window->height(), logger};
 

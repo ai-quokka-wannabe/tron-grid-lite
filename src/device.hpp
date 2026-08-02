@@ -38,7 +38,42 @@ class Instance; // forward declaration
 class Device {
 public:
     //! Pick the best GPU and create a logical device; the surface is needed to check present queue support.
-    Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logger& logger);
+    /*!
+        Selects a physical device and creates a logical one.
+
+        \param instance Vulkan instance to enumerate from.
+        \param surface Surface the device must be able to present to.
+        \param logger Logger for the selection summary.
+        \param preferred_index Index of the GPU to use, as printed in the selection summary. Pass
+               `NO_PREFERENCE` to take the highest-scoring device, which is what everything except
+               deliberate cross-vendor testing wants.
+    */
+    Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logger& logger, uint32_t preferred_index = NO_PREFERENCE);
+
+    /*!
+        Take the highest-scoring device rather than a named one.
+
+        Scoring strongly prefers a discrete GPU, so on a laptop with switchable graphics this is
+        always the discrete one — which is exactly why the override exists. A bug that only appears
+        on the integrated driver would otherwise never be seen, and this repository has already
+        shipped one piece of reasoning whose only evidence was "it works on the driver in front of
+        me".
+    */
+    static constexpr uint32_t NO_PREFERENCE{UINT32_MAX};
+
+    /*!
+        Logs every Vulkan device on this machine and whether it can run the renderer.
+
+        Reports *why* an unusable device is unusable rather than only that it scored badly, because
+        "no suitable GPU found" is the least actionable message a renderer can print. Creates no
+        logical device and leaves nothing behind.
+
+        \param instance Vulkan instance to enumerate from.
+        \param surface Surface presentability is tested against.
+        \param logger Logger to report through.
+        eturn How many devices can run the renderer.
+    */
+    [[nodiscard]] static uint32_t survey(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logger& logger);
 
     // Non-copyable, non-movable
     Device(const Device&) = delete;
