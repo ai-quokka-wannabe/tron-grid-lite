@@ -57,9 +57,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only reflecting it, with Snell refraction, total internal reflection and a throughput cutoff.
   The tree is walked with an explicit stack because compute shaders have no recursion, and the
   whole thing remains deterministic. Glass slabs and a glowing translucent column now stand in the
-  scene. 13.7 ms at 1280x720 on a GTX 1650 Ti.
+  scene. 13.7 ms at 1280x720 on a GTX 1650 Ti — but see the note below on how that was measured.
 
 ### Changed
+
+- **Every performance figure above was measured with the validation layers on, and they are all too
+  slow — the trace pass by about 4.6×.** Debug enables GPU-assisted validation, which instruments the
+  shader: it adds a bounds check to every buffer access in the traversal loop, which is the entire
+  inner loop of a ray tracer. On the same scene, same GPU and same resolution, the frame is
+  **16.9 ms with validation and 3.7 ms without**; the trace pass alone is 16.6 ms against 3.4 ms.
+  Post-processing barely moves (0.33 ms against 0.29 ms), because it is a fixed number of texture
+  reads per texel with no data-dependent addressing and so has almost nothing for GPU-AV to
+  instrument — which is also why the ratio cannot be applied as a blanket correction to the older
+  figures. The milestone entries above are left as they were written, because they record what was
+  measured at the time; `docs/ACOUSTICS.md`, whose delay table was *computed* from the wrong number,
+  has been recalculated.
 
 - **The renderer runs on its own thread.** Not for throughput — the GPU is the bottleneck and a
   thread does not make it faster — but for responsiveness: on Win32 a modal resize drag runs the

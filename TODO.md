@@ -144,7 +144,68 @@ ever exercised, and it drifts silently from the library it wraps. When this is p
 question to answer first is what Phase 6's allocation pattern actually looks like — the old wrapper
 was written speculatively, against a scene layout that has since been deleted too.
 
+## Etape 10 — Phase 6 prerequisite: parallelise the hierarchy build
+
+**Deliberately not done yet, and this entry records why, so that the deferral is a decision rather
+than an oversight.**
+
+`BvhLib::build` is single-threaded and takes **14 ms** for the Grid's 24,952 triangles on a 16-core
+machine — about 2 % of a 650 ms startup, nearly all of which is Vulkan device and pipeline creation
+that no amount of threading can touch. Parallelising it today would buy roughly 10 ms of startup in
+exchange for a concurrent node allocator, against a repo rule that says don't over-engineer.
+
+An earlier plan called this urgent on the strength of a 120 ms measurement. That was a Debug build;
+see the 2026-08-02 journal entry.
+
+**Phase 6 is where it changes**, because a hierarchy over moving creatures is rebuilt every tick
+rather than once at startup, and 14 ms against a frame budget is a different proposition entirely
+from 14 ms paid once at launch.
+
+- [ ] Parallelise the hierarchy build before creatures start moving
+
+The shape is already half-decided by the existing code. `subdivide` partitions its range before it
+recurses, so the two children own disjoint triangle ranges and never touch each other's — the only
+shared mutable state is `nodes`, which both children append to. The determinism requirement is what
+rules out the obvious atomic bump allocator: node indices would then depend on thread scheduling.
+Building each subtree into its own local vector and splicing them back in a fixed frontier order
+keeps the output bit-identical between runs, which a reproducible recording requires.
+
 ## Journal
+
+### 2026-08-02
+
+- Etape 8 done: the renderer runs on its own thread. See the etape above for what was built and for
+  the two things the plan did not anticipate.
+- **Every performance figure recorded in this project so far was measured with the validation layers
+  on, and they are all roughly 4.6× too slow.** Debug enables both core validation and *GPU-assisted*
+  validation, and GPU-AV instruments the shader — it adds a bounds check to every buffer access in
+  the traversal loop, which is the entire inner loop of a ray tracer. Measured both ways on the same
+  scene, same GPU, same resolution:
+
+  | 1280x720, GTX 1650 Ti | Debug + validation | Release |
+  |-----------------------|--------------------|---------|
+  | Frame | 16.9 ms | **3.7 ms** |
+  | Trace | 16.6 ms | **3.4 ms** |
+  | Post-processing | 0.33 ms | **0.29 ms** |
+  | Hierarchy build (CPU) | 120 ms | **14 ms** |
+
+  Note which row barely moves. Post-processing is a fixed number of texture reads per texel with no
+  data-dependent addressing, so there is little for GPU-AV to instrument; the trace pass is nothing
+  but data-dependent addressing. That is also why the ratio cannot be applied as a blanket correction
+  to old figures — it is not one factor, it is a different factor per pass.
+
+  `docs/ACOUSTICS.md` has been corrected: its delay table and the "twenty-six frames" headline were
+  computed from the 14.4 ms figure and are now computed from 3.7 ms. The journal entries below are
+  left as they were written — they record what was measured at the time, and rewriting them would
+  hide the mistake rather than fix it.
+
+- **The hierarchy build does not need parallelising yet, and the plan to do so was based on the wrong
+  number.** 14 ms in Release, not the 120 ms that a Debug measurement suggested — about 2 % of a
+  650 ms startup, nearly all of which is Vulkan device and pipeline creation that threading cannot
+  touch. Parallelising it now would buy roughly 10 ms of startup for something like eighty lines of
+  concurrent code, against a repo rule that says "don't over-engineer". It becomes worth doing in
+  Phase 6, when creatures move and the hierarchy is rebuilt every tick — a 14 ms rebuild against a
+  frame budget is a completely different proposition from a 14 ms cost paid once.
 
 ### 2026-08-01
 

@@ -52,9 +52,16 @@ For a renderer, light is instantaneous. A visual ray's answer is a **value**: tr
 pixel. Sound travels at about 343 m/s, so an acoustic ray's answer is a **function of time** — an
 impulse response — and every consequence in this document flows from that single fact.
 
-The immediate consequence is that the 128 m Grid is 373 ms wide. At the measured 14.4 ms frame time
-that is twenty-six frames. Sound leaving a source now arrives at a listener over the next twenty-six
+The immediate consequence is that the 128 m Grid is 373 ms wide. At the measured 3.7 ms frame time
+that is a hundred frames. Sound leaving a source now arrives at a listener over the next hundred
 frames, by which time everything that moves has moved.
+
+> **On the frame time.** 3.7 ms is measured at 1280x720 on the reference GTX 1650 Ti in a **Release**
+> build with the validation layers off. An earlier revision of this document used 14.4 ms throughout,
+> which was measured in a Debug build with GPU-assisted validation active — that instruments every
+> buffer access in the traversal loop and inflates the trace pass by roughly 4.6× (16.6 ms against
+> 3.4 ms, measured both ways on the same scene). It describes a debugging configuration rather than
+> the renderer, and every frame count below has been recomputed.
 
 ### The BVH does not have to change at all
 
@@ -161,7 +168,7 @@ The response is computed against one frame's BVH and arrives over the following 
 during which the Grid moves. Every interactive acoustics engine has this problem and every one of
 them accepts it. The honest thing is to state the bound rather than pretend the snapshot is exact:
 **nothing in the delivered response is staler than the response length in creature motion** — about
-58 ms, or four frames, because the 20 m cap proposed below bounds *total accumulated path length*,
+58 ms, or sixteen frames, because the 20 m cap proposed below bounds *total accumulated path length*,
 not one-way range. (The 117 ms out-and-back row in the delay table is what a 20 m monostatic
 echolocation range would cost; an emitting creature therefore needs a 128-bin histogram, and that is
 a Phase 5b decision.)
@@ -367,7 +374,7 @@ acoustics one.
 
 ### Delays this geometry actually produces
 
-At 343 m/s, with the frame column at the measured 14.4 ms:
+At 343 m/s, with the frame column at the measured 3.7 ms:
 
 | Path | Delay | Frames |
 |------|-------|--------|
@@ -375,14 +382,14 @@ At 343 m/s, with the frame column at the measured 14.4 ms:
 | Terrace step, one way | 2.43 ms | — |
 | Grid cell | 5.83 ms | — |
 | Room-acoustics bin convention (4 ms) | — | 1.37 m of path |
-| Glass slab width | 17.5 ms | 1.2 |
-| Median terrace run (14 m) | 40.8 ms | 2.8 |
-| Mean terrace run (20.5 m) | 59.8 ms | 4.2 |
-| Nearest pillar separation (~25 m) | 72.9 ms | 5.1 |
-| Proposed 20 m range cap, out and back | 117 ms | 8.1 |
-| Floor half-extent (64 m) | 187 ms | 13.0 |
-| Floor width (128 m) | 373 ms | 25.9 |
-| Floor diagonal (181 m) | 528 ms | 36.7 |
+| Glass slab width | 17.5 ms | 4.7 |
+| Median terrace run (14 m) | 40.8 ms | 11.0 |
+| Mean terrace run (20.5 m) | 59.8 ms | 16.2 |
+| Nearest pillar separation (~25 m) | 72.9 ms | 19.7 |
+| Proposed 20 m range cap, out and back | 117 ms | 31.6 |
+| Floor half-extent (64 m) | 187 ms | 50.4 |
+| Floor width (128 m) | 373 ms | 100.8 |
+| Floor diagonal (181 m) | 528 ms | 142.7 |
 
 The 17.2 cm figure is the cleanest way to communicate the time resolution, and it comes from
 Schnitzler and Kalko's observation that each millisecond of signal duration adds 17 cm to a bat's
