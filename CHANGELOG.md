@@ -66,6 +66,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The development journal is gone from `TODO.md`, and the file is 606 lines shorter than it was
+  this morning.** It was a third copy of history that already had two homes, and it grew faster than
+  either. What changed and why lives here; rules worth obeying next time live in `.claude/CLAUDE.md`
+  § Hard-won rules, condensed to imperatives, because a lesson written as a story is read once and
+  written as a rule is read every session.
+
+  The test applied before deleting any of it was **whether the durable fact already lived in the code
+  it governs** — the positive-infinity miss sentinel is explained in both `libs/bvh` and
+  `grid_bvh.slang`, the `std::from_chars` argument parsing in `main.cpp`, the rejected compass in
+  `docs/PROGRAM_INTERFACE.md`. All of it passed except one item, which was promoted rather than
+  deleted: see below.
+- **A Phase 6 security obligation was found hiding in the journal and is now Etape 12.** Code
+  scanning's path alerts are dismissed as false positives today because the only party who can set
+  `--output` is the person who already owns the process. **That reasoning expires** once the creature
+  roster resolves Program library paths out of a config file, because a downloaded creature pack
+  could write that file — at which point the input genuinely is untrusted and confinement stops being
+  theatre. It existed in no other document, and deleting the journal would have deleted it.
+- `CONTRIBUTING.md` told contributors to add entries to a `TODO.md` § Journal that no longer exists;
+  it now asks for the *why* in the changelog entry instead. Six other documents pointed at the
+  journal and now point where the content actually went.
+
+
 - **Device memory is sub-allocated** (`src/memory_arena.hpp`). A bump allocator hands out offsets into
   a few large blocks instead of taking one `vkAllocateMemory` per resource, and the validation layer's
   sub-allocation complaints go from sixteen to two. The reason was not memory pressure — eighteen

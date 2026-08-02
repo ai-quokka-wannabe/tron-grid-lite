@@ -195,7 +195,7 @@ tracing, 1980 edition, running in compute.
 | [tools/README.md](tools/README.md) | Scripts that operate on the renderer, including the flyby recorder |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [STYLE.md](STYLE.md) | Code style conventions |
-| [TODO.md](TODO.md) | Roadmap, active tasks and development journal |
+| [TODO.md](TODO.md) | Roadmap and open etapes |
 
 ## References
 

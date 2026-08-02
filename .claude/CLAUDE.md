@@ -30,7 +30,7 @@ tron-grid-lite/
 ├── CMakePresets.json    ← 7 configure presets: windows-msvc, windows-clang-cl, windows-mingw, linux-x11-gcc, linux-x11-clang, linux-x11-clang-asan, linux-x11-clang-tsan
 ├── LICENCE              ← GPL v3
 ├── README.md            ← public-facing project overview
-├── TODO.md              ← roadmap, active etapes and journal
+├── TODO.md              ← roadmap and open etapes
 ├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, PERCEPTION, PROGRAM_INTERFACE, RELATED_WORK, DEV_ENV_SETUP
 ├── images/              ← the flyby clips the README embeds
 ├── libs/                ← bvh, logging, math, signals, testing, window — static libraries
@@ -98,6 +98,65 @@ bit-identity is not a goal because it is not reachable — IEEE-754 pins the fou
 `sqrt`, but not fused-multiply-add contraction and not the transcendentals. The target is small and
 measured. See [PROGRAM_INTERFACE.md](../docs/PROGRAM_INTERFACE.md) § Determinism and Replay.
 
+## Hard-won rules
+
+Each of these cost real time at least once. They are here rather than in a journal because a lesson
+written as a story is read once, and written as a rule it is read every session.
+
+**Verifying**
+
+- **Confirm the build succeeded before believing a test result.** A failed build leaves the previous
+  binary in place, and `ctest` will cheerfully report that it passes. This invalidated two
+  experiments before anyone noticed.
+- **Measure in Release.** Debug enables GPU-assisted validation, which instruments every buffer
+  access in the traversal loop — the trace pass reads about 4.6x slow, and post-processing barely
+  moves, so the distortion is per-pass and cannot be corrected by a single factor. Every performance
+  figure in this repository was once wrong for this reason.
+- **A test that has never failed has not been tested.** Break the thing it guards, watch it go red,
+  put it back. Two tests in this repository passed while asserting something a bug could not violate.
+- **Verify on both GPUs before claiming correctness** — see Target Hardware. Driver-specific
+  behaviour is invisible on one.
+
+**Where the bugs actually are**
+
+Three questions, each of which has caught something more than once:
+
+1. **Where does this cross a boundary the compiler cannot see?** Host constant against shader
+   literal, host memory against device memory, a documented ABI layout against the code implementing
+   it. Nearly every serious defect found here has been a duplicated fact with nothing holding the
+   copies together — and **a comment saying "must equal" is not a mechanism.** Use a `static_assert`
+   against the other side's literal.
+2. **Where does a document state a number that could be checked?** Deposit counts, warning counts,
+   allocation counts, phase status. They drift silently and nothing fails.
+3. **Where does this repository already do the same thing correctly?** The cinematic readback had a
+   host-visibility barrier the acoustic pass lacked; `BAND_COUNT` had an assert `MAX_DEPTH` lacked.
+   The correct twin is usually a few files away.
+
+**Tooling on this machine**
+
+- **Never edit a file through PowerShell `Set-Content` or `Out-File`.** The round trip re-encodes
+  UTF-8 as ANSI and turns every em dash into mojibake, and it adds a BOM. Use the editing tools or
+  Python with an explicit encoding.
+- **`Copy-Item` and `Move-Item` preserve the source timestamp**, so Ninja concludes there is nothing
+  to rebuild and the next test runs the old binary. Touch the file after restoring one.
+- **Exclude `build/` from repository-wide greps.** Searching for a removed symbol otherwise returns
+  a wall of `.pdb` matches and buries the real hits.
+
+**Code scanning**
+
+- Alerts on `argv` reaching a path or a subprocess are **dismissed as false positives** in this
+  repository, and correctly so while the only person supplying the argument is the person running
+  the process. **That reasoning expires in Phase 6** — see Etape 12 in TODO.md.
+- **A dismissal is bound to the code it was granted against.** Editing a flagged line re-raises the
+  alert as new. Expect that, and do not read it as a regression.
+- **Expect a fresh batch whenever a new language first lands on main.** Default setup adds analysers
+  automatically.
+
+**Pruning documentation**
+
+- A completed etape, or any historical note, **may be deleted once the durable decisions inside it
+  live in the code they govern.** That is the test. Apply it before deleting, not after.
+
 ## Key Design Decisions
 
 | Decision           | Choice                                      | Why                                        |
@@ -121,4 +180,4 @@ and post processing, and **Phase 5 — acoustic rays** is done too. Phase 6 open
 Programs plug into.
 
 The phase table is canonical in [`TODO.md` § Roadmap](../TODO.md), which also holds the active
-etapes and the journal. Read it there rather than duplicating it here.
+etapes. Read it there rather than duplicating it here.

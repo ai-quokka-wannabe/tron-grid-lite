@@ -3,7 +3,8 @@
 Technical architecture of TronGrid Lite.
 
 > This document describes the target architecture. Sections covering phases that are not yet implemented are marked
-> accordingly. See `TODO.md` for the development journal, and [VISION.md](VISION.md) for the *why*.
+> accordingly. See `TODO.md` for the roadmap and open etapes, `CHANGELOG.md` for what changed and why,
+> and [VISION.md](VISION.md) for the *why* behind the project.
 
 ---
 
