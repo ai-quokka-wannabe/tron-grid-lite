@@ -25,12 +25,21 @@ namespace SignalsLib
     /*!
         Thread-safe, typed message queue for inter-system communication.
 
-        Ownership model:
-        - Receiver owns: std::shared_ptr<Signal<T>>
-        - Sender holds:  std::weak_ptr<Signal<T>>
+        A mutex and a `std::queue`, and deliberately nothing else. Every member locks, so any number
+        of threads may emit and consume concurrently.
 
-        When the receiver is destroyed, the shared_ptr dies, the weak_ptr expires,
-        and the sender knows to stop — no dangling pointers, no manual unregistration.
+        **Lifetime is the owner's problem, not this class's.** There is no registration, no
+        subscriber list and no `weak_ptr` anywhere below — a `Signal` is an ordinary object with
+        ordinary lifetime, and a sender holding a raw reference to a destroyed one is exactly as
+        broken as it would be for any other object.
+
+        One safe arrangement, should a sender ever outlive its receiver, is to hold the queue in a
+        `std::shared_ptr` and give senders a `std::weak_ptr`: the receiver's destruction expires the
+        weak pointer and a sender that locks it learns to stop, with no manual unregistration.
+        `libs/signals/tests` demonstrates that. It is a **convention available to callers rather than
+        a service this class provides**, and neither user in this repository needs it —
+        `LoggingLib::Logger` and the renderer's `RenderChannel` both hold their queue as a plain
+        member and outlive it by construction.
     */
     template <typename T> class Signal {
     public:

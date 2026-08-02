@@ -15,179 +15,34 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | **Done** |
 | 6     | Programs                      | Creature sensor interface plugs in | Pending |
 
-## Etape 1 — Adopt project infrastructure from TronGrid
+## Completed etapes
 
-- [x] Port linting configs, governance docs, templates, workflows, Claude commands
-- [x] Port internal libraries (testing, signals, logging, math, window) with tests
-- [x] Move sources to `src/`, add GPL v3 licence headers, include volk.cpp in build
-- [x] Adapt all name references to TronGrid Lite / ai-quokka-wannabe
-- [x] CI green on all matrix jobs after adoption
+Nine etapes, all boxes ticked. They are collapsed to one line each because a finished checklist is
+not a plan — what each one *decided* lives in `CHANGELOG.md` and the journal below, and what each one
+*built* lives in the code with the reasoning attached to it. Keeping the checklists as well meant
+maintaining a third copy that drifts.
 
-## Etape 2 — Phase 0: triangle on screen
+| # | Etape | Delivered |
+|---|-------|-----------|
+| 1 | Adopt project infrastructure from TronGrid | Linting, governance, CI, and the six internal libraries with their tests |
+| 2 | Phase 0: triangle on screen | Instance, device, surface, swapchain, dynamic rendering |
+| 3 | Phase 1: window, swapchain and frame loop | User camera, neon grid, GPU timestamp profiling |
+| 4 | Phase 2: the compute ray tracer | Host BVH in storage buffers, compute traversal, rasteriser retired |
+| 5 | Phase 3: the full ray tree | Transmission, Snell refraction, total internal reflection |
+| 6 | Phase 4: post processing | HDR target, bloom chain, fitted ACES curve |
+| 7 | Phase 5: acoustic rays | Sound sources, the gather on host and device, ears in the ABI |
+| 8 | Move rendering onto its own thread | Render thread, `Window::wakeEvents`, on-demand drawing |
+| 9 | Phase 6 prerequisite: sub-allocate device memory | `MemoryArena`; sub-allocation warnings 16 to 2 |
 
-- [x] Vulkan instance + debug messenger (vk::raii)
-- [x] Physical device selection (prefer discrete GPU)
-- [x] Logical device + queue creation
-- [x] Window via WindowLib (Win32 / XCB)
-- [x] Swapchain (MAILBOX present mode), dynamic rendering
-- [x] Graphics pipeline: triangle.slang (vertex + fragment)
-- [x] Frame synchronisation (fences + semaphores)
-- [x] Triangle on screen
+Two decisions from those etapes are load-bearing enough that they live in the code rather than here,
+and are worth knowing before touching either area:
 
-## Etape 3 — Phase 1: window, swapchain and frame loop
-
-- [x] User camera wired to input (free flight, for the User only)
-- [x] Neon grid geometry to fly through
-- [x] Depth buffer, recreated with the swapchain
-- [x] Frame timing and GPU timestamp profiling with a once-per-second summary
-
-## Etape 4 — Phase 2: the compute ray tracer
-
-- [x] Triangle and material storage buffers
-- [x] BVH builder on the host, uploaded as a storage buffer
-- [x] Compute traversal kernel: primary rays only, mirror surfaces
-- [x] Write results into an offscreen image, blitted into the swapchain
-- [x] Retire the rasteriser: no graphics pipeline, no depth buffer, no vertex buffer
-
-## Etape 5 — Phase 3: the full ray tree
-
-- [x] Transmission: split the ray at a surface rather than reflecting only
-- [x] Snell refraction with total internal reflection
-- [x] Raise the bounce limit and add a throughput cutoff
-- [x] Glass in the test scene
-
-## Etape 6 — Phase 4: post processing
-
-- [x] Render to an HDR target instead of tone mapping inside the tracer
-- [x] Wire up the bloom chain that is already compiled
-- [x] Move tone mapping to postprocess.slang and its fitted ACES curve
-
-## Etape 7 — Phase 5: acoustic rays
-
-- [x] Give surfaces something to be heard: sound sources on the Grid
-- [x] Acoustic ray traversal through the same hierarchy
-- [x] Energy histogram per listener, banded
-- [x] Add ears to the Program interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md`. No version bump: `TGL_PROGRAM_ABI_VERSION` stays at 1 until 0.1.0
-
-**Done.** The gather runs on the host as the specification (`src/acoustics.hpp`) and on the device as
-`acoustics.slang`, and `--verify-acoustics` holds the two to each other on the real Grid — they agree
-to about four parts per million. `TglEarDesc`, `TglEarView` and the `vocalisation_strength` action are
-written into `docs/PROGRAM_INTERFACE.md`, which is where the ABI lives until there is a header.
-
-Two things Phase 5 deliberately did **not** build, both specified and both waiting for a reason to
-exist rather than for time:
-
-- **Direct occlusion and enumerated image sources** (Phase 5b). Both exist only to serve *point*
-  sources, and the only point source on the roadmap is a creature vocalisation. Building them now
-  would be building for a caller that does not exist. When they are built, the occlusion result must
-  be a **fraction and never a bit** — "ray blocked implies silence" is the single largest error
-  available in this subsystem.
-- **ISO 9613-1 above 8 kHz.** The standard tabulates nothing past 8 kHz, so the formulae must be
-  evaluated once, offline, and the constants written down. Needed before the `rodent` preset listens,
-  since its top band reaches 85.5 kHz, and not before.
-
-## Etape 8 — Move rendering onto its own thread
-
-The frame loop and the window message pump currently share a thread, and on Win32 that has a
-concrete consequence: a modal resize drag blocks the message loop, so the renderer stops until the
-user lets go of the window edge. `WindowLib::Window` already carries the `EventCallback` hook this
-needs, and its comment says exactly why it exists: "to react to events during modal operations when
-the main loop is blocked". It is not a workaround for the missing thread — it is **half of the
-threaded design, already in place**. During a modal drag `pumpEvents` is stuck inside the platform's
-own loop, but the window procedure still fires, so the callback keeps feeding the queue and a render
-thread on the other end keeps drawing.
-
-The earlier TronGrid solved this the straightforward way: the main thread pumps events and a render
-thread owns the Vulkan timeline, with a `SignalsLib::Signal<RenderEvent>` between them. That is the
-one place a mutex-protected queue earns its lock, and it is why `libs/signals` exists.
-
-- [x] Move the frame loop onto a render thread, with `Signal<RenderEvent>` carrying resize, input
-      and stop from the event thread
-- [x] Translate window events to `RenderEvent` inside the event callback, so a modal drag still feeds
-      the queue
-- [x] Keep cursor capture on the window's thread — `ShowCursor` is per-thread on Win32 and cannot
-      move to the render thread, which is how the earlier TronGrid handles it too
-- [x] Update `docs/ARCHITECTURE.md` § Signal-Based Communication, which currently records this as
-      decided-but-unbuilt
-
-**Done.** The interactive loop left `main` for `runRenderLoop`, and everything the two threads share
-is collected in one `RenderChannel` — so the boundary is checkable by reading rather than by
-reasoning: if a name is not a member of it, exactly one thread touches it.
-
-Two things the plan above did not anticipate, both found while building it:
-
-- `Window::wakeEvents` had to be added. `waitEvents` sleeps until the User does something, so a
-  render thread that had died could not tell the event loop to stop, and the window went on looking
-  alive until somebody moved the mouse. `PostMessageW(WM_NULL)` on Win32; a self-addressed client
-  message carrying `XCB_NONE` on X11.
-- The `std::thread` needed an RAII stop-and-join. A joinable thread reaching its destructor calls
-  `std::terminate`, so an exception from any of the platform calls in the event loop would have
-  aborted the process instead of being reported. The same guard detaches the event callback, because
-  `window` outlives the object that callback points at.
-
-Verified on a GTX 1650 Ti: four programmatic resizes, minimise, restore and close, with validation
-layers on and zero errors. The modal-drag freeze itself is the design's whole purpose but has not
-been measured — driving a real modal loop needs a hand on the window edge.
-
-The acoustic solve is the next user after that. It is built now but still runs on whichever thread
-asks for it; at roughly a tenth of the visual rate it wants a second thread boundary and a second
-queue, which is a Phase 6 concern rather than a Phase 5 one.
-
-## Etape 9 — Phase 6 prerequisite: sub-allocate device memory
-
-Deferred deliberately, and this entry exists so that deferral does not become forgetting.
-
-Every allocation in this renderer is its own `vkAllocateMemory`, and the validation layer objects
-fifteen times on every single run: *"the required size of the allocation is 578400, but smaller
-buffers like this should be sub-allocated from larger memory blocks"*. The threshold it complains
-below is 1 MiB, and most of the Grid's buffers are well under it.
-
-Today that is untidy rather than harmful. **Phase 6 is where it stops being untidy**, because
-creature sensors are exactly the wrong shape for one-allocation-per-resource: many creatures, two
-eyes each, each eye a small render target far below the threshold, plus the acoustic buffers beside
-them. Two limits bite at once — `maxMemoryAllocationCount` is a hard driver cap, and every
-allocation is rounded up to `bufferImageGranularity`, so a great many small ones waste real memory
-in padding.
-
-- [x] Sub-allocate device memory before creature sensors multiply the allocation count
-
-An allocator wrapper for this already existed and was **deleted unused** in `d72473c`: 444 lines
-across `allocator.hpp`, `allocator.cpp` and `vma.cpp`, compiled into every binary and never once
-instantiated. `git show 96c3484:src/allocator.hpp` returns it in full, and the two siblings alongside
-it.
-
-It was deleted rather than kept because it had never run. Untested wrapper code around a memory
-allocator is worse than none: the next reader trusts 268 lines of plausible API that no build has
-ever exercised, and it drifts silently from the library it wraps.
-
-**Done, and deliberately not as that wrapper.** `src/memory_arena.hpp` is a bump allocator in about
-120 lines: it hands out offsets into a few large blocks and reclaims everything at once. There is no
-free list, and that is not a simplification of a real allocator — it is the right shape for what this
-renderer does. Every group of resources here is created together and destroyed together: the bloom
-pyramid is rebuilt whole on resize, the output images are rebuilt whole on resize, and the Grid's
-buffers live from upload to shutdown. Nothing ever wants to free one image and keep its neighbour.
-
-The reason for doing it now was **not** memory pressure. At eighteen allocations against a typical
-`maxMemoryAllocationCount` of 4,096, the renderer sat at well under one per cent of the cap. It was a
-signal-to-noise problem: nineteen known-benign warnings on every run are nineteen places for a real
-one to hide, and validation output that is routinely ignored is validation that has stopped working.
-
-| Warning source | Before | After |
-|----------------|-------:|------:|
-| Images (bloom pyramid, tracer outputs, post-process outputs) | 10 | **0** |
-| Buffers (Grid geometry, material tables, ears, histogram) | 6 | **0** |
-| Staging buffers, transient | 2 | 2 |
-
-The two that remain are the staging buffers inside `uploadStorageBuffer`, and they are **left
-deliberately**. Each exists for the duration of one copy and is destroyed before the function
-returns, so putting it in an arena would either grow that arena on every upload or need a reset
-protocol for a transfer nobody keeps. The validation layer's advice is simply wrong for a one-shot
-transfer scratch, and the comment there says so.
-
-One detail worth keeping in mind when Phase 6 adds per-creature buffers: an arena block is mapped
-**once**, by the arena, because Vulkan forbids mapping one `VkDeviceMemory` twice. Two buffers
-sharing a host-visible block therefore cannot each map it, which is why `bind` returns the address
-rather than the caller asking for it.
+- **An arena block is mapped once, by the arena.** Vulkan forbids mapping one `VkDeviceMemory` twice,
+  so buffers sharing a host-visible block cannot each map it. `MemoryArena::bind` returns the address
+  for that reason. Phase 6's per-creature buffers will meet this.
+- **Staging buffers are deliberately not sub-allocated.** Each exists for one copy and is destroyed
+  before `uploadStorageBuffer` returns; the validation layer's advice is simply wrong for a one-shot
+  transfer scratch. That is why two warnings remain and should stay.
 
 ## Etape 10 — Phase 6 prerequisite: parallelise the hierarchy build
 
@@ -263,6 +118,36 @@ Decisions worth pinning now, while they are cheap:
    Grid's own never changes.
 
 ## Journal
+
+### 2026-08-03 (second hunt, libs and docs)
+
+Pointed the three questions at `libs/`, which had barely been audited, and pruned the completed
+etapes while there.
+
+- **The worst find was a safety property that did not exist.** `ARCHITECTURE.md`'s design-decision
+  table said `Signal<T>` was "lifetime-safe via `weak_ptr`". The class is a mutex and a queue; the
+  `weak_ptr` text was an ownership convention in a comment, and *neither user adopts it* — both hold
+  the queue as a plain member. A table entry asserting safety that is not implemented is worse than
+  no entry, because it stops the reader thinking about lifetime at all.
+- The stated rule that each library has an `include/<lib>/` directory is false for two of six:
+  `signals` publishes `signal/`, `logging` publishes `log/`.
+- `ACOUSTICS.md` still cited "the current TODO item, `Fill hearing_samples`" — an item removed some
+  time ago. The argument it supported survives; the citation did not.
+- Several claims **checked out**, which is worth recording so nobody re-checks them: the library
+  target types (two `INTERFACE`, four `STATIC`), the six `*Lib` namespaces, the advertised test
+  macros, the BVH's `2n - 1` node bound, and the Logger's fatal path flushing before it writes to
+  stderr. The Logger also emits under the waiter's mutex — which is where the render channel's
+  version of that fix came from in the first place.
+
+**Pruning.** Nine completed etapes became a one-line table. A finished checklist is not a plan, and
+keeping it beside the changelog and the journal was a third copy to drift. Two decisions were rescued
+from the collapse because they still constrain future work — the once-only arena mapping and the
+deliberate non-sub-allocation of staging buffers — and both were already in the code they govern,
+which is the test for whether an etape can safely go.
+
+**A note on the sweep itself.** Grepping for removed symbols across the repository returned mostly
+`.pdb` files out of `build/`. Excluding build output is the difference between a useful sweep and
+twelve false positives.
 
 ### 2026-08-03 (bug hunt)
 

@@ -752,11 +752,15 @@ first cut. And the *Grid* should stop at two buffers: how a Program extracts dir
 the Program's problem, and *Ormia* is a standing warning that the mechanism may live in the body's
 mechanics rather than in computation at all.
 
-The current TODO item, "Fill `hearing_samples` in the Program interface", names a flat array. **A flat
-sample list is precisely the shape that makes localisation impossible**, and the name should be changed
-before it freezes. Worth stating plainly: no such field exists anywhere in the repository, and
-`tgl_program_abi.h` does not exist as a file at all — the ABI lives only as C snippets inside
-[PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md). That makes this the cheapest possible moment to shape it.
+An earlier TODO item read "Fill `hearing_samples` in the Program interface", naming a flat array.
+**A flat sample list is precisely the shape that makes localisation impossible**, because it has
+nowhere to put the second ear. The item is gone and the shape it named never existed; what the ABI
+carries instead is one `TglEarView` per ear, each with its own energy array — see
+[The ABI shape](#the-abi-shape).
+
+The wider point survives the item that prompted it: `tgl_program_abi.h` still does not exist as a
+file, and the ABI lives only as C snippets inside
+[PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md). Every shape in it is still free.
 
 ### Solve rate: two rates, for two different things
 
