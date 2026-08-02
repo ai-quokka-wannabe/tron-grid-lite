@@ -61,6 +61,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The renderer runs on its own thread.** Not for throughput — the GPU is the bottleneck and a
+  thread does not make it faster — but for responsiveness: on Win32 a modal resize drag runs the
+  platform's own message loop, so a renderer sharing that thread froze until the User let go of the
+  window edge. The event thread keeps the message pump and the cursor, because the pump belongs to
+  the thread that created the window and `ShowCursor` is per-thread; everything Vulkan moves across,
+  because a queue submission wants one owner. The two communicate through a single
+  `SignalsLib::Signal<RenderEvent>` and two atomic flags, collected in one `RenderChannel` struct so
+  that the boundary is checkable by reading: if a name is not a member of it, exactly one thread
+  touches it. `Window::setEventCallback` — until now unused — is what makes this work, because it
+  fires from inside the platform's message handling and so keeps feeding the queue while the pump
+  itself is stuck. The interactive frame loop moved out of `main` into `runRenderLoop`.
+- `Window::wakeEvents` — the one window method callable from another thread. `waitEvents` otherwise
+  sleeps until the User does something, so a render thread that had died could not tell the event
+  loop to stop and the window went on looking alive. `PostMessageW(WM_NULL)` on Win32; a
+  self-addressed client message carrying `XCB_NONE` on X11, which the existing dispatch already
+  discards.
+
 - **There is no ABI versioning, deliberately, until 0.1.0.** `TGL_PROGRAM_ABI_VERSION` is pinned at
   `1u` and stays there. The interface changes whenever it needs to and both sides rebuild; nobody is
   owed backward compatibility by a project that has not reached its first release. The constant is

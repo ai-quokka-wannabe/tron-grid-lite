@@ -108,18 +108,28 @@ Rules:
 `SignalsLib::Signal<T>` is a mutex-protected typed queue. It exists to carry messages **across a thread boundary**,
 and that is the only place it belongs — a lock per message buys nothing when both ends run on the same thread.
 
-**Today it has exactly one user:** `LoggingLib::Logger` holds one as the queue its background writer drains. It is
-held as a plain member, because the logger owns both ends and outlives both.
+**It has two users.** `LoggingLib::Logger` holds one as the queue its background writer drains, as a plain member,
+because the logger owns both ends and outlives both. The second carries window events from the event thread to the
+render thread, and it is the reason the renderer is threaded at all: on Win32 a modal resize drag runs the platform's
+own message loop, so a renderer sharing that thread simply stops until the User lets go of the window edge.
 
-**It gains a second when rendering moves onto its own thread.** That is a decided piece of work, not a hypothetical:
-the main thread will pump window events and the render thread will own the Vulkan timeline, with a
-`Signal<RenderEvent>` between them — the same shape the earlier TronGrid used, and for the same reason. On Win32 a
-modal resize drag blocks the message loop, so a renderer sharing that thread simply stops until the user lets go.
-Phase 5's acoustic solve, which runs at roughly a tenth of the visual rate, is the third user waiting behind it.
+The division of labour follows the platform's constraints rather than taste. The message pump belongs to the thread
+that created the window, and `ShowCursor` is per-thread on Win32, so events and the cursor stay on the event thread.
+Everything Vulkan is on the render thread, because a queue submission wants one owner.
 
-Until those land, this section describes a queue with one customer. Direct calls remain the right answer for
-same-tick, same-system data access, and RAII members remain the right answer for parent-child ownership such as
-device to swapchain.
+Two details are worth stating, because both are easy to get wrong and neither is visible from the type:
+
+- **The emit happens under the mutex the reader waits on.** A message queued after the reader has tested its
+  predicate but before it has registered as a waiter would notify nobody. `Signal` is internally locked, so the queue
+  itself is safe; the lost wakeup is a property of the condition variable beside it, not of the queue.
+- **`Window::setEventCallback` is what makes the whole thing work.** It fires from inside the platform's own message
+  handling, so it keeps feeding the queue during a modal drag — precisely when `pumpEvents` cannot run. The hook was
+  written for this and sat unused until now.
+
+Phase 5's acoustic solve, which runs at roughly a tenth of the visual rate, is the third user waiting behind these.
+
+Direct calls remain the right answer for same-tick, same-system data access, and RAII members remain the right answer
+for parent-child ownership such as device to swapchain.
 
 ---
 

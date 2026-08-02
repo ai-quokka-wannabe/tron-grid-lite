@@ -148,6 +148,20 @@ namespace WindowLib
         pumpEvents();
     }
 
+    void Win32Window::wakeEvents()
+    {
+        /*
+            WM_NULL is the message that means nothing: DefWindowProc ignores it and the window
+            procedure never sees a reason to act. All that matters is that posting it puts something
+            in the queue, which is what ends the WaitMessage above.
+
+            PostMessageW is one of the few Win32 calls documented as safe from any thread — it
+            appends to the target thread's message queue rather than calling into its window
+            procedure, which is exactly why SendMessage would be wrong here.
+        */
+        PostMessageW(m_hwnd, WM_NULL, 0, 0);
+    }
+
     void Win32Window::setCursorCaptured(bool captured)
     {
         // Early return if state is unchanged. ShowCursor maintains a per-process display

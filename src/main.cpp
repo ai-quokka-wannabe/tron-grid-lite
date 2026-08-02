@@ -43,21 +43,26 @@
 #include <bvh/bvh.hpp>
 #include <log/logger.hpp>
 #include <math/vector.hpp>
+#include <signal/signal.hpp>
 #include <window/window.hpp>
 #include <window/window_event.hpp>
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <charconv>
 #include <chrono>
-#include <cstring>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -72,6 +77,71 @@ namespace
 
     //! Number of frames the host may record ahead of the GPU.
     constexpr uint32_t MAX_FRAMES_IN_FLIGHT{2u};
+
+    /*!
+        What the event thread sends the render thread.
+
+        Window events cannot be read from the render thread: on Win32 the message pump belongs to
+        the thread that created the window, and on both platforms the event queue is filled by the
+        platform's own callback. So the event thread translates and forwards, and this is the whole
+        vocabulary of that channel.
+    */
+    struct RenderEvent {
+        //! What kind of message this is.
+        enum class Type {
+            Resize, //!< The window changed size; the swapchain and its dependants must be rebuilt.
+            Input, //!< A key, mouse or focus event for the User's camera.
+            Stop //!< The window is closing; finish the current frame and return.
+        };
+
+        Type type{Type::Input}; //!< Discriminator.
+        uint32_t width{0u}; //!< New width, for Resize.
+        uint32_t height{0u}; //!< New height, for Resize.
+        WindowLib::WindowEvent input{}; //!< The original event, for Input.
+    };
+
+    /*!
+        Everything the two threads share, and the only thing they share.
+
+        Collecting it here is what makes the boundary checkable: if a name is not a member of this
+        struct, exactly one thread touches it, and no reasoning about locks is required. The queue
+        carries work in one direction, the two flags carry single bits back in the other, and the
+        mutex and condition variable exist solely so the render thread can sleep when there is
+        nothing to draw.
+    */
+    struct RenderChannel {
+        SignalsLib::Signal<RenderEvent> queue; //!< Event thread to render thread. Mutex-protected internally.
+        std::mutex mutex; //!< Held across `emit` so a wakeup cannot be lost. See `send`.
+        std::condition_variable cv; //!< Wakes the render thread when it is idling on a blank window.
+
+        //! Render thread to event thread: what the User's Tab key asked for. Applied by whoever owns the window.
+        std::atomic<bool> wants_cursor_capture{false};
+
+        //! Render thread to event thread: the renderer has died, so stop pumping into a queue nobody drains.
+        std::atomic<bool> render_failed{false};
+
+        /*!
+            Queues a message and wakes the render thread.
+
+            The emit happens under the very mutex the render thread waits on, or the wakeup can be
+            lost: a message queued after the waiter has tested its predicate but before it has
+            registered as a waiter would notify nobody, and the render thread would sleep with work
+            pending. LoggingLib::Logger documents the same hazard on its own queue.
+
+            The notify is deliberately outside the lock, so the woken thread does not immediately
+            block on the mutex that was just released.
+
+            \param event Message to queue.
+        */
+        void send(const RenderEvent& event)
+        {
+            {
+                const std::lock_guard<std::mutex> lock{mutex};
+                queue.emit(event);
+            }
+            cv.notify_one();
+        }
+    };
 
     /*!
         Depth of the ray tree.
@@ -467,6 +537,299 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
     return EXIT_SUCCESS;
 }
 
+/*!
+    Draws the Grid until told to stop. Runs on the render thread and owns the Vulkan timeline.
+
+    Every Vulkan object created here belongs to this thread for its whole life, which is the point:
+    a queue submission wants one owner, and the rule "if it is Vulkan, it lives on this stack" is
+    one anybody can check by reading. The window is deliberately not a parameter — this function
+    cannot ask how big the window is, only be told, because asking would race the thread that owns
+    it.
+
+    \param device Logical device, queues and physical device.
+    \param swapchain Presentation chain. Recreated here on every resize.
+    \param tracer The compute ray tracer.
+    \param post_process Bloom, tone mapping and sRGB encoding.
+    \param logger Thread-safe logger.
+    \param channel The only state shared with the event thread.
+*/
+void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel)
+{
+    const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
+    const vk::raii::CommandPool command_pool{device.get(), pool_info};
+
+    const vk::CommandBufferAllocateInfo command_buffer_info{
+        .commandPool = *command_pool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = MAX_FRAMES_IN_FLIGHT};
+    vk::raii::CommandBuffers command_buffers{device.get(), command_buffer_info};
+
+    std::vector<vk::raii::Semaphore> image_available;
+    std::vector<vk::raii::Fence> in_flight;
+    for (uint32_t frame{0u}; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
+        image_available.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
+        in_flight.emplace_back(device.get(), vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
+    }
+
+    // One present semaphore per swapchain image: a semaphore signalled for image N must not be
+    // waited on while a different frame presents image M.
+    std::vector<vk::raii::Semaphore> render_finished;
+    for (uint32_t image{0u}; image < swapchain.imageCount(); ++image) {
+        render_finished.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
+    }
+
+    GpuProfiler profiler{device, MAX_FRAMES_IN_FLIGHT, logger};
+
+    /*
+        Everything above this point is destroyed when this scope unwinds, and a great deal of it may
+        still be in use by a submission the GPU has not finished. On the ordinary path the loop below
+        exits and the device is idled first — but an exception escaping the loop skipped that
+        entirely. `vk::OutOfDateKHRError` is caught inside, yet surface-lost, device-lost and
+        out-of-device-memory are not, and any of them would run destructors for the command pool, the
+        semaphores, the query pool and every image while work was still executing.
+
+        The guard makes the wait unconditional. Its own failure is swallowed deliberately: a device
+        that is already lost cannot be waited on, and throwing from a destructor during unwinding
+        would replace the real error with a call to std::terminate.
+    */
+    struct DeviceIdleGuard {
+        const Device* device;
+
+        ~DeviceIdleGuard()
+        {
+            try {
+                device->get().waitIdle();
+            }
+            // NOLINTNEXTLINE(bugprone-empty-catch) — see above: this runs during unwinding.
+            catch (...) {
+                // Deliberately swallowed. Throwing from a destructor while an exception is in
+                // flight calls std::terminate and destroys the diagnostic that matters.
+            }
+        }
+    } idle_guard{&device};
+
+    // The debug camera: the User's free-flight view. Creatures never use this.
+    Camera camera{MathLib::Vec3{0.0f, 6.0f, 40.0f}};
+    SpectatorController spectator;
+
+    logger.logInfo("Phase 4 initialised on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
+
+    uint32_t frame_index{0u};
+    bool needs_recreate{false};
+    bool stopping{false};
+
+    // This thread's own idea of the window size, updated only by Resize messages. It never asks the
+    // window directly: that would race the event thread.
+    uint32_t surface_width{swapchain.extent().width};
+    uint32_t surface_height{swapchain.extent().height};
+
+    std::chrono::steady_clock::time_point previous_time{std::chrono::steady_clock::now()};
+
+    while (!stopping) {
+        // Drain everything queued since the last frame. Input is integrated rather than sampled, so
+        // no event may be dropped, however many arrived during one frame.
+        RenderEvent message{};
+        while (channel.queue.consume(message)) {
+            switch (message.type) {
+            case RenderEvent::Type::Resize:
+                surface_width = message.width;
+                surface_height = message.height;
+                needs_recreate = true;
+                break;
+
+            case RenderEvent::Type::Input:
+                spectator.processEvent(message.input);
+                break;
+
+            case RenderEvent::Type::Stop:
+                stopping = true;
+                break;
+            }
+        }
+
+        if (stopping) {
+            break;
+        }
+
+        const std::chrono::steady_clock::time_point current_time{std::chrono::steady_clock::now()};
+        const float delta_seconds{std::chrono::duration<float>{current_time - previous_time}.count()};
+        previous_time = current_time;
+
+        spectator.update(camera, delta_seconds);
+
+        // Published for the event thread to apply, because ShowCursor is per-thread on Win32.
+        channel.wants_cursor_capture = spectator.cursorCaptured();
+
+        /*
+            A minimised window has nothing to render into. Waiting on the condition variable rather
+            than spinning: the next message — almost certainly the Resize that restores the window —
+            is what should wake this thread.
+        */
+        if ((surface_width == 0u) || (surface_height == 0u)) {
+            std::unique_lock<std::mutex> lock{channel.mutex};
+            channel.cv.wait(lock, [&channel]() {
+                return !channel.queue.empty();
+            });
+            continue;
+        }
+
+        if (needs_recreate) {
+            // Swapchain::recreate idles the device itself before rebuilding, which is also what the
+            // two resizes below require, so there is deliberately no waitIdle here: two calls would
+            // leave it ambiguous which layer owns the invariant.
+            swapchain.recreate(surface_width, surface_height);
+
+            /*
+                The semaphores must be rebuilt with the swapchain. There is one per image and they
+                are indexed by the acquired image index, but vkGetSwapchainImagesKHR may legally
+                return more images than were requested, and nothing requires two swapchains built
+                from the same surface to return the same count. A grown swapchain would index past
+                the end of this vector and hand the driver a garbage handle — before any validation
+                layer could see it.
+            */
+            render_finished.clear();
+            for (uint32_t image{0u}; image < swapchain.imageCount(); ++image) {
+                render_finished.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
+            }
+
+            tracer.resize(swapchain.extent());
+            post_process.resize(swapchain.extent(), tracer.outputViews());
+            needs_recreate = false;
+            continue;
+        }
+
+        const vk::raii::Fence& fence{in_flight[frame_index]};
+        while (device.get().waitForFences({*fence}, vk::True, UINT64_MAX) == vk::Result::eTimeout) {
+            // Retry — a timeout here is not an error.
+        }
+
+        uint32_t image_index{0u};
+        bool acquire_suboptimal{false};
+        try {
+            /*
+                vulkan-hpp throws for an out-of-date swapchain and treats a suboptimal one as
+                success, so eSuboptimalKHR is the only non-success code that can reach here — and it
+                means the image WAS acquired and this semaphore will be signalled.
+
+                Abandoning the frame at that point would leave it signalled with nothing to consume
+                it, and the same semaphore is handed to the next acquire for this slot, which
+                VUID-vkAcquireNextImageKHR-semaphore-01779 forbids. A suboptimal image is still a
+                perfectly usable image, so it is rendered and presented as normal and the swapchain
+                is rebuilt afterwards. Dragging a window edge produces this constantly, because the
+                size is sampled once when the swapchain is built.
+            */
+            const auto [acquire_result, acquired_index] = swapchain.get().acquireNextImage(UINT64_MAX, *image_available[frame_index], nullptr);
+            acquire_suboptimal = (acquire_result == vk::Result::eSuboptimalKHR);
+            image_index = acquired_index;
+        } catch (const vk::OutOfDateKHRError&) {
+            // A failed acquire signals nothing, so the semaphore may be reused unchanged.
+            needs_recreate = true;
+            continue;
+        }
+
+        device.get().resetFences({*fence});
+        profiler.collect(frame_index);
+        profiler.logSummary();
+
+        const vk::raii::CommandBuffer& command_buffer{command_buffers[frame_index]};
+        command_buffer.reset();
+        command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+        profiler.resetFrame(command_buffer, frame_index);
+        profiler.begin(command_buffer, frame_index, GpuPass::Frame);
+
+        profiler.begin(command_buffer, frame_index, GpuPass::Trace);
+        tracer.record(command_buffer, frame_index, camera, MAX_BOUNCES);
+        profiler.end(command_buffer, frame_index, GpuPass::Trace);
+
+        profiler.begin(command_buffer, frame_index, GpuPass::Post);
+        post_process.record(command_buffer, frame_index, BLOOM_THRESHOLD, BLOOM_STRENGTH, VIGNETTE_STRENGTH, EXPOSURE);
+        profiler.end(command_buffer, frame_index, GpuPass::Post);
+
+        profiler.begin(command_buffer, frame_index, GpuPass::Present);
+
+        /*
+            The source stage must be the stage the acquire semaphore is waited on, not eTopOfPipe. A
+            semaphore wait at eTransfer orders nothing against a barrier claiming to come from the
+            top of the pipe, so the layout transition would be free to run before the image has
+            actually been acquired.
+        */
+        const vk::ImageMemoryBarrier2 to_transfer_dst{.srcStageMask = vk::PipelineStageFlagBits2::eBlit,
+            .srcAccessMask = vk::AccessFlagBits2::eNone,
+            .dstStageMask = vk::PipelineStageFlagBits2::eBlit,
+            .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .oldLayout = vk::ImageLayout::eUndefined,
+            .newLayout = vk::ImageLayout::eTransferDstOptimal,
+            .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+            .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+            .image = swapchain.images()[image_index],
+            .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u}};
+        command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1u, .pImageMemoryBarriers = &to_transfer_dst});
+
+        /*
+            A one-to-one blit rather than a copy, because the traced image is RGBA and the surface is
+            BGRA. The blit performs that conversion; a copy would require identical formats and would
+            swap red and blue.
+        */
+        const std::array<vk::Offset3D, 2> source_bounds{
+            vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(post_process.extent().width), static_cast<int32_t>(post_process.extent().height), 1}};
+        const std::array<vk::Offset3D, 2> destination_bounds{
+            vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(swapchain.extent().width), static_cast<int32_t>(swapchain.extent().height), 1}};
+
+        const vk::ImageBlit2 blit_region{.srcSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u},
+            .srcOffsets = source_bounds,
+            .dstSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u},
+            .dstOffsets = destination_bounds};
+
+        command_buffer.blitImage2(vk::BlitImageInfo2{.srcImage = post_process.outputImage(frame_index),
+            .srcImageLayout = vk::ImageLayout::eTransferSrcOptimal,
+            .dstImage = swapchain.images()[image_index],
+            .dstImageLayout = vk::ImageLayout::eTransferDstOptimal,
+            .regionCount = 1u,
+            .pRegions = &blit_region,
+            .filter = vk::Filter::eNearest});
+
+        const vk::ImageMemoryBarrier2 to_present{.srcStageMask = vk::PipelineStageFlagBits2::eBlit,
+            .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
+            .dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
+            .dstAccessMask = vk::AccessFlagBits2::eNone,
+            .oldLayout = vk::ImageLayout::eTransferDstOptimal,
+            .newLayout = vk::ImageLayout::ePresentSrcKHR,
+            .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
+            .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
+            .image = swapchain.images()[image_index],
+            .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u}};
+        command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1u, .pImageMemoryBarriers = &to_present});
+
+        profiler.end(command_buffer, frame_index, GpuPass::Present);
+        profiler.end(command_buffer, frame_index, GpuPass::Frame);
+        command_buffer.end();
+
+        const vk::PipelineStageFlags wait_stage{vk::PipelineStageFlagBits::eTransfer};
+        const vk::SubmitInfo submit{.waitSemaphoreCount = 1u,
+            .pWaitSemaphores = &*image_available[frame_index],
+            .pWaitDstStageMask = &wait_stage,
+            .commandBufferCount = 1u,
+            .pCommandBuffers = &*command_buffer,
+            .signalSemaphoreCount = 1u,
+            .pSignalSemaphores = &*render_finished[image_index]};
+        device.graphicsQueue().submit({submit}, *fence);
+
+        try {
+            const vk::PresentInfoKHR present{.waitSemaphoreCount = 1u,
+                .pWaitSemaphores = &*render_finished[image_index],
+                .swapchainCount = 1u,
+                .pSwapchains = &*swapchain.get(),
+                .pImageIndices = &image_index};
+            const vk::Result result{device.presentQueue().presentKHR(present)};
+            if ((result == vk::Result::eSuboptimalKHR) || acquire_suboptimal) {
+                needs_recreate = true;
+            }
+        } catch (const vk::OutOfDateKHRError&) {
+            needs_recreate = true;
+        }
+
+        frame_index = (frame_index + 1u) % MAX_FRAMES_IN_FLIGHT;
+    }
+}
+
 int main(int argc, char** argv)
 {
     LoggingLib::Logger logger;
@@ -589,250 +952,125 @@ int main(int argc, char** argv)
             return recordCinematic(device, tracer, post_process, logger, record_width, record_height, record_frames, record_directory);
         }
 
-        const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
-        const vk::raii::CommandPool command_pool{device.get(), pool_info};
+        /*
+            From here the renderer runs on its own thread.
 
-        const vk::CommandBufferAllocateInfo command_buffer_info{
-            .commandPool = *command_pool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = MAX_FRAMES_IN_FLIGHT};
-        vk::raii::CommandBuffers command_buffers{device.get(), command_buffer_info};
+            Not for throughput — the GPU is the bottleneck and a thread does not make it faster. It
+            is for responsiveness: on Win32 a modal resize drag runs the platform's own message loop,
+            so a renderer sharing that thread simply stops until the User lets go of the window edge.
+            The window procedure keeps firing throughout, which is why the event callback below can
+            keep feeding the queue while the pump is stuck.
 
-        std::vector<vk::raii::Semaphore> image_available;
-        std::vector<vk::raii::Fence> in_flight;
-        for (uint32_t frame{0u}; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
-            image_available.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
-            in_flight.emplace_back(device.get(), vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
-        }
+            The division of labour follows the constraint rather than taste. The message pump belongs
+            to the thread that created the window, and `ShowCursor` is per-thread on Win32, so events
+            and the cursor stay here. Everything Vulkan moves across, because a queue submission
+            wants one owner.
+        */
+        RenderChannel channel;
 
-        // One present semaphore per swapchain image: a semaphore signalled for image N must not be
-        // waited on while a different frame presents image M.
-        std::vector<vk::raii::Semaphore> render_finished;
-        for (uint32_t image{0u}; image < swapchain.imageCount(); ++image) {
-            render_finished.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
-        }
+        std::thread render_thread{[&device, &swapchain, &tracer, &post_process, &logger, &channel, &window]() {
+            try {
+                runRenderLoop(device, swapchain, tracer, post_process, logger, channel);
+            } catch (const std::exception& error) {
+                channel.render_failed = true;
 
-        GpuProfiler profiler{device, MAX_FRAMES_IN_FLIGHT, logger};
+                /*
+                    Setting the flag is not enough on its own. The event thread spends nearly all of
+                    its life asleep inside the platform's event wait, and nothing in this process can
+                    end that sleep except an event — so without the wake, a dead renderer would sit
+                    behind a window that still looked alive until the User happened to move the
+                    mouse over it.
+
+                    The condition variable is deliberately not signalled here: the only thread that
+                    ever waits on it is this one.
+                */
+                try {
+                    window->wakeEvents();
+                }
+                // NOLINTNEXTLINE(bugprone-empty-catch) — the flag above is the report.
+                catch (...) {
+                    // A window that cannot be woken is already gone; the flag still stops the loop.
+                }
+
+                try {
+                    logger.logFatal(std::string{"Render thread: "} + error.what());
+                }
+                // NOLINTNEXTLINE(bugprone-empty-catch) — the flag above is the report.
+                catch (...) {
+                    // Nothing left that could report anything.
+                }
+            }
+        }};
 
         /*
-            Everything above this point is destroyed when the enclosing scope unwinds, and a great
-            deal of it may still be in use by a submission the GPU has not finished. On the ordinary
-            path the loop below exits and the device is idled first — but an exception escaping the
-            loop skipped that entirely. `vk::OutOfDateKHRError` is caught inside, yet surface-lost,
-            device-lost and out-of-device-memory are not, and any of them would run destructors for
-            the command pool, the semaphores, the query pool and every image while work was still
-            executing.
+            Stops and joins the render thread, however this scope is left.
 
-            The guard makes the wait unconditional. Its own failure is swallowed deliberately: a
-            device that is already lost cannot be waited on, and throwing from a destructor during
-            unwinding would replace the real error with a call to std::terminate.
+            A joinable std::thread that reaches its destructor calls std::terminate, and the platform
+            calls in the loop below can throw — so without this, an error on the event thread would
+            abort the process instead of being reported by the handler at the bottom of main. The
+            ordinary exit runs through here too: a second stop-and-join written after the loop would
+            only be a second thing to keep correct.
+
+            Detaching the callback comes first and is not incidental. `window` is declared far above
+            and is therefore destroyed long after `channel`; a close arriving in between would call
+            through a pointer to an object that no longer exists.
         */
-        struct DeviceIdleGuard {
-            const Device* device;
+        struct RenderThreadGuard {
+            WindowLib::Window* window;
+            std::thread* thread;
+            RenderChannel* channel;
 
-            ~DeviceIdleGuard()
+            ~RenderThreadGuard()
             {
-                try {
-                    device->get().waitIdle();
-                }
-                // NOLINTNEXTLINE(bugprone-empty-catch) — see above: this runs during unwinding.
-                catch (...) {
-                    // Deliberately swallowed. Throwing from a destructor while an exception is in
-                    // flight calls std::terminate and destroys the diagnostic that matters.
+                window->setEventCallback(nullptr, nullptr);
+
+                if (thread->joinable()) {
+                    channel->send(RenderEvent{.type = RenderEvent::Type::Stop});
+                    thread->join();
                 }
             }
-        } idle_guard{&device};
+        } render_thread_guard{window.get(), &render_thread, &channel};
 
-        // The debug camera: the User's free-flight view. Creatures never use this.
-        Camera camera{MathLib::Vec3{0.0f, 6.0f, 40.0f}};
-        SpectatorController spectator;
+        /*
+            The event thread from here on: pump, translate, forward.
 
-        logger.logInfo("Phase 4 initialised on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
+            The callback fires from inside the platform's own message handling, which is what keeps
+            the queue moving during a modal drag. It does no work beyond translation — anything slow
+            here would stall the window.
+        */
+        window->setEventCallback(
+            [](const WindowLib::WindowEvent& event, void* user_data) {
+                auto* target = static_cast<RenderChannel*>(user_data);
 
-        uint32_t frame_index{0u};
-        bool needs_recreate{false};
-        std::chrono::steady_clock::time_point previous_time{std::chrono::steady_clock::now()};
+                RenderEvent forwarded{};
+                if (event.type == WindowLib::WindowEvent::Type::Resize) {
+                    forwarded.type = RenderEvent::Type::Resize;
+                    forwarded.width = event.resize.width;
+                    forwarded.height = event.resize.height;
+                } else {
+                    forwarded.type = RenderEvent::Type::Input;
+                    forwarded.input = event;
+                }
 
-        while (!window->shouldClose()) {
+                target->send(forwarded);
+            },
+            &channel);
+
+        while (!window->shouldClose() && !channel.render_failed) {
+            window->waitEvents();
             window->pumpEvents();
 
+            // The callback has already forwarded everything; this drains the window's own queue so
+            // it cannot grow without bound, and catches the close request.
             WindowLib::WindowEvent event{};
             while (window->pollEvent(event)) {
-                if (event.type == WindowLib::WindowEvent::Type::Resize) {
-                    needs_recreate = true;
-                } else if (event.type == WindowLib::WindowEvent::Type::Close) {
+                if (event.type == WindowLib::WindowEvent::Type::Close) {
                     window->requestClose();
                 }
-                spectator.processEvent(event);
             }
 
-            const std::chrono::steady_clock::time_point current_time{std::chrono::steady_clock::now()};
-            const float delta_seconds{std::chrono::duration<float>{current_time - previous_time}.count()};
-            previous_time = current_time;
-
-            window->setCursorCaptured(spectator.cursorCaptured());
-            spectator.update(camera, delta_seconds);
-
-            // A minimised window has a zero-sized swapchain; there is nothing to render into.
-            if ((window->width() == 0u) || (window->height() == 0u)) {
-                window->waitEvents();
-                continue;
-            }
-
-            if (needs_recreate) {
-                // Swapchain::recreate idles the device itself before rebuilding, which is also what
-                // the two resizes below require, so there is deliberately no waitIdle here: two
-                // calls would leave it ambiguous which layer owns the invariant.
-                swapchain.recreate(window->width(), window->height());
-
-                /*
-                    The semaphores must be rebuilt with the swapchain. There is one per image and
-                    they are indexed by the acquired image index, but vkGetSwapchainImagesKHR may
-                    legally return more images than were requested, and nothing requires two
-                    swapchains built from the same surface to return the same count. A grown
-                    swapchain would index past the end of this vector and hand the driver a garbage
-                    handle — before any validation layer could see it.
-                */
-                render_finished.clear();
-                for (uint32_t image{0u}; image < swapchain.imageCount(); ++image) {
-                    render_finished.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
-                }
-
-                tracer.resize(swapchain.extent());
-                post_process.resize(swapchain.extent(), tracer.outputViews());
-                needs_recreate = false;
-                continue;
-            }
-
-            const vk::raii::Fence& fence{in_flight[frame_index]};
-            while (device.get().waitForFences({*fence}, vk::True, UINT64_MAX) == vk::Result::eTimeout) {
-                // Retry — a timeout here is not an error.
-            }
-
-            uint32_t image_index{0u};
-            bool acquire_suboptimal{false};
-            try {
-                /*
-                    vulkan-hpp throws for an out-of-date swapchain and treats a suboptimal one as
-                    success, so eSuboptimalKHR is the only non-success code that can reach here —
-                    and it means the image WAS acquired and this semaphore will be signalled.
-
-                    Abandoning the frame at that point would leave it signalled with nothing to
-                    consume it, and the same semaphore is handed to the next acquire for this slot,
-                    which VUID-vkAcquireNextImageKHR-semaphore-01779 forbids. A suboptimal image is
-                    still a perfectly usable image, so it is rendered and presented as normal and
-                    the swapchain is rebuilt afterwards. Dragging a window edge produces this
-                    constantly, because the size is sampled once when the swapchain is built.
-                */
-                const auto [acquire_result, acquired_index] = swapchain.get().acquireNextImage(UINT64_MAX, *image_available[frame_index], nullptr);
-                acquire_suboptimal = (acquire_result == vk::Result::eSuboptimalKHR);
-                image_index = acquired_index;
-            } catch (const vk::OutOfDateKHRError&) {
-                // A failed acquire signals nothing, so the semaphore may be reused unchanged.
-                needs_recreate = true;
-                continue;
-            }
-
-            device.get().resetFences({*fence});
-            profiler.collect(frame_index);
-            profiler.logSummary();
-
-            const vk::raii::CommandBuffer& command_buffer{command_buffers[frame_index]};
-            command_buffer.reset();
-            command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-            profiler.resetFrame(command_buffer, frame_index);
-            profiler.begin(command_buffer, frame_index, GpuPass::Frame);
-
-            profiler.begin(command_buffer, frame_index, GpuPass::Trace);
-            tracer.record(command_buffer, frame_index, camera, MAX_BOUNCES);
-            profiler.end(command_buffer, frame_index, GpuPass::Trace);
-
-            profiler.begin(command_buffer, frame_index, GpuPass::Post);
-            post_process.record(command_buffer, frame_index, BLOOM_THRESHOLD, BLOOM_STRENGTH, VIGNETTE_STRENGTH, EXPOSURE);
-            profiler.end(command_buffer, frame_index, GpuPass::Post);
-
-            profiler.begin(command_buffer, frame_index, GpuPass::Present);
-
-            /*
-                The source stage must be the stage the acquire semaphore is waited on, not
-                eTopOfPipe. A semaphore wait at eTransfer orders nothing against a barrier claiming
-                to come from the top of the pipe, so the layout transition would be free to run
-                before the image has actually been acquired.
-            */
-            const vk::ImageMemoryBarrier2 to_transfer_dst{.srcStageMask = vk::PipelineStageFlagBits2::eBlit,
-                .srcAccessMask = vk::AccessFlagBits2::eNone,
-                .dstStageMask = vk::PipelineStageFlagBits2::eBlit,
-                .dstAccessMask = vk::AccessFlagBits2::eTransferWrite,
-                .oldLayout = vk::ImageLayout::eUndefined,
-                .newLayout = vk::ImageLayout::eTransferDstOptimal,
-                .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-                .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-                .image = swapchain.images()[image_index],
-                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u}};
-            command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1u, .pImageMemoryBarriers = &to_transfer_dst});
-
-            /*
-                A one-to-one blit rather than a copy, because the traced image is RGBA and the
-                surface is BGRA. The blit performs that conversion; a copy would require identical
-                formats and would swap red and blue.
-            */
-            const std::array<vk::Offset3D, 2> source_bounds{
-                vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(post_process.extent().width), static_cast<int32_t>(post_process.extent().height), 1}};
-            const std::array<vk::Offset3D, 2> destination_bounds{
-                vk::Offset3D{0, 0, 0}, vk::Offset3D{static_cast<int32_t>(swapchain.extent().width), static_cast<int32_t>(swapchain.extent().height), 1}};
-
-            const vk::ImageBlit2 blit_region{.srcSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u},
-                .srcOffsets = source_bounds,
-                .dstSubresource = vk::ImageSubresourceLayers{vk::ImageAspectFlagBits::eColor, 0u, 0u, 1u},
-                .dstOffsets = destination_bounds};
-
-            command_buffer.blitImage2(vk::BlitImageInfo2{.srcImage = post_process.outputImage(frame_index),
-                .srcImageLayout = vk::ImageLayout::eTransferSrcOptimal,
-                .dstImage = swapchain.images()[image_index],
-                .dstImageLayout = vk::ImageLayout::eTransferDstOptimal,
-                .regionCount = 1u,
-                .pRegions = &blit_region,
-                .filter = vk::Filter::eNearest});
-
-            const vk::ImageMemoryBarrier2 to_present{.srcStageMask = vk::PipelineStageFlagBits2::eBlit,
-                .srcAccessMask = vk::AccessFlagBits2::eTransferWrite,
-                .dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe,
-                .dstAccessMask = vk::AccessFlagBits2::eNone,
-                .oldLayout = vk::ImageLayout::eTransferDstOptimal,
-                .newLayout = vk::ImageLayout::ePresentSrcKHR,
-                .srcQueueFamilyIndex = vk::QueueFamilyIgnored,
-                .dstQueueFamilyIndex = vk::QueueFamilyIgnored,
-                .image = swapchain.images()[image_index],
-                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u}};
-            command_buffer.pipelineBarrier2(vk::DependencyInfo{.imageMemoryBarrierCount = 1u, .pImageMemoryBarriers = &to_present});
-
-            profiler.end(command_buffer, frame_index, GpuPass::Present);
-            profiler.end(command_buffer, frame_index, GpuPass::Frame);
-            command_buffer.end();
-
-            const vk::PipelineStageFlags wait_stage{vk::PipelineStageFlagBits::eTransfer};
-            const vk::SubmitInfo submit{.waitSemaphoreCount = 1u,
-                .pWaitSemaphores = &*image_available[frame_index],
-                .pWaitDstStageMask = &wait_stage,
-                .commandBufferCount = 1u,
-                .pCommandBuffers = &*command_buffer,
-                .signalSemaphoreCount = 1u,
-                .pSignalSemaphores = &*render_finished[image_index]};
-            device.graphicsQueue().submit({submit}, *fence);
-
-            try {
-                const vk::PresentInfoKHR present{.waitSemaphoreCount = 1u,
-                    .pWaitSemaphores = &*render_finished[image_index],
-                    .swapchainCount = 1u,
-                    .pSwapchains = &*swapchain.get(),
-                    .pImageIndices = &image_index};
-                const vk::Result result{device.presentQueue().presentKHR(present)};
-                if ((result == vk::Result::eSuboptimalKHR) || acquire_suboptimal) {
-                    needs_recreate = true;
-                }
-            } catch (const vk::OutOfDateKHRError&) {
-                needs_recreate = true;
-            }
-
-            frame_index = (frame_index + 1u) % MAX_FRAMES_IN_FLIGHT;
+            // Applied here because ShowCursor is per-thread on Win32 and this is the window's thread.
+            window->setCursorCaptured(channel.wants_cursor_capture);
         }
 
         logger.logInfo("Shutting down cleanly.");

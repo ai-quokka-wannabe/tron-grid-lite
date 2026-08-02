@@ -84,14 +84,33 @@ The earlier TronGrid solved this the straightforward way: the main thread pumps 
 thread owns the Vulkan timeline, with a `SignalsLib::Signal<RenderEvent>` between them. That is the
 one place a mutex-protected queue earns its lock, and it is why `libs/signals` exists.
 
-- [ ] Move the frame loop onto a render thread, with `Signal<RenderEvent>` carrying resize, input
+- [x] Move the frame loop onto a render thread, with `Signal<RenderEvent>` carrying resize, input
       and stop from the event thread
-- [ ] Translate window events to `RenderEvent` inside the event callback, so a modal drag still feeds
+- [x] Translate window events to `RenderEvent` inside the event callback, so a modal drag still feeds
       the queue
-- [ ] Keep cursor capture on the window's thread — `ShowCursor` is per-thread on Win32 and cannot
+- [x] Keep cursor capture on the window's thread — `ShowCursor` is per-thread on Win32 and cannot
       move to the render thread, which is how the earlier TronGrid handles it too
-- [ ] Update `docs/ARCHITECTURE.md` § Signal-Based Communication, which currently records this as
+- [x] Update `docs/ARCHITECTURE.md` § Signal-Based Communication, which currently records this as
       decided-but-unbuilt
+
+**Done.** The interactive loop left `main` for `runRenderLoop`, and everything the two threads share
+is collected in one `RenderChannel` — so the boundary is checkable by reading rather than by
+reasoning: if a name is not a member of it, exactly one thread touches it.
+
+Two things the plan above did not anticipate, both found while building it:
+
+- `Window::wakeEvents` had to be added. `waitEvents` sleeps until the User does something, so a
+  render thread that had died could not tell the event loop to stop, and the window went on looking
+  alive until somebody moved the mouse. `PostMessageW(WM_NULL)` on Win32; a self-addressed client
+  message carrying `XCB_NONE` on X11.
+- The `std::thread` needed an RAII stop-and-join. A joinable thread reaching its destructor calls
+  `std::terminate`, so an exception from any of the platform calls in the event loop would have
+  aborted the process instead of being reported. The same guard detaches the event callback, because
+  `window` outlives the object that callback points at.
+
+Verified on a GTX 1650 Ti: four programmatic resizes, minimise, restore and close, with validation
+layers on and zero errors. The modal-drag freeze itself is the design's whole purpose but has not
+been measured — driving a real modal loop needs a hand on the window edge.
 
 Phase 5's acoustic solve is the next user after that: it runs at roughly a tenth of the visual rate,
 which is a second thread boundary and a second queue.

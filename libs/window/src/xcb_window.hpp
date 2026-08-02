@@ -37,6 +37,9 @@ namespace WindowLib
         //! Blocks until at least one XCB event arrives, then drains all pending events.
         void waitEvents() override;
 
+        //! Sends the window a client message it ignores, so waitEvents returns. Callable from any thread.
+        void wakeEvents() override;
+
         //! Captures or releases the mouse cursor.
         void setCursorCaptured(bool captured) override;
 

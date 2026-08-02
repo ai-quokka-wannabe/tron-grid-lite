@@ -43,6 +43,9 @@ namespace WindowLib
         //! Blocks until at least one Win32 message arrives, then drains all pending messages.
         void waitEvents() override;
 
+        //! Posts a no-op message so a thread blocked in waitEvents returns. Callable from any thread.
+        void wakeEvents() override;
+
         //! Captures or releases the mouse cursor.
         void setCursorCaptured(bool captured) override;
 

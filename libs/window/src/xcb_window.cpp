@@ -187,6 +187,31 @@ namespace WindowLib
         pumpEvents();
     }
 
+    void XcbWindow::wakeEvents()
+    {
+        /*
+            X11 has no "wake up" primitive, so the window sends itself an event and the wait ends
+            because an event arrived. A client message is the natural carrier: `handleEvent` already
+            examines only `data32[0]`, and only for WM_DELETE_WINDOW, so any other value falls
+            through and is discarded. XCB_NONE is used because atoms are never zero and it therefore
+            cannot be mistaken for a close request.
+
+            libxcb serialises requests internally, which is what makes this callable from a thread
+            other than the one blocked in `xcb_wait_for_event`. The flush is what actually gets the
+            request onto the socket — without it the message would sit in the output buffer until
+            something else caused a flush, which is precisely the deadlock this is meant to break.
+        */
+        xcb_client_message_event_t wake{};
+        wake.response_type = XCB_CLIENT_MESSAGE;
+        wake.format = 32;
+        wake.window = m_window;
+        wake.type = m_wm_protocols;
+        wake.data.data32[0] = XCB_NONE;
+
+        xcb_send_event(m_connection, 0, m_window, XCB_EVENT_MASK_STRUCTURE_NOTIFY, reinterpret_cast<const char*>(&wake));
+        xcb_flush(m_connection);
+    }
+
     void XcbWindow::setCursorCaptured(bool captured)
     {
         // Idempotent guard — repeated calls with the same value are no-ops. Without this,
