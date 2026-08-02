@@ -273,6 +273,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`docs/ARCHITECTURE.md` claimed `SignalsLib::Signal<T>` was "lifetime-safe via `weak_ptr`".** The
+  class contains no `weak_ptr` at all — it is a mutex and a `std::queue`. That comment described an
+  ownership *convention a caller could adopt*, and neither user in the repository adopts it:
+  `LoggingLib::Logger` and the renderer's `RenderChannel` both hold their queue as a plain member and
+  outlive it by construction. A design-decision table asserting a safety property that does not exist
+  is the kind of thing somebody eventually relies on. Both the table and the header now say what is
+  true, and note that the `shared_ptr`/`weak_ptr` arrangement is available and tested but is a
+  caller's choice rather than a service.
+- **The stated library layout rule was wrong for two of six libraries.** `ARCHITECTURE.md` said each
+  has "its own `include/<lib>/` directory"; `signals` publishes `include/signal/` and `logging`
+  publishes `include/log/`. Anyone following the rule when adding a library would have produced an
+  inconsistent layout, and anyone hunting for a header would have looked in the wrong place.
+- **`docs/ACOUSTICS.md` cited "the current TODO item, `Fill hearing_samples`"**, which has not been a
+  TODO item for some time. The passage's actual argument — that a flat sample list has nowhere to put
+  a second ear — survives and now points at the `TglEarView` per ear that replaced it.
+- **`TODO.md` is pruned.** Nine completed etapes collapse to a one-line table; a finished checklist is
+  not a plan, and keeping it alongside the changelog and the journal meant maintaining a third copy
+  that drifts. The two decisions from them that are still load-bearing — that an arena block is mapped
+  once by the arena, and that staging buffers are deliberately not sub-allocated — are called out
+  explicitly, and both also live in the code they constrain. The file drops from 721 lines to 577.
+
 - **The acoustic pass never made its histogram visible to the host.** A dispatch wrote it, a fence was
   waited on, and the host read the mapping — but a fence establishes only that the work *finished*, not
   that its writes are available to the host memory domain, and host-coherent memory removes the need to
