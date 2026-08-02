@@ -241,7 +241,7 @@ namespace
     */
     [[nodiscard]] std::vector<Material> makeMaterials()
     {
-        std::vector<Material> materials(6u);
+        std::vector<Material> materials(MATERIAL_SLOT_COUNT);
         materials[MATERIAL_FLOOR] = makeMirror(MathLib::Vec3{0.85f, 0.90f, 1.00f});
 
         /*

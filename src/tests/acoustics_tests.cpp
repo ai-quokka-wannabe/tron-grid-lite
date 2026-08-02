@@ -343,6 +343,39 @@ TEST_CASE(the_response_is_a_pure_function_of_the_grid_and_the_ear)
     TEST_CHECK(!(coarse.bins == here.bins));
 }
 
+TEST_CASE(a_material_index_past_the_table_is_silent_and_still_reflects)
+{
+    /*
+        The table is indexed by a triangle's material with no guarantee from the type system that the
+        two agree, so a short table is a caller error that used to be undefined behaviour — a read
+        past the end of a vector, which crashes somewhere else entirely or, worse, does not.
+
+        An unknown surface is treated as silent and still reflecting, which is the only sane reading
+        of a surface nobody described, and both halves are checked here: the sounding patch goes
+        quiet when its strength is unreachable, and the ceiling it never described still produces
+        its echo of the one material that remains.
+    */
+    const BvhLib::Bvh bvh{parallelPlateScene()};
+
+    // Long enough to describe the floor, too short to describe the pillar the ceiling is made of.
+    std::vector<float> truncated(MATERIAL_NEON_PRIMARY + 1u, 0.0f);
+    truncated[MATERIAL_NEON_PRIMARY] = 1.0f;
+
+    const Acoustics::ImpulseResponse response{Acoustics::gather(bvh, truncated, EAR, plainConfig())};
+
+    // The floor is described and sings; the direct arrival is unaffected by the missing entry.
+    TEST_CHECK(energyInBin(response, binOf(5.0f)) > 0.0f);
+
+    // The ceiling is undescribed, so it is silent — but it must still reflect, or the echo of the
+    // floor off it would vanish too.
+    TEST_CHECK(energyInBin(response, binOf(15.0f)) > 0.0f);
+
+    // An empty table describes nothing at all, so nothing sings anywhere.
+    const std::vector<float> nothing(1u, 0.0f);
+    const Acoustics::ImpulseResponse silent{Acoustics::gather(bvh, nothing, EAR, plainConfig())};
+    TEST_CHECK(silent.total() == 0.0f);
+}
+
 int main()
 {
     return static_cast<int>(TestingLib::runAll());

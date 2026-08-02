@@ -35,7 +35,7 @@ class Device; // forward declaration
     The renderer: a compute shader that walks a hand-built bounding volume hierarchy.
 
     There is no ray-tracing hardware in play. The hierarchy, the triangles and the materials live
-    in ordinary storage buffers, and `trace.slang` traverses them with a fixed-size stack. Because
+    in ordinary storage buffers, and `grid_bvh.slang` traverses them with a fixed-size stack. Because
     every surface in the Grid is perfectly smooth, each intersection spawns exactly one reflected
     ray, so the whole thing is deterministic: no sampling, no variance, no denoiser.
 

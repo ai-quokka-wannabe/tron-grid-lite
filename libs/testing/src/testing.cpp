@@ -16,8 +16,46 @@
 #include <iostream>
 #include <stdexcept>
 
+#if defined(_WIN32) && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
+
 namespace TestingLib
 {
+
+    namespace
+    {
+
+        /*!
+            Sends failed C runtime assertions to stderr instead of to a message box.
+
+            On Windows, a Debug build's CRT reports a failed assertion — including the debug STL's
+            own bounds checks on `std::vector::operator[]` — by opening a **modal dialog** and
+            waiting for somebody to click it. In an interactive session that is merely rude. In CI
+            it is a hang: the job has nobody to click the box, so a test that would have failed in
+            milliseconds instead sits there until the runner's timeout kills it, and the log says
+            nothing about which test it was.
+
+            Redirecting the report turns that into an ordinary crash with a message on stderr, which
+            ctest records as a failure with the assertion text attached.
+
+            Guarded on `_DEBUG` as well as `_WIN32`, and not merely for tidiness: outside a debug CRT
+            these calls are macros that expand to nothing, which leaves the loop variable unread and
+            fails the build under `/WX`. There is nothing to redirect there anyway — a release build
+            defines no assertions — and nothing to do on Linux, whose C runtime has no such behaviour
+            to correct.
+        */
+        void silenceAssertionDialogs()
+        {
+#if defined(_WIN32) && defined(_DEBUG)
+            for (const int report_type : {_CRT_WARN, _CRT_ERROR, _CRT_ASSERT}) {
+                _CrtSetReportMode(report_type, _CRTDBG_MODE_FILE);
+                _CrtSetReportFile(report_type, _CRTDBG_FILE_STDERR);
+            }
+#endif
+        }
+
+    } // namespace
 
     //! Internal exception thrown when a test check fails.
     struct CheckFailure : std::runtime_error {
@@ -37,6 +75,8 @@ namespace TestingLib
 
     bool runAll()
     {
+        silenceAssertionDialogs();
+
         const std::vector<TestCase>& cases{registry()};
         std::size_t passed{0};
         std::size_t failed{0};

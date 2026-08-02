@@ -172,6 +172,25 @@ keeps the output bit-identical between runs, which a reproducible recording requ
 
 ## Journal
 
+### 2026-08-02 (late)
+
+- A post-merge audit of the acoustics work, prompted by nothing breaking — which is the point. Four
+  defects, none of which any test or build had complained about:
+    - **An out-of-range material index was undefined behaviour** in the gather. Fixed with one
+      compare per hit and pinned by a test. Confirmed by mutation, which is how the next item was
+      found.
+    - **`makeMaterials` was sized by a literal `6u`** while the acoustic table used
+      `MATERIAL_SLOT_COUNT`. Adding a slot would have silently left the optical table short.
+    - **A failed CRT assertion opened a modal dialog** — discovered by popping one on Matej's screen
+      during that mutation test, which is a poor way to find it but a real find. In CI this is a
+      hang rather than a failure: nobody clicks the box, the runner times out, and the log never
+      says which test it was. `TestingLib::runAll` now routes CRT reports to stderr.
+    - **Stale attributions** still crediting `trace.slang` with declaring `Node` and `Triangle`.
+- The `_DEBUG` guard on that last fix was itself found by the compiler: outside a debug CRT the
+  `_CrtSetReportMode` calls are macros expanding to nothing, so the loop variable went unread and
+  `/WX` rejected it. Worth recording because it is the good case — the build catching a mistake in a
+  fix for something the build could not catch.
+
 ### 2026-08-02 (evening)
 
 - **Every acoustic surface is now a perfect mirror.** Absorption removed, transmission stated as a
