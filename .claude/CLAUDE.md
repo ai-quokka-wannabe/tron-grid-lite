@@ -141,6 +141,13 @@ Three questions, each of which has caught something more than once:
   to rebuild and the next test runs the old binary. Touch the file after restoring one.
 - **Exclude `build/` from repository-wide greps.** Searching for a removed symbol otherwise returns
   a wall of `.pdb` matches and buries the real hits.
+- **Backslash escapes do not survive a shell heredoc into Python.** `b"\\return"` arrives as
+  `b"\return"`, which is a carriage return followed by `eturn` — so a Doxygen tag written that way
+  lands in the source as a control character and a misspelt word, invisible in every editor. Three
+  reached `main` this way, and the first attempt to *repair* them added four more, because the
+  search pattern was mangled identically to the replacement and the substitution matched itself.
+  Write source through the editing tools. If a backslash must go through Python, build it as
+  `bytes([92])` and never as an escape. CI now fails on any carriage return in a tracked text file.
 
 **Code scanning**
 
