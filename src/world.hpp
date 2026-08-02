@@ -39,8 +39,12 @@ class Device; // forward declaration
     here is specific to light" — this class is where that claim is kept on the host side, as
     `grid_bvh.slang` keeps it on the device side.
 
-    Immutable once built. Phase 6 is where that changes, because creatures move and a hierarchy over
-    moving geometry is rebuilt rather than uploaded once — see Etape 10 in TODO.md.
+    Immutable once built, and **it stays that way even when creatures move**. Phase 6 adds bodies, but
+    they do not join this hierarchy: they get their own, under a small top level that holds one box
+    per instance, so the Grid's own structure is never rebuilt and a rigid body's is built once when
+    it is rezzed. Rebuilding everything each tick would cost 31 ms with twenty creatures against
+    0.0031 ms for the top level alone — see `docs/ARCHITECTURE.md` § One hierarchy today, two when
+    creatures move, and Etape 10 in TODO.md.
 */
 class World {
 public:

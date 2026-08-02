@@ -66,6 +66,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The hierarchy question that gated Phase 6 is decided: two levels, not a faster builder.** Putting
+  creature bodies in the Grid's single hierarchy means rebuilding it every tick — measured at
+  **31 ms with twenty creatures**, most of it spent rebuilding the Grid's own 24,952 triangles, which
+  had not moved. A top level over one box per instance costs **0.0031 ms**, a factor of ten thousand,
+  because a rigid body's hierarchy is built once when it is rezzed and only its transform changes
+  after that.
+
+  **This deletes the etape that was going to fix it.** Etape 10 proposed parallelising the builder;
+  sixteen cores might have reached 3 ms, which is a real gain, still a thousand times worse than not
+  rebuilding at all, and achieved by occupying the whole machine to recompute something unchanged. It
+  was a good solution to a problem that should not exist, and it is now replaced by the two-level
+  structure itself.
+
+  It also sharpens the remaining glTF question rather than leaving it independent: rigid segments make
+  the second level nearly free, while skinned meshes make it merely much better — about 0.45 ms per
+  thousand-triangle body per tick. A world of flat-shaded facets has little use for smooth skinning,
+  so the cheap answer and the fitting answer coincide.
+
+  Measurements, method and the calibration against the real Grid are in `docs/ARCHITECTURE.md`
+  § One hierarchy today, two when creatures move.
+
 - **The development journal is gone from `TODO.md`, and the file is 606 lines shorter than it was
   this morning.** It was a third copy of history that already had two homes, and it grew faster than
   either. What changed and why lives here; rules worth obeying next time live in `.claude/CLAUDE.md`
