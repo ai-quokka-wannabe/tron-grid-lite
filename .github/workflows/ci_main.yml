@@ -50,6 +50,23 @@ jobs:
             - name: Lint markdown
               run: markdownlint-cli2 "**/*.md"
 
+            # A carriage return sitting inside a line is invisible in every editor, survives
+            # clang-format and markdownlint, and reads as ordinary text in review. Three reached
+            # main before this step existed, each one a Doxygen \return written through a tool
+            # chain that collapsed the escape, leaving a control character and a word reading
+            # "eturn" where the tag should be.
+            #
+            # .gitattributes normalises to LF and this runner is Linux, so the checkout contains
+            # no legitimate carriage return at all and any match is a stray. -I skips binary
+            # files, and taking the file list from git keeps build outputs and untracked scratch
+            # out of it.
+            - name: Check for stray carriage returns
+              run: |
+                if git ls-files -z | xargs -0 grep -lIP '\r'; then
+                    echo "::error::The files above contain a carriage return. Line endings here are LF, so it is a stray one inside a line - look for a Doxygen tag written through a tool that ate the escape."
+                    exit 1
+                fi
+
             - name: Save npm cache
               if: steps.npm-cache-restore.outputs.cache-hit != 'true'
               uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

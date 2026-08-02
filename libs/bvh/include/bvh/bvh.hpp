@@ -225,7 +225,7 @@ namespace BvhLib
                instance's world bounds, so it must already be built.
         \param geometry_index Index of that hierarchy within `Scene::geometries`.
         \param to_world Placement. Any affine transform; see `intersectScene` on what scale costs.
-        eturn An instance ready to be added to a scene.
+        \return An instance ready to be added to a scene.
     */
     [[nodiscard]] Instance makeInstance(const Bvh& geometry, uint32_t geometry_index, const MathLib::Mat4& to_world);
 
@@ -252,7 +252,7 @@ namespace BvhLib
         \param direction Ray direction in world space; need not be normalised, and the returned
                distance is in its units.
         \param max_distance Furthest hit to accept.
-        eturn The nearest hit, with `instance` naming which placement it belongs to.
+        \return The nearest hit, with `instance` naming which placement it belongs to.
     */
     [[nodiscard]] Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance);
 

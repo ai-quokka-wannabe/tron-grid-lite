@@ -71,7 +71,7 @@ public:
         \param instance Vulkan instance to enumerate from.
         \param surface Surface presentability is tested against.
         \param logger Logger to report through.
-        eturn How many devices can run the renderer.
+        \return How many devices can run the renderer.
     */
     [[nodiscard]] static uint32_t survey(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logger& logger);
 
