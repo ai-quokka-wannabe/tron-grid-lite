@@ -40,6 +40,7 @@
 #include "swapchain.hpp"
 #include "tracer.hpp"
 #include "vulkan_helpers.hpp"
+#include "world.hpp"
 #include <bvh/bvh.hpp>
 #include <log/logger.hpp>
 #include <math/vector.hpp>
@@ -169,16 +170,6 @@ namespace
         would learn to exploit instead of learning the Grid.
     */
     constexpr float VIGNETTE_STRENGTH{0.35f};
-
-    //! Material slots in the Grid's material table.
-    enum MaterialSlot : uint32_t {
-        MATERIAL_FLOOR = 0u, //!< The mirror the whole Grid stands on.
-        MATERIAL_NEON_PRIMARY = 1u, //!< Cyan tubes along ordinary grid lines.
-        MATERIAL_NEON_ACCENT = 2u, //!< Orange tubes along major grid lines.
-        MATERIAL_PILLAR = 3u, //!< Standing blocks, bright enough to light the floor around them.
-        MATERIAL_GLASS = 4u, //!< Clear slabs that refract what is behind them.
-        MATERIAL_GLOWING_GLASS = 5u //!< A tube that emits and transmits at once.
-    };
 
     //! Converts a mesh into hierarchy triangles, tagging each with the given material.
     void appendTriangles(std::vector<BvhLib::Triangle>& out, const Mesh& mesh, uint32_t material)
@@ -621,6 +612,33 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
     uint32_t surface_width{swapchain.extent().width};
     uint32_t surface_height{swapchain.extent().height};
 
+    /*
+        Everything the picture depends on.
+
+        A frame is drawn only when one of these differs from what the last frame was drawn from. The
+        comparison is against the *state*, not against a set of dirty flags raised by whoever
+        modified it, and that is deliberate: a dirty flag is correct only if every writer remembers
+        to raise it, whereas comparing the state cannot be forgotten. Wrongly deciding a frame is
+        needed costs one redundant frame; wrongly deciding it is not costs a window that has stopped
+        updating, so the cheap-to-get-right version is the one to have.
+
+        The Grid itself is absent from this because it cannot yet change — `World` is uploaded once
+        and is immutable. Phase 6 is where a generation counter joins this struct, because that is
+        when creatures move.
+    */
+    struct ViewState {
+        MathLib::Vec3 position{};
+        MathLib::Quat orientation{};
+        float fov_y{0.0f};
+        uint32_t width{0u};
+        uint32_t height{0u};
+
+        [[nodiscard]] bool operator==(const ViewState&) const = default;
+    };
+
+    ViewState presented{};
+    bool has_presented{false};
+
     std::chrono::steady_clock::time_point previous_time{std::chrono::steady_clock::now()};
 
     while (!stopping) {
@@ -659,15 +677,47 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
         channel.wants_cursor_capture = spectator.cursorCaptured();
 
         /*
-            A minimised window has nothing to render into. Waiting on the condition variable rather
-            than spinning: the next message — almost certainly the Resize that restores the window —
-            is what should wake this thread.
+            Sleep until there is a reason to draw.
+
+            This is what a CAD viewport does and what a game loop does not, and the Grid is far
+            closer to the former: it is a world that mostly sits still, watched through a window
+            that is usually not moving. Spinning at the GPU's maximum rate to redraw an identical
+            image is the single most expensive thing this program can do for no result — it holds a
+            laptop GPU at full clock, with the fans and the battery drain that implies, to produce a
+            picture nobody can distinguish from the previous one.
+
+            The wait is the same condition variable the minimised case uses, because the wake-up
+            condition is identical: something arrived. A held key produces motion every frame and so
+            keeps the loop running; releasing it stops the motion, the state stops changing, and the
+            renderer goes quiet on its own without anybody having to say so.
+
+            That last property is also how the GPU profiler is fed: it averages over frames, so
+            holding a movement key is what produces a run of them to average. There is deliberately
+            no flag to draw unconditionally — it would exist solely to do what holding W already
+            does.
         */
-        if ((surface_width == 0u) || (surface_height == 0u)) {
-            std::unique_lock<std::mutex> lock{channel.mutex};
-            channel.cv.wait(lock, [&channel]() {
-                return !channel.queue.empty();
-            });
+        const ViewState wanted{
+            .position = camera.position(), .orientation = camera.orientation(), .fov_y = camera.fovY(), .width = surface_width, .height = surface_height};
+
+        const bool blank{(surface_width == 0u) || (surface_height == 0u)};
+        const bool idle{has_presented && (wanted == presented) && !needs_recreate};
+
+        if (blank || idle) {
+            {
+                std::unique_lock<std::mutex> lock{channel.mutex};
+                channel.cv.wait(lock, [&channel]() {
+                    return !channel.queue.empty();
+                });
+            }
+
+            /*
+                The clock restarts here, and it is not optional. `delta_seconds` is measured from
+                the previous pass through the loop, so without this a thread that slept for a minute
+                would wake, compute a delta of sixty seconds, and hand it to the spectator — which
+                integrates velocity against it and would fling the camera a kilometre on the first
+                keystroke after an idle.
+            */
+            previous_time = std::chrono::steady_clock::now();
             continue;
         }
 
@@ -693,6 +743,15 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
             tracer.resize(swapchain.extent());
             post_process.resize(swapchain.extent(), tracer.outputViews());
             needs_recreate = false;
+
+            /*
+                A rebuilt swapchain's images have never been drawn to, and their contents are
+                undefined. Forgetting this is how on-demand rendering shows garbage: a resize that
+                happens to leave the width, the height and the camera exactly as they were would
+                otherwise look idle on the very next pass, and the window would sit displaying
+                whatever the driver handed back until the User moved something.
+            */
+            has_presented = false;
             continue;
         }
 
@@ -826,6 +885,11 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
             needs_recreate = true;
         }
 
+        // Recorded only after the frame has actually been submitted, so that an early `continue` on
+        // an out-of-date swapchain leaves the loop believing it still owes a picture — which it does.
+        presented = wanted;
+        has_presented = true;
+
         frame_index = (frame_index + 1u) % MAX_FRAMES_IN_FLIGHT;
     }
 }
@@ -942,7 +1006,9 @@ int main(int argc, char** argv)
         // its own output folder.
         const std::filesystem::path shader_directory{executableDirectory()};
 
-        Tracer tracer{device, bvh, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
+        const World world{device, bvh, logger};
+
+        Tracer tracer{device, world, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
         tracer.resize(swapchain.extent());
 
         PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};

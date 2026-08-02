@@ -57,10 +57,11 @@
     |     16 |   12 | `emission`             | `float3`          |
     |     28 |    4 | `transmission`         | `float`           |
 
-    Acoustic properties will be needed once the same BVH carries acoustic rays, but they are not
-    here yet: a field nothing reads is a field nothing maintains, and adding two rows to every
-    material to reserve space for them costs a real doubling of the material buffer. They arrive
-    when hearing does.
+    Acoustic properties are deliberately **not** here, and that is now a decision rather than a
+    deferral. They live in their own parallel table in `acoustics.hpp`, indexed by the same
+    `MaterialSlot`, because the two senses disagree about what a surface is: an optically emissive
+    pillar is acoustically silent, and keying a gather on `emission` would find 16,724 triangles
+    where the design calls for 16,640. Two tables that disagree are the point, not an accident.
 
     No `bool` members appear anywhere, because the size and alignment of a GLSL/Slang `bool` in a
     storage buffer is not something worth betting on; anything switch-like must be a `uint32_t`.
@@ -85,6 +86,24 @@ static_assert(alignof(Material) == 16u, "Material must be 16-byte aligned to mat
 static_assert(offsetof(Material, index_of_refraction) == 12u, "Material::index_of_refraction must sit in the first std430 row.");
 static_assert(offsetof(Material, emission) == 16u, "Material::emission must start the second std430 row.");
 static_assert(offsetof(Material, transmission) == 28u, "Material::transmission must sit in the second std430 row.");
+
+/*!
+    Slots in the Grid's material table.
+
+    Both material tables are indexed by these — the optical one a triangle's `material` field selects
+    in `trace.slang`, and the acoustic one in `acoustics.hpp`. The two are separate tables of the same
+    length in the same order, so a slot names a *surface of the Grid* rather than a set of optical
+    properties, and a surface may perfectly well be bright and silent.
+*/
+enum MaterialSlot : uint32_t {
+    MATERIAL_FLOOR = 0u, //!< The mirror the whole Grid stands on.
+    MATERIAL_NEON_PRIMARY = 1u, //!< Cyan tubes along ordinary grid lines.
+    MATERIAL_NEON_ACCENT = 2u, //!< Orange tubes along major grid lines.
+    MATERIAL_PILLAR = 3u, //!< Standing blocks, bright enough to light the floor around them.
+    MATERIAL_GLASS = 4u, //!< Clear slabs that refract what is behind them.
+    MATERIAL_GLOWING_GLASS = 5u, //!< A tube that emits and transmits at once.
+    MATERIAL_SLOT_COUNT = 6u //!< Number of slots, and therefore the length of both material tables.
+};
 
 /*
     Named points in the material space. These are conveniences, not categories: nothing downstream

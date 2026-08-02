@@ -172,6 +172,33 @@ keeps the output bit-identical between runs, which a reproducible recording requ
 
 ## Journal
 
+### 2026-08-02 (afternoon)
+
+- **Phase 5 has a model.** The CPU gather, the acoustic material table, the ISO 9613-2 air absorption
+  row and eight tests. This is the specification; `acoustics.slang` mirrors it next, exactly as
+  `trace.slang` mirrors `libs/bvh`.
+- Two extractions came first, and both were verified as no-ops by hashing eight recorded frames
+  before and after: `grid_bvh.slang` for the traversal both senses share, and `World` for the Grid's
+  geometry on the device. `libs/bvh` has claimed since it was written that "the same hierarchy is
+  intended to serve acoustic rays later, which is why nothing here is specific to light" — those two
+  are where the claim is actually kept, on the device and on the host.
+- **Nothing runs without a reason.** The renderer was spinning at 270 fps redrawing an identical
+  picture of a Grid that cannot yet change. It now compares the state it drew from and sleeps on the
+  render channel's condition variable: **0.09 s of CPU over 12 s against 7.56 s drawing every pass**,
+  roughly eighty times less. State comparison rather than dirty flags, because a flag is only correct if
+  every writer remembers it. One hazard found while building it and fixed: a swapchain rebuild leaves
+  images with undefined contents, so a resize that happened to leave the camera and size unchanged
+  would have looked idle and left garbage on screen — a rebuild now forces the next frame.
+- The acoustic side gets the same rule and a stronger justification. `gather` is a pure function, so
+  a solve whose inputs have not changed may be skipped and the skipped answer *is* the right answer
+  rather than an approximation of it. The renderer has to compare state because floating-point camera
+  integration can wander; a gather cannot. `src/tests/acoustics_tests.cpp` pins the cache key by
+  showing each of its three parts can change the answer.
+- A test asserted something false about the geometry and had to be corrected rather than the code: I
+  claimed nothing could arrive in bin 13 at an ear two metres up, forgetting that a slanted ray
+  reaches the floor at 4.46 m. Replaced with what was actually meant — the first occupied bin is the
+  perpendicular drop, and a lower ear hears the floor sooner.
+
 ### 2026-08-02
 
 - Etape 8 done: the renderer runs on its own thread. See the etape above for what was built and for

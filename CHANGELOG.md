@@ -61,6 +61,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Nothing runs without a reason.** The renderer no longer spins at the GPU's maximum rate redrawing
+  an image identical to the previous one. It compares the state a frame was drawn from — camera
+  position, orientation, field of view, surface size — and sleeps on the render channel's condition
+  variable when none of them has moved, which is what a CAD viewport does and what a game loop does
+  not. The Grid is far closer to the former: a world that mostly sits still, watched through a window
+  that is usually not moving. Measured on the static Grid with the camera still, **0.09 s of CPU over
+  12 s of wall clock against 7.56 s on the build that drew unconditionally** — about eighty times
+  less, with the GPU dropping off its clocks entirely. The saving is claimed only for a Grid and a
+  view that are both standing still; a moving camera draws every pass, as it must. State comparison
+  rather than dirty flags, deliberately: a flag is correct only if every writer remembers to raise
+  it, and forgetting costs a window that has stopped updating. A swapchain rebuild explicitly forces
+  the next frame, because its new images hold
+  undefined contents and a resize that left the camera and size unchanged would otherwise look idle
+  and leave garbage on screen. There is deliberately no flag to draw unconditionally: the GPU
+  profiler averages over frames and a still camera produces none, so a run of frames to average is
+  obtained by holding a movement key — which is all such a flag would have done.
+
 - **Every performance figure above was measured with the validation layers on, and they are all too
   slow — the trace pass by about 4.6×.** Debug enables GPU-assisted validation, which instruments the
   shader: it adds a bounds check to every buffer access in the traversal loop, which is the entire

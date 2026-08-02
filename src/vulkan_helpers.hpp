@@ -14,17 +14,19 @@
 
 #pragma once
 
+#include "device.hpp"
 #include <vulkan/vulkan_raii.hpp>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 /*!
-    The two Vulkan chores every pass needs.
+    The Vulkan chores every pass needs.
 
-    Both of these existed three times over — byte-for-byte in the tracer and the post-processing
+    The first two existed three times over — byte-for-byte in the tracer and the post-processing
     stage, and a third time in `main.cpp` with a different name and a different error message. Three
     copies of a function is three places to fix a bug in, and the SPIR-V reader had exactly such a
     bug: it ignored the result of its own read, and only one copy would have been noticed.
@@ -34,6 +36,12 @@ namespace VulkanHelpers
 
     //! First word of every SPIR-V module, per the specification.
     inline constexpr uint32_t SPIRV_MAGIC{0x07230203u};
+
+    //! A device-local buffer and the memory backing it.
+    struct DeviceBuffer {
+        vk::raii::Buffer buffer{nullptr};
+        vk::raii::DeviceMemory memory{nullptr};
+    };
 
     /*!
         Returns the index of a memory type satisfying both the resource's requirements and the
@@ -99,6 +107,70 @@ namespace VulkanHelpers
         }
 
         return words;
+    }
+
+    /*!
+        Uploads bytes into a fresh device-local storage buffer through a staging copy.
+
+        Device-local rather than host-visible, deliberately: these buffers are read many times per
+        ray, and host-visible memory is the wrong side of the bus for that. The staging buffer and
+        its command pool are local, so both are destroyed as soon as the copy has been waited on.
+
+        Synchronous — it submits and waits. Every caller runs at start-up, where one fence wait per
+        buffer costs nothing and getting the data there before anybody draws is the whole point.
+
+        \param device Logical device, its physical device and its graphics queue.
+        \param data Bytes to upload. Must be at least `bytes` long.
+        \param bytes Size of the buffer. Must not be zero — Vulkan rejects a zero-sized buffer, so a
+               caller with nothing to upload has to pass one placeholder element instead.
+        \return The buffer and the memory backing it, both owned by the caller.
+    */
+    [[nodiscard]] inline DeviceBuffer uploadStorageBuffer(const Device& device, const void* data, vk::DeviceSize bytes)
+    {
+        const vk::raii::Buffer staging_buffer{
+            device.get(), vk::BufferCreateInfo{.size = bytes, .usage = vk::BufferUsageFlagBits::eTransferSrc, .sharingMode = vk::SharingMode::eExclusive}};
+
+        const vk::MemoryRequirements staging_requirements{staging_buffer.getMemoryRequirements()};
+        const vk::raii::DeviceMemory staging_memory{device.get(),
+            vk::MemoryAllocateInfo{.allocationSize = staging_requirements.size,
+                .memoryTypeIndex = findMemoryType(device.physicalDevice(), staging_requirements.memoryTypeBits,
+                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)}};
+        staging_buffer.bindMemory(*staging_memory, 0u);
+
+        void* mapped{staging_memory.mapMemory(0u, bytes)};
+        std::memcpy(mapped, data, static_cast<size_t>(bytes));
+        staging_memory.unmapMemory();
+
+        DeviceBuffer result{};
+        result.buffer = vk::raii::Buffer{device.get(),
+            vk::BufferCreateInfo{
+                .size = bytes, .usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, .sharingMode = vk::SharingMode::eExclusive}};
+
+        const vk::MemoryRequirements requirements{result.buffer.getMemoryRequirements()};
+        result.memory = vk::raii::DeviceMemory{device.get(),
+            vk::MemoryAllocateInfo{.allocationSize = requirements.size,
+                .memoryTypeIndex = findMemoryType(device.physicalDevice(), requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal)}};
+        result.buffer.bindMemory(*result.memory, 0u);
+
+        const vk::raii::CommandPool pool{
+            device.get(), vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient, .queueFamilyIndex = device.graphicsFamilyIndex()}};
+
+        vk::raii::CommandBuffers command_buffers{
+            device.get(), vk::CommandBufferAllocateInfo{.commandPool = *pool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1u}};
+        const vk::raii::CommandBuffer& command_buffer{command_buffers.front()};
+
+        command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+        command_buffer.copyBuffer(*staging_buffer, *result.buffer, {vk::BufferCopy{.srcOffset = 0u, .dstOffset = 0u, .size = bytes}});
+        command_buffer.end();
+
+        const vk::raii::Fence fence{device.get(), vk::FenceCreateInfo{}};
+        device.graphicsQueue().submit({vk::SubmitInfo{.commandBufferCount = 1u, .pCommandBuffers = &*command_buffer}}, *fence);
+
+        while (device.get().waitForFences({*fence}, vk::True, UINT64_MAX) == vk::Result::eTimeout) {
+            // Retry — a timeout here is not an error.
+        }
+
+        return result;
     }
 
 } // namespace VulkanHelpers
