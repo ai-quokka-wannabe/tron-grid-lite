@@ -42,6 +42,20 @@
     `docs/PROGRAM_INTERFACE.md` publishes bit-identical replay as a guarantee. A quasi-uniform set
     gives the same coverage for the same count, identically, every run.
 
+    **`gather` is a pure function, and that is a load-bearing property rather than a tidiness one.**
+    The same Grid, materials, ear and config give a bit-identical response, which means a solve
+    whose inputs have not changed may simply be skipped — and the answer that was skipped is not an
+    approximation of the right one, it *is* the right one. A stationary creature in a static Grid
+    hears exactly what it heard last tick, so re-solving is not cheap-and-approximate, it is
+    expensive-and-pointless.
+
+    This is a stronger licence than the renderer has. The debug view has to compare the camera state
+    it drew from, because floating-point integration of a held key can wander by a bit and produce a
+    genuinely different frame; a gather cannot wander, so its cache key is exact. Whatever eventually
+    drives solves must key on the Grid's generation, the ear's position and the config — and
+    `src/tests/acoustics_tests.cpp` pins that every one of those three can change the answer, which
+    is what makes them the key rather than an arbitrary choice.
+
     This header is the specification. `acoustics.slang` mirrors it on the GPU, exactly as
     `trace.slang` mirrors `libs/bvh`, and `src/tests/acoustics_tests.cpp` holds this side to its own
     arithmetic. The design and its citations live in `docs/ACOUSTICS.md`.

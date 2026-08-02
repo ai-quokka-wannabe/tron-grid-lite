@@ -75,6 +75,9 @@ namespace
         return static_cast<uint32_t>(path_metres / (Acoustics::SPEED_OF_SOUND * Acoustics::BIN_SECONDS));
     }
 
+    //! Returns the index of the earliest bin holding any energy, or BIN_COUNT if the response is silent.
+    [[nodiscard]] uint32_t firstOccupiedBin(const Acoustics::ImpulseResponse& response);
+
     //! Returns the energy summed across every band of one bin.
     [[nodiscard]] float energyInBin(const Acoustics::ImpulseResponse& response, uint32_t bin)
     {
@@ -83,6 +86,16 @@ namespace
             sum += response.at(band, bin);
         }
         return sum;
+    }
+
+    uint32_t firstOccupiedBin(const Acoustics::ImpulseResponse& response)
+    {
+        for (uint32_t bin{0u}; bin < Acoustics::BIN_COUNT; ++bin) {
+            if (energyInBin(response, bin) > 0.0f) {
+                return bin;
+            }
+        }
+        return Acoustics::BIN_COUNT;
     }
 
 }
@@ -255,6 +268,45 @@ TEST_CASE(an_empty_grid_is_silent)
     const Acoustics::ImpulseResponse response{Acoustics::gather(empty, materials, EAR, plainConfig())};
 
     TEST_CHECK(response.total() == 0.0f);
+}
+
+TEST_CASE(the_response_is_a_pure_function_of_the_grid_and_the_ear)
+{
+    /*
+        This is what licenses solving on demand rather than every tick, and it is a stronger licence
+        than the renderer has. A frame has to be compared against the state it was drawn from,
+        because floating-point camera integration can wander; a gather cannot wander at all. Same
+        Grid, same materials, same ear, same config gives bit-identical output — so a solve whose
+        inputs are unchanged may be skipped outright, and the skipped answer is not an approximation
+        of the real one, it *is* the real one.
+
+        The test therefore has two halves, and the second is the one that matters: every input must
+        be able to change the output, or it does not belong in the cache key and a cache built on it
+        would return a stale answer for a listener that had moved.
+    */
+    const BvhLib::Bvh bvh{parallelPlateScene()};
+    const std::vector<Acoustics::AcousticMaterial> materials{Acoustics::makeAcousticMaterials()};
+
+    const Acoustics::ImpulseResponse here{Acoustics::gather(bvh, materials, EAR, plainConfig())};
+    const Acoustics::ImpulseResponse here_again{Acoustics::gather(bvh, materials, EAR, plainConfig())};
+
+    TEST_CHECK(here.bins == here_again.bins);
+
+    // Moving the ear must move the answer, or ear position does not belong in the key.
+    const Acoustics::ImpulseResponse lower{Acoustics::gather(bvh, materials, MathLib::Vec3{0.0f, 2.0f, 0.0f}, plainConfig())};
+    TEST_CHECK(!(lower.bins == here.bins));
+
+    // An ear closer to the sounding floor hears it sooner: the first occupied bin is the
+    // perpendicular drop, and two metres is a shorter drop than five.
+    TEST_CHECK(firstOccupiedBin(lower) == binOf(2.0f));
+    TEST_CHECK(firstOccupiedBin(here) == binOf(5.0f));
+    TEST_CHECK(firstOccupiedBin(lower) < firstOccupiedBin(here));
+
+    // The config must be in the key too: a different ray budget is a different answer.
+    Acoustics::GatherConfig sparse{plainConfig()};
+    sparse.direction_count = 256u;
+    const Acoustics::ImpulseResponse coarse{Acoustics::gather(bvh, materials, EAR, sparse)};
+    TEST_CHECK(!(coarse.bins == here.bins));
 }
 
 int main()

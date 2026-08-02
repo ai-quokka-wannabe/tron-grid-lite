@@ -543,8 +543,10 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
     \param post_process Bloom, tone mapping and sRGB encoding.
     \param logger Thread-safe logger.
     \param channel The only state shared with the event thread.
+    \param continuous Draw every pass instead of only when something changed. For profiling.
 */
-void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel)
+void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel,
+    bool continuous)
 {
     const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
     const vk::raii::CommandPool command_pool{device.get(), pool_info};
@@ -612,6 +614,33 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
     uint32_t surface_width{swapchain.extent().width};
     uint32_t surface_height{swapchain.extent().height};
 
+    /*
+        Everything the picture depends on.
+
+        A frame is drawn only when one of these differs from what the last frame was drawn from. The
+        comparison is against the *state*, not against a set of dirty flags raised by whoever
+        modified it, and that is deliberate: a dirty flag is correct only if every writer remembers
+        to raise it, whereas comparing the state cannot be forgotten. Wrongly deciding a frame is
+        needed costs one redundant frame; wrongly deciding it is not costs a window that has stopped
+        updating, so the cheap-to-get-right version is the one to have.
+
+        The Grid itself is absent from this because it cannot yet change — `World` is uploaded once
+        and is immutable. Phase 6 is where a generation counter joins this struct, because that is
+        when creatures move.
+    */
+    struct ViewState {
+        MathLib::Vec3 position{};
+        MathLib::Quat orientation{};
+        float fov_y{0.0f};
+        uint32_t width{0u};
+        uint32_t height{0u};
+
+        [[nodiscard]] bool operator==(const ViewState&) const = default;
+    };
+
+    ViewState presented{};
+    bool has_presented{false};
+
     std::chrono::steady_clock::time_point previous_time{std::chrono::steady_clock::now()};
 
     while (!stopping) {
@@ -650,15 +679,46 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
         channel.wants_cursor_capture = spectator.cursorCaptured();
 
         /*
-            A minimised window has nothing to render into. Waiting on the condition variable rather
-            than spinning: the next message — almost certainly the Resize that restores the window —
-            is what should wake this thread.
+            Sleep until there is a reason to draw.
+
+            This is what a CAD viewport does and what a game loop does not, and the Grid is far
+            closer to the former: it is a world that mostly sits still, watched through a window
+            that is usually not moving. Spinning at the GPU's maximum rate to redraw an identical
+            image is the single most expensive thing this program can do for no result — it holds a
+            laptop GPU at full clock, with the fans and the battery drain that implies, to produce a
+            picture nobody can distinguish from the previous one.
+
+            The wait is the same condition variable the minimised case uses, because the wake-up
+            condition is identical: something arrived. A held key produces motion every frame and so
+            keeps the loop running; releasing it stops the motion, the state stops changing, and the
+            renderer goes quiet on its own without anybody having to say so.
+
+            `--continuous` opts out, for profiling. A renderer that only draws when something moves
+            gives the GPU profiler nothing to average over while the camera is still, and the frame
+            timings in the documentation have to come from somewhere.
         */
-        if ((surface_width == 0u) || (surface_height == 0u)) {
-            std::unique_lock<std::mutex> lock{channel.mutex};
-            channel.cv.wait(lock, [&channel]() {
-                return !channel.queue.empty();
-            });
+        const ViewState wanted{
+            .position = camera.position(), .orientation = camera.orientation(), .fov_y = camera.fovY(), .width = surface_width, .height = surface_height};
+
+        const bool blank{(surface_width == 0u) || (surface_height == 0u)};
+        const bool idle{has_presented && (wanted == presented) && !needs_recreate && !continuous};
+
+        if (blank || idle) {
+            {
+                std::unique_lock<std::mutex> lock{channel.mutex};
+                channel.cv.wait(lock, [&channel]() {
+                    return !channel.queue.empty();
+                });
+            }
+
+            /*
+                The clock restarts here, and it is not optional. `delta_seconds` is measured from
+                the previous pass through the loop, so without this a thread that slept for a minute
+                would wake, compute a delta of sixty seconds, and hand it to the spectator — which
+                integrates velocity against it and would fling the camera a kilometre on the first
+                keystroke after an idle.
+            */
+            previous_time = std::chrono::steady_clock::now();
             continue;
         }
 
@@ -684,6 +744,15 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
             tracer.resize(swapchain.extent());
             post_process.resize(swapchain.extent(), tracer.outputViews());
             needs_recreate = false;
+
+            /*
+                A rebuilt swapchain's images have never been drawn to, and their contents are
+                undefined. Forgetting this is how on-demand rendering shows garbage: a resize that
+                happens to leave the width, the height and the camera exactly as they were would
+                otherwise look idle on the very next pass, and the window would sit displaying
+                whatever the driver handed back until the User moved something.
+            */
+            has_presented = false;
             continue;
         }
 
@@ -817,6 +886,11 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
             needs_recreate = true;
         }
 
+        // Recorded only after the frame has actually been submitted, so that an early `continue` on
+        // an out-of-date swapchain leaves the loop believing it still owes a picture — which it does.
+        presented = wanted;
+        has_presented = true;
+
         frame_index = (frame_index + 1u) % MAX_FRAMES_IN_FLIGHT;
     }
 }
@@ -833,6 +907,16 @@ int main(int argc, char** argv)
             against a surface, but nothing is ever presented to it.
         */
         bool recording{false};
+
+        /*
+            Draw every pass rather than only when the picture would differ.
+
+            Purely a measurement aid. The renderer is otherwise idle whenever the Grid and the
+            camera are both still, which is correct and is also exactly the wrong behaviour for
+            timing a frame: the GPU profiler averages over frames, and a still camera produces
+            none. Every timing figure quoted in this repository's documentation was taken with this.
+        */
+        bool continuous{false};
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -864,6 +948,8 @@ int main(int argc, char** argv)
 
             if (argument == "--record") {
                 recording = true;
+            } else if (argument == "--continuous") {
+                continuous = true;
             } else if (argument == "--width") {
                 record_width = value(record_width);
             } else if (argument == "--height") {
@@ -961,9 +1047,9 @@ int main(int argc, char** argv)
         */
         RenderChannel channel;
 
-        std::thread render_thread{[&device, &swapchain, &tracer, &post_process, &logger, &channel, &window]() {
+        std::thread render_thread{[&device, &swapchain, &tracer, &post_process, &logger, &channel, &window, continuous]() {
             try {
-                runRenderLoop(device, swapchain, tracer, post_process, logger, channel);
+                runRenderLoop(device, swapchain, tracer, post_process, logger, channel, continuous);
             } catch (const std::exception& error) {
                 channel.render_failed = true;
 

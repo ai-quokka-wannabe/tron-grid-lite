@@ -311,6 +311,36 @@ is the Program's business, not the renderer's.
 
 ---
 
+## Nothing Runs Without a Reason
+
+**Every pass in this engine is driven by change, never by a clock.** The Grid is a world that mostly sits still,
+watched through a window that is usually not moving, and the closest thing to it is a CAD viewport rather than a game
+loop. Spinning the GPU at its maximum rate to redraw an image identical to the previous one is the most expensive
+thing this program can do for no result — it holds a laptop GPU at full clock, with the fans and battery drain that
+implies, to produce a picture nobody can tell from the last.
+
+Measured on the reference machine, on the static Grid with the camera still: **0.09 s of CPU over 12 s of wall clock,
+against 7.56 s for the same period drawing continuously.** Roughly eighty times less, and the GPU drops off its clocks
+entirely.
+
+The rule applies to both senses, but they earn it differently:
+
+- **The debug view compares the state it drew from** — camera position, orientation, field of view, surface size — and
+  sleeps on the render channel's condition variable when none of them has moved. State comparison rather than dirty
+  flags, deliberately: a dirty flag is correct only if every writer remembers to raise it, and forgetting costs a
+  window that has stopped updating. Comparing the state cannot be forgotten. The one thing this must never get wrong is
+  a swapchain rebuild, whose new images hold undefined contents — a resize that left the camera and the size unchanged
+  would otherwise look idle and leave garbage on screen, so a rebuild explicitly forces the next frame.
+- **The acoustic gather has a stronger licence, because it is a pure function.** Same Grid, materials, ear and config
+  gives a bit-identical response, so a solve whose inputs have not changed may be skipped outright — and the skipped
+  answer is not an approximation of the real one, it *is* the real one. A stationary creature in a static Grid hears
+  exactly what it heard last tick. Re-solving is not cheap-and-approximate, it is expensive-and-pointless. The cache
+  key is the Grid's generation, the ear's position and the config, and `src/tests/acoustics_tests.cpp` pins that each
+  of the three can change the answer — which is what makes them the key rather than a guess.
+
+The renderer's `--continuous` flag opts out, and exists for one reason: the GPU profiler averages over frames, and a
+still camera produces none. Every frame timing quoted in this repository was taken with it.
+
 ## Frame Flow
 
 ```text
