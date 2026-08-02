@@ -416,32 +416,61 @@ Sound is traced the same way light is, through the same structure:
 
 - The same BVH buffers are bound to an acoustic compute pass.
 - Rays are cast from a sound source, or gathered towards a listener, and traversal is bit-for-bit the same algorithm.
-- On hit, the material's **acoustic absorption** is applied instead of its optical colour, and path length
-  accumulates into a delay.
-- The output is a small set of arrival events — direction, delay, attenuation — delivered to a creature's hearing
+- On hit, nothing is applied to the surface's account at all: reflection is lossless. Path length accumulates into a
+  delay, and a surface that sings deposits into the bin that delay selects.
+- The output is an impulse response per band — where energy arrives in time — delivered to a creature's hearing
   sensor, not an image.
 
-Nothing about the BVH, its buffer layout or the traversal code has to change: none of it is specific to light. What
-does not exist yet is the pair of acoustic values per material, which § Material Model above places in a parallel
-buffer rather than in `Material` itself.
+Nothing about the BVH, its buffer layout or the traversal code has to change: none of it is specific to light.
 
-### Two acoustic values, and specifically not a scattering coefficient
+### One acoustic value, and specifically not absorption, scattering or transmission
 
 The optical side asks two questions of a surface: what does it do to light that arrives, and what light does it
-originate. `colour` and `emission` answer them. The acoustic side asks exactly the same two questions, so it gets
-exactly the same shape — **absorption** and **source strength** — and nothing else.
+originate. `colour` and `emission` answer them. **The acoustic side answers only the second.** Every surface on the
+Grid is a perfect acoustic mirror, so the acoustic table is one float per material — source strength — and there is
+no acoustic material model at all beyond it.
 
-Room acoustics would normally add a third, a scattering coefficient splitting each reflection into a specular part
-and a diffuse one. The Grid does not need it, for the same reason the optical model carries no roughness. Roughness
-was dropped because a perfectly smooth surface is the analytic limit of the microfacet model rather than a
-simplification of it; scattering is dropped because the floor's terraces already **are** the scattering. Their risers
-stand a metre proud and their steps are metres across, against a wavelength of roughly eleven centimetres at the neon
-hum's fundamental — geometry far larger than the wave, redirecting it specularly in genuinely varied directions. A
-statistical coefficient would model a second time, and less honestly, what the triangles are already doing.
+Three things a room-acoustics engine would carry are absent, and each for its own reason:
 
-Source strength is the value that has to exist instead, because otherwise nothing on the Grid makes a sound at all.
-The neon hums, so the same triangles that emit light emit sound, and the surface that carries `emission` carries its
-acoustic counterpart beside it.
+- **Absorption** was modelled and then removed on its own numbers. At the authored `alpha = 0.02` of a polished hard
+  surface, ten bounces cost 0.88 dB, and rays on an open plane escape after one or two — so the realistic figure is
+  nearer 0.2 dB against spreading's 26 dB across the range cap. Treble's documentation puts the measurement
+  uncertainty on such a coefficient at about ±0.2, which is larger than the effect it produced. A term whose error bar
+  exceeds its value is decoration rather than physics.
+- **Transmission** was never modelled. Sound does pass through a glass slab in reality, and representing that honestly
+  needs a thickness, a transmission coefficient and an interface model — the acoustic counterpart of exactly the
+  microfacet machinery the optical side does without. On the Grid a slab is an obstacle, and behind one there is quiet.
+- **Scattering** is dropped because the floor's terraces already **are** the scattering. Their risers stand a metre
+  proud and their steps are metres across, against a wavelength of roughly eleven centimetres at the hum's
+  fundamental — geometry far larger than the wave, redirecting it specularly in genuinely varied directions. A
+  statistical coefficient would model a second time, and less honestly, what the triangles are already doing.
+
+A lossless reflector is only safe because the Grid is an **open half-space**: rays leave and do not come back, total
+path is capped, and reflection order is capped, so nothing accumulates without bound. Enclose any part of the Grid —
+a room, a tunnel, a lid over a terrace hollow — and perfect mirrors would ring forever. That is the condition under
+which this has to be reopened, and it is a geometry decision rather than an acoustic one.
+
+### Nothing on the Grid sounds continuously
+
+**Every source is pulsed, one-shot or modulated. There is no steady tone anywhere.** The neon does not hum on a
+continuous sine; it pulses. A creature vocalising emits a call and stops, as an animal does. A worm dragging itself
+across the floor scrapes — sustained, but noisy and modulated by its own gait rather than held at a constant level.
+
+The engineering reason this costs nothing to honour is that **the gather computes an impulse response, and a source's
+behaviour in time is not part of it.** The histogram answers "if this source fired an impulse now, where in time does
+its energy arrive" — a property of geometry alone. What a source actually does in time is an envelope multiplying
+that response at delivery. So a pulse, a one-shot call and a scrape are the same object with different envelopes, and
+none of them changes a line of the traversal.
+
+The reason it *matters* is perceptual, and it is much stronger than the compute argument. **A continuous tone carries
+almost no delay information.** Every arrival overlaps every other, and a creature receives a steady level with no
+temporal structure to measure — the 1 ms bins and their 17.2 cm of range resolution would be describing something the
+listener cannot extract. Onsets are what make a delay measurable, which is precisely why bats emit pulses rather than
+tones. Pulsing the Grid is what makes the histogram worth computing.
+
+It also produces the right asymmetry for free: a scraping worm is easy to *detect* and hard to *range*, because a
+sustained noisy source has no sharp onset to measure from. That is physically correct, and it is an emergent property
+of the model rather than something written into it.
 
 That leaves the material at two extra floats rather than four. The fields removed once for being read by nothing
 should come back only when something reads them, and a scattering coefficient would arrive with nothing to drive it

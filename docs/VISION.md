@@ -99,12 +99,19 @@ can actually look at.
 
 ### Hearing
 
-Later in the roadmap, the same acceleration structure that answers visual rays will answer **acoustic rays**. Sound on
-the Grid travels along the same geometry that light does: it reflects off the same mirrors, is occluded by the same
-walls, and passes through the same glass. To make that possible, every surface will carry **both optical and acoustic
-properties** — a reflectivity for photons and an absorption coefficient for pressure waves, side by side in the same
-material record. The acoustic half is not in `Material` yet: a field nothing reads is a field nothing maintains, so it
-arrives when hearing does.
+Later in the roadmap, the same acceleration structure that answers visual rays answers **acoustic rays**. Sound on the
+Grid travels along the same geometry that light does — the same hierarchy, the same slab test, the same triangle
+intersection — but it does not behave the same way once it arrives, and the differences are the interesting part.
+
+Light is instantaneous for a renderer; sound is not, so an acoustic ray carries its accumulated path length and the
+answer is a function of time rather than a value. Every surface is a **perfect acoustic mirror**: no absorption, no
+scattering, and no transmission, so where light passes through a glass slab, sound bounces off it and behind it there
+is quiet. **The one surface the optical renderer treats as transparent is the one the acoustic renderer treats as most
+opaque**, which is precisely why a creature with both senses learns something neither sense could tell it alone.
+
+So the two senses share the geometry and share nothing else. `Material` carries optical properties only; what a
+surface does acoustically is a single authored number — how loudly it sings — in its own small table beside it, and
+the Grid's neon is the only thing that sings. See [ACOUSTICS.md](ACOUSTICS.md).
 
 One Grid, two senses, one traversal.
 

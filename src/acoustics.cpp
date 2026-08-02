@@ -23,49 +23,28 @@ namespace Acoustics
     namespace
     {
 
-        /*!
-            Octave centre frequencies of the tabulated air-absorption curve, in hertz.
-
-            The eight ISO 266 preferred centres ISO 9613-2 tabulates, and no more. Extending the
-            table upward is a documented open item — see `airAbsorptionDbPerKm`.
-        */
-        constexpr std::array<float, 8> AIR_ABSORPTION_FREQUENCIES{63.0f, 125.0f, 250.0f, 500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f};
-
-        /*!
-            Atmospheric absorption at those centres, in dB/km, at 20 °C and 70 % relative humidity.
-
-            ISO 9613-2's tabulated row for those conditions. The curve climbs by roughly a factor of
-            three per octave at the top end, which is why the Grid has a physical acoustic horizon
-            for anything that hears above a few kilohertz.
-        */
-        constexpr std::array<float, 8> AIR_ABSORPTION_DB_PER_KM{0.1f, 0.3f, 1.1f, 2.8f, 5.0f, 9.0f, 22.9f, 76.6f};
-
         //! Golden angle, in radians: the increment that spaces a Fibonacci spiral evenly.
         const float GOLDEN_ANGLE{3.14159265358979323846f * (3.0f - std::sqrt(5.0f))};
 
     } // namespace
 
-    std::vector<AcousticMaterial> makeAcousticMaterials()
+    std::vector<float> makeAcousticSourceStrengths()
     {
-        std::vector<AcousticMaterial> materials(MATERIAL_SLOT_COUNT);
+        std::vector<float> strengths(MATERIAL_SLOT_COUNT, 0.0f);
 
-        // Polished hard surface. The most consequential number in the model, because every path
-        // touches the floor.
-        materials[MATERIAL_FLOOR] = AcousticMaterial{.absorption = 0.02f, .source_strength = 0.0f};
+        /*
+            Only the tubes sing, and the two of them sing equally: they are identical hardware
+            differing in gas colour, which is an optical property and not an acoustic one. The
+            primary tube is the unit of the scale, so its strength is 1 by definition.
 
-        // The two tube materials are identical hardware — they differ in gas colour, which is an
-        // optical property and not an acoustic one. The primary tube is the unit of the scale.
-        materials[MATERIAL_NEON_PRIMARY] = AcousticMaterial{.absorption = 0.02f, .source_strength = 1.0f};
-        materials[MATERIAL_NEON_ACCENT] = AcousticMaterial{.absorption = 0.02f, .source_strength = 1.0f};
+            Everything else is silent, and the pillars are the case that matters — they are
+            `makeEmissive` and therefore optically bright, which is exactly why this table is
+            authored rather than derived from the optical one.
+        */
+        strengths[MATERIAL_NEON_PRIMARY] = 1.0f;
+        strengths[MATERIAL_NEON_ACCENT] = 1.0f;
 
-        // Optically emissive, acoustically silent — the whole reason this table is authored
-        // separately from the optical one rather than derived from it.
-        materials[MATERIAL_PILLAR] = AcousticMaterial{.absorption = 0.03f, .source_strength = 0.0f};
-
-        materials[MATERIAL_GLASS] = AcousticMaterial{.absorption = 0.03f, .source_strength = 0.0f}; // 3 mm glass, mid-band.
-        materials[MATERIAL_GLOWING_GLASS] = AcousticMaterial{.absorption = 0.03f, .source_strength = 0.0f}; // As the slabs, and likewise silent.
-
-        return materials;
+        return strengths;
     }
 
     float ImpulseResponse::total() const
@@ -92,56 +71,11 @@ namespace Acoustics
         return MathLib::Vec3{radius * std::cos(theta), height, radius * std::sin(theta)};
     }
 
-    float airAbsorptionDbPerKm(float frequency_hz)
-    {
-        if (frequency_hz <= 0.0f) {
-            return 0.0f;
-        }
-
-        const std::size_t last{AIR_ABSORPTION_FREQUENCIES.size() - 1u};
-
-        // Below the table the curve is flat enough, and nothing on the roster hears there anyway:
-        // the lowest band edge in the whole roster is C. elegans' 100 Hz.
-        if (frequency_hz <= AIR_ABSORPTION_FREQUENCIES.front()) {
-            return AIR_ABSORPTION_DB_PER_KM.front();
-        }
-
-        /*
-            Interpolation is linear in the logarithm of both axes, because that is the shape of the
-            data: the frequencies are octave centres, so they are uniform in log f, and the levels
-            climb by a roughly constant factor per octave rather than a constant amount. Linear
-            interpolation between 22.9 and 76.6 would understate the middle of that octave by about
-            a third.
-
-            Above the table the same slope is continued from the last pair, which is the documented
-            extrapolation. See the header: it is the right asymptotic shape and the wrong number,
-            and it must not be relied on above 8 kHz.
-        */
-        std::size_t lower{last - 1u};
-        if (frequency_hz < AIR_ABSORPTION_FREQUENCIES[last]) {
-            for (std::size_t index{0u}; index < last; ++index) {
-                if (frequency_hz <= AIR_ABSORPTION_FREQUENCIES[index + 1u]) {
-                    lower = index;
-                    break;
-                }
-            }
-        }
-
-        const float log_frequency{std::log(frequency_hz)};
-        const float log_low{std::log(AIR_ABSORPTION_FREQUENCIES[lower])};
-        const float log_high{std::log(AIR_ABSORPTION_FREQUENCIES[lower + 1u])};
-        const float log_level_low{std::log(AIR_ABSORPTION_DB_PER_KM[lower])};
-        const float log_level_high{std::log(AIR_ABSORPTION_DB_PER_KM[lower + 1u])};
-
-        const float t{(log_frequency - log_low) / (log_high - log_low)};
-        return std::exp(log_level_low + (t * (log_level_high - log_level_low)));
-    }
-
-    ImpulseResponse gather(const BvhLib::Bvh& bvh, const std::vector<AcousticMaterial>& materials, const MathLib::Vec3& ear, const GatherConfig& config)
+    ImpulseResponse gather(const BvhLib::Bvh& bvh, const std::vector<float>& source_strengths, const MathLib::Vec3& ear, const GatherConfig& config)
     {
         ImpulseResponse response{};
 
-        if (bvh.nodes.empty() || materials.empty() || (config.direction_count == 0u)) {
+        if (bvh.nodes.empty() || source_strengths.empty() || (config.direction_count == 0u)) {
             return response;
         }
 
@@ -155,10 +89,6 @@ namespace Acoustics
             // It only ever grows, it decides which bin an arrival lands in, and it is the primary
             // termination rule.
             float path{0.0f};
-
-            // Energy still carried after the reflections so far, before spreading and air. Exactly
-            // the role `throughput` plays in trace.slang.
-            float throughput{1.0f};
 
             for (uint32_t order{0u}; order <= config.max_order; ++order) {
                 // The remaining path budget is the ray's own limit, so a ray never travels further
@@ -176,9 +106,9 @@ namespace Acoustics
                 path += hit.distance;
 
                 const BvhLib::Triangle& triangle{bvh.triangles[hit.triangle]};
-                const AcousticMaterial& material{materials[triangle.material]};
+                const float source_strength{source_strengths[triangle.material]};
 
-                if (material.source_strength > 0.0f) {
+                if (source_strength > 0.0f) {
                     /*
                         Spreading is explicit and is measured from a one-metre reference, so a
                         source exactly one metre away arrives at unit strength and nothing closer
@@ -195,18 +125,18 @@ namespace Acoustics
                             const float air_db{config.air_absorption_db_per_km[band] * (path / 1000.0f)};
                             const float air{std::pow(10.0f, -air_db / 10.0f)};
 
-                            response.at(band, bin) += material.source_strength * config.hum_spectrum[band] * throughput * spreading * air;
+                            response.at(band, bin) += source_strength * config.hum_spectrum[band] * spreading * air;
                         }
                     }
                 }
 
-                // Deposit first, then reflect — the same order in which trace.slang accumulates
-                // emission before it follows the reflected branch.
-                throughput *= (1.0f - material.absorption);
-                if (throughput <= 0.0f) {
-                    break;
-                }
-
+                /*
+                    Reflect losslessly. Nothing is subtracted here and nothing needs to be: every
+                    surface on the Grid is a perfect acoustic mirror, and what bounds the response
+                    is the range cap above, the order cap on this loop, and the spreading and air
+                    terms applied at the deposit. See the note in the header for why that is safe on
+                    an open plane and where it would stop being safe.
+                */
                 const MathLib::Vec3 face_normal{triangle.edge1.cross(triangle.edge2).normalised()};
 
                 // Reflect about the face the ray actually arrived at, whichever side that is: a

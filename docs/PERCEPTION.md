@@ -252,7 +252,17 @@ renderer.
 - **Why the tolerance exists.** Three properties of the *simulation*: energy histograms are 44–176×
   coarser than the audio sample period and their fine structure is synthesised as noise; late
   reverberation needs only **12–24 spatial directions** (about 41° apart — 24 samples for the entire
-  diffuse tail); and frequency is handled in 6–9 octave bands.
+  diffuse tail); and frequency is handled in a handful of bands.
+
+  > **The band figure above is the offline one, and this repository uses fewer.** Six to nine octave
+  > bands is right for offline room acoustics — ISO 3382-1 requires at least 125 Hz to 4 kHz and
+  > pygsound carries eight — but every shipping real-time system uses far fewer. Steam Audio uses
+  > three; Schissler and Manocha use four logarithmic bands and are explicit that the reason is
+  > 4-wide SIMD. **The Grid uses four**, for the same engineering reason expressed differently: a band
+  > vector fits one `float4`. It is also generous against the biology, which tops out at one band for
+  > a moth and no frequency discrimination at all for a nematode. Band *edges* come from the
+  > audiogram and differ per preset — see
+  > [ACOUSTICS.md § Bands](ACOUSTICS.md#bands-four-chosen-from-the-audiogram).
 
   A fourth mechanism is often cited alongside these and is deliberately left out: the precedence
   effect, by which reflections arriving within a few milliseconds are fused and the leading
@@ -352,10 +362,18 @@ These follow from everything above. They are binding on the renderer.
    approach all of it. Compute solid angle properly and sanity-check every field figure against
    41,253 deg²; if a naive azimuth × elevation product exceeds that, the geometry is wrong.
 10. **Acoustic tolerances apply to audio only.** A few thousand rays, millisecond energy bins,
-    6–9 octave bands, a ~10 Hz solve with per-block interpolation, 12–24 directions for the
-    diffuse tail. These tolerances must not leak into the visual path: audio earns them through
-    millisecond energy integration and the coarseness of the histogram itself, and vision has no
-    equivalent.
+    **four** bands, a ~10 Hz solve, 12–24 directions for the diffuse tail. These tolerances must not
+    leak into the visual path: audio earns them through millisecond energy integration and the
+    coarseness of the histogram itself, and vision has no equivalent.
+
+    Two figures in the earlier wording of this rule were the offline ones and are corrected here.
+    **Bands are four, not 6–9** — the offline convention is right for offline work, and every shipping
+    real-time system is tighter, for an engineering reason this project shares exactly. And there is
+    **no per-block interpolation**, because there are no blocks: this repository has no waveform, no
+    sample stream and no audio rate. It delivers an energy histogram per tick and nothing between
+    ticks is interpolated, so a technique that smooths a solve across audio blocks has nothing here to
+    smooth. Prescribing it would also collide with rule 6, which forbids adding smoothing for a
+    Program's benefit.
 11. **Publish the assumption alongside every derived number.** Nearly every error caught while
     verifying this document was a translation error rather than a biology error: peak acuity
     applied whole-field, cycles per degree quoted as pixels per degree, per-eye counts summed as
