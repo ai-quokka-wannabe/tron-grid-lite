@@ -171,16 +171,6 @@ namespace
     */
     constexpr float VIGNETTE_STRENGTH{0.35f};
 
-    //! Material slots in the Grid's material table.
-    enum MaterialSlot : uint32_t {
-        MATERIAL_FLOOR = 0u, //!< The mirror the whole Grid stands on.
-        MATERIAL_NEON_PRIMARY = 1u, //!< Cyan tubes along ordinary grid lines.
-        MATERIAL_NEON_ACCENT = 2u, //!< Orange tubes along major grid lines.
-        MATERIAL_PILLAR = 3u, //!< Standing blocks, bright enough to light the floor around them.
-        MATERIAL_GLASS = 4u, //!< Clear slabs that refract what is behind them.
-        MATERIAL_GLOWING_GLASS = 5u //!< A tube that emits and transmits at once.
-    };
-
     //! Converts a mesh into hierarchy triangles, tagging each with the given material.
     void appendTriangles(std::vector<BvhLib::Triangle>& out, const Mesh& mesh, uint32_t material)
     {

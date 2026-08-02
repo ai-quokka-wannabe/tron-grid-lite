@@ -7,6 +7,7 @@ add_executable(${PROJECT_NAME}
     swapchain.cpp
     tracer.cpp
     world.cpp
+    acoustics.cpp
     postprocess.cpp
     geometry.cpp
     profiler.cpp
