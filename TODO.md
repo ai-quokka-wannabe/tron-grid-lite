@@ -73,9 +73,12 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 The frame loop and the window message pump currently share a thread, and on Win32 that has a
 concrete consequence: a modal resize drag blocks the message loop, so the renderer stops until the
-user lets go of the window edge. `WindowLib::Window` already carries an `EventCallback` hook whose
-comment says exactly this — it exists "to react to events during modal operations when the main loop
-is blocked" — which is a workaround for the missing thread rather than a design.
+user lets go of the window edge. `WindowLib::Window` already carries the `EventCallback` hook this
+needs, and its comment says exactly why it exists: "to react to events during modal operations when
+the main loop is blocked". It is not a workaround for the missing thread — it is **half of the
+threaded design, already in place**. During a modal drag `pumpEvents` is stuck inside the platform's
+own loop, but the window procedure still fires, so the callback keeps feeding the queue and a render
+thread on the other end keeps drawing.
 
 The earlier TronGrid solved this the straightforward way: the main thread pumps events and a render
 thread owns the Vulkan timeline, with a `SignalsLib::Signal<RenderEvent>` between them. That is the
@@ -83,7 +86,10 @@ one place a mutex-protected queue earns its lock, and it is why `libs/signals` e
 
 - [ ] Move the frame loop onto a render thread, with `Signal<RenderEvent>` carrying resize, input
       and stop from the event thread
-- [ ] Retire the `EventCallback` hook if the thread makes it redundant
+- [ ] Translate window events to `RenderEvent` inside the event callback, so a modal drag still feeds
+      the queue
+- [ ] Keep cursor capture on the window's thread — `ShowCursor` is per-thread on Win32 and cannot
+      move to the render thread, which is how the earlier TronGrid handles it too
 - [ ] Update `docs/ARCHITECTURE.md` § Signal-Based Communication, which currently records this as
       decided-but-unbuilt
 
