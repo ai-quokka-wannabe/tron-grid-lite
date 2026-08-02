@@ -131,6 +131,15 @@ private:
     uint32_t m_max_ears{0u}; //!< Ears the buffers were sized for.
     uint32_t m_material_count{0u}; //!< Length of the source-strength table, for the shader's bounds guard.
 
+    /*!
+        The loudest entry in the source table, for the fixed-point overflow check.
+
+        Kept because `record` cannot see the table — it lives on the device by then — and the check
+        is meaningless without it. A caller is free to author a strength above one, and the histogram
+        would wrap silently rather than complain.
+    */
+    float m_loudest_source{0.0f};
+
     //! Device-local block behind the source-strength table. Declared before it so it outlives it.
     MemoryArena m_device_arena;
 

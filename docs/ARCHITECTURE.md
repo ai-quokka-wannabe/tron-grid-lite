@@ -392,8 +392,8 @@ done anyway, and is how every frame timing quoted in this repository was taken.
 ```
 
 Both trace passes read the same BVH buffers in the same frame; they differ only in dispatch size and in the camera
-description pushed into them. When Phase 5 lands, an acoustic trace pass joins the sensor branch, dispatching against
-the same buffers and feeding a hearing sensor instead of an image.
+description pushed into them. The acoustic pass sits beside them on the sensor branch, dispatching against those same
+buffers — one workgroup per ear rather than one thread per pixel — and feeding a histogram instead of an image.
 
 ### Frame Synchronisation
 

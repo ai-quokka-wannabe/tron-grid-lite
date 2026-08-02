@@ -28,17 +28,19 @@ class Device; // forward declaration
 /*!
     Hands out slices of a few large device allocations instead of one allocation per resource.
 
-    Vulkan's validation layer says the same thing on every run of this renderer, once per image:
-    *"trying to bind to a memory block which is fully consumed by the image… smaller images like
-    this should be sub-allocated from larger memory blocks"*. Nineteen of those on a Grid that has
-    never allocated more than about eighteen blocks is not a memory problem — `maxMemoryAllocationCount`
-    is typically 4,096, so the renderer sits at well under one per cent of the cap.
+    Before this existed, Vulkan's validation layer said the same thing sixteen times on every run,
+    once per image and once per small buffer: *"trying to bind to a memory block which is fully
+    consumed by the image… smaller images like this should be sub-allocated from larger memory
+    blocks"*. That was never a memory problem — `maxMemoryAllocationCount` is typically 4,096 and the
+    renderer sat at well under one per cent of the cap.
 
-    **It is a signal-to-noise problem, and that is the reason this exists now.** Nineteen known-benign
-    warnings on every run are nineteen places for a real one to hide, and validation output that is
-    routinely ignored is validation that has stopped working. The memory argument arrives later, in
-    Phase 6, when creature sensors multiply the count: many creatures, two eyes each, each eye a small
-    render target far below the threshold.
+    **It was a signal-to-noise problem, and that is why this exists now.** Sixteen known-benign
+    warnings on every run are sixteen places for a real one to hide, and validation output that is
+    routinely ignored is validation that has stopped working. Two remain, both transient staging
+    buffers inside `VulkanHelpers::uploadStorageBuffer`, where the advice is simply wrong.
+
+    The memory argument arrives later, in Phase 6, when creature sensors multiply the count: many
+    creatures, two eyes each, each eye a small render target far below the threshold.
 
     **A bump allocator, deliberately.** There is no free list and no per-resource release: an arena
     hands out offsets in order and reclaims everything at once when it is reset or destroyed. That is
@@ -101,7 +103,7 @@ public:
     */
     void reset();
 
-    //! Returns how many device allocations this arena currently holds. Used by tests and diagnostics.
+    //! Returns how many device allocations this arena currently holds, for diagnostics.
     [[nodiscard]] uint32_t blockCount() const
     {
         return static_cast<uint32_t>(m_blocks.size());

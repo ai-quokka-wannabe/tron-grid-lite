@@ -14,6 +14,7 @@
 
 #include "acoustic_tracer.hpp"
 #include "device.hpp"
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <stdexcept>
@@ -55,6 +56,18 @@ namespace
     static_assert(Acoustics::BAND_COUNT == 4u, "acoustics.slang declares BAND_COUNT as 4.");
     static_assert(Acoustics::BIN_COUNT == 64u, "acoustics.slang declares BIN_COUNT as 64.");
 
+    /*
+        The rest of the shared constants, asserted for the same reason and against the same literals
+        acoustics.slang carries. None of these would fail loudly if they drifted: a different bin
+        width or speed of sound simply puts every arrival in the wrong place, and a different surface
+        epsilon changes which surfaces a reflected ray re-hits. The host and the device would each
+        be self-consistent and disagree with each other, which is exactly the shape of the direction
+        set bug --verify-acoustics caught.
+    */
+    static_assert(Acoustics::BIN_SECONDS == 0.001f, "acoustics.slang declares BIN_SECONDS as 0.001.");
+    static_assert(Acoustics::SPEED_OF_SOUND == 343.0f, "acoustics.slang declares SPEED_OF_SOUND as 343.0.");
+    static_assert(Acoustics::SURFACE_EPSILON == 1e-3f, "acoustics.slang declares SURFACE_EPSILON as 1e-3.");
+
     //! Creates a storage buffer and binds it into an arena, returning its mapped address if any.
     void* createArenaBuffer(const Device& device, MemoryArena& arena, vk::DeviceSize bytes, vk::raii::Buffer& buffer)
     {
@@ -78,6 +91,7 @@ AcousticTracer::AcousticTracer(const Device& device, const World& world, const s
     m_logger(&logger),
     m_max_ears(max_ears),
     m_material_count(static_cast<uint32_t>(source_strengths.size())),
+    m_loudest_source(source_strengths.empty() ? 0.0f : *std::max_element(source_strengths.begin(), source_strengths.end())),
     m_device_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, DEVICE_BLOCK_BYTES),
     m_host_arena(device, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, HOST_BLOCK_BYTES)
 {
@@ -182,19 +196,24 @@ void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, uint3
     }
 
     /*
-        Assert the fixed-point product before dispatching rather than discovering the wrap in a
-        histogram, where it would read as an arrival that is quieter than the one before it.
+        Check the fixed-point product before dispatching, rather than discovering the wrap in a
+        histogram where it would read as an arrival quieter than the one before it.
 
-        The worst case is every ray depositing at full strength into the same bin: one deposit per
-        ray per reflection order, all landing together. `2^18` per unit arrival leaves room for
-        `2^31 / 2^18 = 8,192` of them, which the default budget of 2,048 directions by four orders
-        reaches exactly.
+        The worst case is every ray depositing into the same bin at the loudest amplitude the inputs
+        allow: one deposit per ray per segment, and a ray makes `max_order + 1` segments — the direct
+        one plus one per reflection. Both the source table and the band spectrum are authored by the
+        caller and neither is bounded by anything, so both belong in the product; spreading and air
+        can only ever attenuate, so they are safely ignored.
     */
-    const uint64_t worst_case_deposits{static_cast<uint64_t>(config.direction_count) * (static_cast<uint64_t>(config.max_order) + 1u)};
-    const uint64_t worst_case_total{worst_case_deposits * static_cast<uint64_t>(FIXED_POINT_SCALE)};
-    if (worst_case_total > UINT32_MAX) {
-        throw std::runtime_error{"Acoustic ray budget can overflow the fixed-point histogram: " + std::to_string(worst_case_deposits)
-            + " full-strength deposits against a ceiling of " + std::to_string(UINT32_MAX / static_cast<uint32_t>(FIXED_POINT_SCALE)) + "."};
+    const float loudest_band{std::max({config.hum_spectrum[0], config.hum_spectrum[1], config.hum_spectrum[2], config.hum_spectrum[3]})};
+    const double loudest_deposit{static_cast<double>(m_loudest_source) * static_cast<double>(loudest_band) * static_cast<double>(FIXED_POINT_SCALE)};
+
+    const uint64_t segments{static_cast<uint64_t>(config.direction_count) * (static_cast<uint64_t>(config.max_order) + 1u)};
+    const double worst_case_total{static_cast<double>(segments) * loudest_deposit};
+
+    if (worst_case_total > static_cast<double>(UINT32_MAX)) {
+        throw std::runtime_error{"Acoustic ray budget can overflow the fixed-point histogram: " + std::to_string(segments) + " segments at up to "
+            + std::to_string(static_cast<double>(m_loudest_source * loudest_band)) + " each."};
     }
 
     const AcousticPushConstants push{.hum_spectrum = MathLib::Vec4{config.hum_spectrum[0], config.hum_spectrum[1], config.hum_spectrum[2], config.hum_spectrum[3]},
@@ -220,6 +239,30 @@ void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, uint3
         number on this side would be a second place for it to be wrong.
     */
     command_buffer.dispatch(ear_count, 1u, 1u);
+
+    /*
+        Make the histogram visible to the host.
+
+        **A fence is not enough, and host-coherent memory is not enough either.** Waiting on a fence
+        establishes that the work finished; it does not make the shader's writes *available* to the
+        host memory domain, and coherence only removes the need to invalidate a mapped range, not the
+        need for the dependency itself. Without this the host may read a stale histogram, and the
+        specification permits it to — the fact that it happens to work on the driver in front of me
+        is the least reliable evidence available.
+
+        `recordCinematic` has done exactly this since Phase 4, forty lines from here, for its image
+        readback. This pass was written without it.
+
+        There is deliberately no matching barrier for the ear positions going the other way, and the
+        asymmetry is real rather than an oversight: submitting to a queue defines a memory dependency
+        with prior host writes to mapped memory, so the device sees them without being told. Nothing
+        in the specification does the same favour in reverse.
+    */
+    const vk::MemoryBarrier2 histogram_visible{.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader,
+        .srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite,
+        .dstStageMask = vk::PipelineStageFlagBits2::eHost,
+        .dstAccessMask = vk::AccessFlagBits2::eHostRead};
+    command_buffer.pipelineBarrier2(vk::DependencyInfo{.memoryBarrierCount = 1u, .pMemoryBarriers = &histogram_visible});
 }
 
 Acoustics::ImpulseResponse AcousticTracer::read(uint32_t ear_index) const

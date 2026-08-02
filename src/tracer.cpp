@@ -44,7 +44,6 @@ namespace
     //! Block size for the buffer arena. Comfortably larger than every table this owns put together.
     constexpr vk::DeviceSize BUFFER_BLOCK_BYTES{4u * 1024u * 1024u};
 
-
     /*!
         Linear radiance, not a picture.
 
@@ -81,6 +80,18 @@ namespace
     static_assert(sizeof(Material) == 32u, "trace.slang declares Material as 32 bytes.");
     static_assert(sizeof(BvhLib::Node) == 32u, "grid_bvh.slang declares Node as 32 bytes.");
     static_assert(sizeof(BvhLib::Triangle) == 48u, "grid_bvh.slang declares Triangle as 48 bytes.");
+
+    /*
+        grid_bvh.slang sizes its traversal stack with a literal 30, because a shader array needs a
+        compile-time bound and it cannot see this header.
+
+        The failure mode if the two drift is worse than a crash, which is why it is worth an assert
+        that reads oddly. Raise the host's cap and the builder happily produces deeper trees; the
+        shader's stack stays at thirty and its `stack_size < MAX_DEPTH` guard then *silently drops*
+        the far child of every node it cannot hold. Rays stop finding surfaces that are demonstrably
+        there, no validation layer objects, and the picture merely looks a little wrong.
+    */
+    static_assert(BvhLib::MAX_DEPTH == 30u, "grid_bvh.slang sizes its traversal stack with a literal 30. Change both or neither.");
 
 } // namespace
 

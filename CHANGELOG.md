@@ -273,6 +273,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The acoustic pass never made its histogram visible to the host.** A dispatch wrote it, a fence was
+  waited on, and the host read the mapping — but a fence establishes only that the work *finished*, not
+  that its writes are available to the host memory domain, and host-coherent memory removes the need to
+  invalidate a range rather than the need for the dependency itself. `recordCinematic` has done this
+  correctly since Phase 4, forty lines away. Now barriered to `eHost` / `eHostRead`. It happened to work
+  on the driver in front of us, which is the least reliable evidence available. (The reverse direction
+  needs nothing, and the asymmetry is real: submitting to a queue defines a dependency with prior host
+  writes, so the device sees the ear positions without being told.)
+- **The ABI documented the impulse response as bin-major; every implementation of it is band-major.**
+  `TglEarView::energy` said "bin-major" in both `PROGRAM_INTERFACE.md` and `ACOUSTICS.md`, while
+  `Acoustics::ImpulseResponse` and `acoustics.slang` both index `[(band * bin_count) + bin]`. Four bands
+  by sixty-four bins does not crash when transposed — it produces plausible nonsense, silently, in
+  whichever Program read the documentation. The docs now state band-major, give the index expression,
+  and say why: finding arrivals within a band means walking bins, which this layout makes one
+  contiguous run.
+- **`BvhLib::MAX_DEPTH` and `grid_bvh.slang`'s traversal stack were tied only by a comment**, and the
+  failure mode was silent. Raise the host's cap and the builder produces deeper trees while the shader's
+  stack stays at thirty — whereupon its `stack_size < MAX_DEPTH` guard *drops* the far child of every
+  node it cannot hold, losing hits with no diagnostic anywhere. Now a `static_assert`, verified by
+  mutation. The acoustic constants `BIN_SECONDS`, `SPEED_OF_SOUND` and `SURFACE_EPSILON` had the same
+  gap and now have the same guard; `BAND_COUNT` and `BIN_COUNT` already did.
+- **The fixed-point overflow guard assumed unit amplitude.** It multiplied the ray budget by the scale
+  and stopped, but both the source-strength table and the band spectrum are authored by the caller and
+  neither is bounded — a spectrum above one would wrap the histogram silently while the check passed.
+  Both now enter the product.
+- **`docs/ACOUSTICS.md` was an order out on the same arithmetic**, quoting 8,192 deposits for "2,048
+  directions by four orders". A ray makes `max_order + 1` segments — the direct one plus one per
+  reflection — so the figure is 10,240. The code always computed it correctly.
+- Stale claims on the front page and elsewhere: `README.md` said Phase 5 was what "remains" and that the
+  embedded clip "is the current output", when it was recorded before the floor gained its terraced
+  relief; `docs/ARCHITECTURE.md` still said "when Phase 5 lands"; `src/memory_arena.hpp` described in
+  the present tense the sixteen warnings it had just eliminated, and miscounted them as nineteen — that
+  was the count of *all* validation warnings, not the sub-allocation ones.
+
 - `docs/ACOUSTICS.md` specified a bump of `TGL_PROGRAM_ABI_VERSION` from `1u` to `2u`. That was
   written before the pre-0.1.0 versioning rule was settled and had been contradicted ever since by
   `docs/PROGRAM_INTERFACE.md` § Versioning, which pins it at `1u`. A design document specifying a
