@@ -107,7 +107,7 @@ accumulating into **one histogram per ear**. That is a scattered atomic add, and
 anywhere in this renderer.
 
 Two constraints bite immediately. `VK_EXT_shader_atomic_float` is not requested, and requesting it
-would violate the device policy recorded in the journal — the device asks for nothing beyond Vulkan
+would violate the device policy this project holds to — the device asks for nothing beyond Vulkan
 1.3 core plus the swapchain extension — so float atomics are off the table. And acoustic energy in an
 unbounded response spans many orders of magnitude, so a naive fixed-point scale would either saturate
 the direct arrival or quantise the late ones to zero.

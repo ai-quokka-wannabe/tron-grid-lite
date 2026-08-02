@@ -230,12 +230,13 @@ chore: update Vulkan SDK to 1.4.335.0
 | `CHANGELOG.md` | User-facing change history |
 | `docs/PERCEPTION.md` | How creatures perceive: sensor resolutions and the biology behind them |
 | `docs/RELATED_WORK.md` | Prior art: what research labs build in this area, and what is unusual here |
-| `TODO.md` | Active tasks, roadmap and development journal |
+| `TODO.md` | Roadmap and open etapes |
 
 ### Updating Documentation
 
 - Update `README.md` for user-facing changes
-- Add a reverse-chronological entry to `TODO.md` § Journal for non-trivial work
+- Record *why* a non-trivial change was made in its `CHANGELOG.md` entry, not only what changed.
+  There is no separate journal: it was a third copy of the same history and was removed
 - Update code comments when changing public APIs
 - Keep examples up to date and working
 - Add an entry to `CHANGELOG.md` § Unreleased for anything user-visible
