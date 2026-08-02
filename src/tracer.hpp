@@ -22,6 +22,7 @@
 #include <vulkan/vulkan_raii.hpp>
 #include "camera.hpp"
 #include "components.hpp"
+#include "memory_arena.hpp"
 #include "vulkan_helpers.hpp"
 #include "world.hpp"
 #include <log/logger.hpp>
@@ -123,10 +124,21 @@ private:
     uint32_t m_frames_in_flight{0u}; //!< Number of output images and descriptor sets.
     vk::Extent2D m_extent{}; //!< Current output image size.
 
+    //! One block behind the material table. Declared before it so it outlives it.
+    MemoryArena m_buffer_arena;
+
     VulkanHelpers::DeviceBuffer m_materials; //!< Optical material table, 32 bytes each.
 
+    /*!
+        One block of memory behind every output image, rather than one allocation each.
+
+        Reset and refilled on every resize, which is exactly the shape a bump allocator wants: the
+        images are created together and destroyed together, and nothing ever frees one and keeps its
+        neighbour.
+    */
+    MemoryArena m_image_arena;
+
     std::vector<vk::raii::Image> m_output_images; //!< One per frame in flight.
-    std::vector<vk::raii::DeviceMemory> m_output_memory; //!< Backing memory for each output image.
     std::vector<vk::raii::ImageView> m_output_views; //!< Storage views of each output image.
 
     vk::raii::DescriptorSetLayout m_set_layout{nullptr}; //!< Layout of the single descriptor set.

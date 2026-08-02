@@ -21,6 +21,7 @@
 #endif
 #include <vulkan/vulkan_raii.hpp>
 #include "acoustics.hpp"
+#include "memory_arena.hpp"
 #include "vulkan_helpers.hpp"
 #include "world.hpp"
 #include <log/logger.hpp>
@@ -130,15 +131,24 @@ private:
     uint32_t m_max_ears{0u}; //!< Ears the buffers were sized for.
     uint32_t m_material_count{0u}; //!< Length of the source-strength table, for the shader's bounds guard.
 
+    //! Device-local block behind the source-strength table. Declared before it so it outlives it.
+    MemoryArena m_device_arena;
+
+    /*!
+        Host-visible block behind the ear and histogram buffers.
+
+        Both are tiny — thirty-two bytes and two kilobytes at two ears — and both are written or read
+        by the host on every solve, so one shared mapping serves them better than two allocations.
+    */
+    MemoryArena m_host_arena;
+
     VulkanHelpers::DeviceBuffer m_source_strengths; //!< One float per material slot. Device-local; never changes.
 
     vk::raii::Buffer m_ears{nullptr}; //!< Ear positions, host-visible.
-    vk::raii::DeviceMemory m_ears_memory{nullptr}; //!< Backing memory for the ear buffer.
-    void* m_ears_mapped{nullptr}; //!< Persistently mapped ear buffer.
+    void* m_ears_mapped{nullptr}; //!< Mapped ear buffer.
 
     vk::raii::Buffer m_histogram{nullptr}; //!< Fixed-point histograms, host-visible.
-    vk::raii::DeviceMemory m_histogram_memory{nullptr}; //!< Backing memory for the histogram buffer.
-    void* m_histogram_mapped{nullptr}; //!< Persistently mapped histogram buffer.
+    void* m_histogram_mapped{nullptr}; //!< Mapped histogram buffer.
 
     vk::raii::DescriptorSetLayout m_set_layout{nullptr}; //!< Layout of the single descriptor set.
     vk::raii::DescriptorPool m_descriptor_pool{nullptr}; //!< Pool the set comes from.

@@ -9,6 +9,7 @@ add_executable(${PROJECT_NAME}
     world.cpp
     acoustics.cpp
     acoustic_tracer.cpp
+    memory_arena.cpp
     postprocess.cpp
     geometry.cpp
     profiler.cpp

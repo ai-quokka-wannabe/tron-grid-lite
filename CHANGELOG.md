@@ -61,6 +61,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Device memory is sub-allocated** (`src/memory_arena.hpp`). A bump allocator hands out offsets into
+  a few large blocks instead of taking one `vkAllocateMemory` per resource, and the validation layer's
+  sub-allocation complaints go from sixteen to two. The reason was not memory pressure — eighteen
+  allocations against a typical cap of 4,096 is under one per cent — but signal to noise: sixteen
+  known-benign warnings on every run are sixteen places for a real one to hide, and validation output
+  that is routinely ignored is validation that has stopped working.
+
+  No free list, deliberately. Every group of resources here is created together and destroyed
+  together — the bloom pyramid and the output images are rebuilt whole on resize, and the Grid's
+  buffers live from upload to shutdown — so nothing ever wants to free one image and keep its
+  neighbour. The two remaining warnings are the transient staging buffers inside
+  `uploadStorageBuffer`, left alone because each exists for one copy and is gone before the function
+  returns; sub-allocating a one-shot transfer scratch buys nothing.
+
 - **Phase 5 milestone reached: the Grid can be heard.** Sound is traced through the same hierarchy as
   light, by the same traversal module, and delivered as an impulse response per ear — energy against
   delay, in that ear's own frequency bands. `TglEarDesc`, `TglEarView` and a `vocalisation_strength`

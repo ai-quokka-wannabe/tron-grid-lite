@@ -20,6 +20,7 @@
 #include <volk/volk.h>
 #endif
 #include <vulkan/vulkan_raii.hpp>
+#include "memory_arena.hpp"
 #include <log/logger.hpp>
 #include <cstdint>
 #include <string>
@@ -104,15 +105,20 @@ public:
     }
 
 private:
-    //! An image with its memory and view, owned together because they always live and die together.
+    /*!
+        An image and its view, owned together because they always live and die together.
+
+        There is deliberately no memory member. The backing store belongs to `m_image_arena`, which
+        holds one block behind the whole pyramid rather than one allocation per mip, and reclaims all
+        of it at once on resize.
+    */
     struct OwnedImage {
         vk::raii::Image image{nullptr};
-        vk::raii::DeviceMemory memory{nullptr};
         vk::raii::ImageView view{nullptr};
     };
 
-    //! Allocates one storage image of the given size and format.
-    [[nodiscard]] OwnedImage createImage(vk::Extent2D extent, vk::Format format, vk::ImageUsageFlags usage) const;
+    //! Creates one storage image of the given size and format, bound to the arena.
+    [[nodiscard]] OwnedImage createImage(vk::Extent2D extent, vk::Format format, vk::ImageUsageFlags usage);
 
     //! Chooses the pyramid's mip sizes for the current output extent.
     void computeBloomExtents();
@@ -128,6 +134,15 @@ private:
 
     uint32_t m_frames_in_flight{0u}; //!< Number of independent image sets.
     vk::Extent2D m_extent{}; //!< Size of the final picture.
+    /*!
+        One block of memory behind every image this stage owns, rather than one allocation each.
+
+        The bloom pyramid alone is ten images at the default two frames in flight, every one of them
+        far below the megabyte at which the validation layer stops objecting. They are built together
+        and thrown away together on resize, which is exactly the shape a bump allocator wants.
+    */
+    MemoryArena m_image_arena;
+
     std::vector<vk::Extent2D> m_bloom_extents; //!< Size of each mip, index 0 being half the output.
 
     //! Per frame in flight, one mip pyramid. Indexed [frame][mip].

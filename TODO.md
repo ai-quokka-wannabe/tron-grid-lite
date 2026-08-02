@@ -148,7 +148,7 @@ them. Two limits bite at once — `maxMemoryAllocationCount` is a hard driver ca
 allocation is rounded up to `bufferImageGranularity`, so a great many small ones waste real memory
 in padding.
 
-- [ ] Sub-allocate device memory before creature sensors multiply the allocation count
+- [x] Sub-allocate device memory before creature sensors multiply the allocation count
 
 An allocator wrapper for this already existed and was **deleted unused** in `d72473c`: 444 lines
 across `allocator.hpp`, `allocator.cpp` and `vma.cpp`, compiled into every binary and never once
@@ -157,9 +157,36 @@ it.
 
 It was deleted rather than kept because it had never run. Untested wrapper code around a memory
 allocator is worse than none: the next reader trusts 268 lines of plausible API that no build has
-ever exercised, and it drifts silently from the library it wraps. When this is picked up, the
-question to answer first is what Phase 6's allocation pattern actually looks like — the old wrapper
-was written speculatively, against a scene layout that has since been deleted too.
+ever exercised, and it drifts silently from the library it wraps.
+
+**Done, and deliberately not as that wrapper.** `src/memory_arena.hpp` is a bump allocator in about
+120 lines: it hands out offsets into a few large blocks and reclaims everything at once. There is no
+free list, and that is not a simplification of a real allocator — it is the right shape for what this
+renderer does. Every group of resources here is created together and destroyed together: the bloom
+pyramid is rebuilt whole on resize, the output images are rebuilt whole on resize, and the Grid's
+buffers live from upload to shutdown. Nothing ever wants to free one image and keep its neighbour.
+
+The reason for doing it now was **not** memory pressure. At eighteen allocations against a typical
+`maxMemoryAllocationCount` of 4,096, the renderer sat at well under one per cent of the cap. It was a
+signal-to-noise problem: nineteen known-benign warnings on every run are nineteen places for a real
+one to hide, and validation output that is routinely ignored is validation that has stopped working.
+
+| Warning source | Before | After |
+|----------------|-------:|------:|
+| Images (bloom pyramid, tracer outputs, post-process outputs) | 10 | **0** |
+| Buffers (Grid geometry, material tables, ears, histogram) | 6 | **0** |
+| Staging buffers, transient | 2 | 2 |
+
+The two that remain are the staging buffers inside `uploadStorageBuffer`, and they are **left
+deliberately**. Each exists for the duration of one copy and is destroyed before the function
+returns, so putting it in an arena would either grow that arena on every upload or need a reset
+protocol for a transfer nobody keeps. The validation layer's advice is simply wrong for a one-shot
+transfer scratch, and the comment there says so.
+
+One detail worth keeping in mind when Phase 6 adds per-creature buffers: an arena block is mapped
+**once**, by the arena, because Vulkan forbids mapping one `VkDeviceMemory` twice. Two buffers
+sharing a host-visible block therefore cannot each map it, which is why `bind` returns the address
+rather than the caller asking for it.
 
 ## Etape 10 — Phase 6 prerequisite: parallelise the hierarchy build
 
