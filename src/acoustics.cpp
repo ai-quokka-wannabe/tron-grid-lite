@@ -23,8 +23,17 @@ namespace Acoustics
     namespace
     {
 
-        //! Golden angle, in radians: the increment that spaces a Fibonacci spiral evenly.
-        const float GOLDEN_ANGLE{3.14159265358979323846f * (3.0f - std::sqrt(5.0f))};
+        /*!
+            The golden angle as a fraction of a full turn: (3 - sqrt(5)) / 2.
+
+            A literal rather than a computation, and `acoustics.slang` carries the same one. Deriving
+            it from `sqrt(5)` on each side invites the two libraries to disagree in the last bit,
+            which would put every ray on a slightly different heading.
+        */
+        constexpr float GOLDEN_TURN_FRACTION{0.38196601125010515f};
+
+        //! One full turn, in radians.
+        constexpr float TWO_PI{6.28318530717958648f};
 
     } // namespace
 
@@ -61,12 +70,15 @@ namespace Acoustics
             the last exactly at the south, which wastes two of the directions on a pair that a
             uniform set would never place there and leaves the equator correspondingly thinner.
         */
+
         const float height{1.0f - ((2.0f * (static_cast<float>(index) + 0.5f)) / static_cast<float>(safe_count))};
 
         // Clamped because a height a hair outside [-1, 1] from rounding would take a square root of
         // a negative number, and the resulting NaN would poison a whole ray rather than one bin.
         const float radius{std::sqrt(std::max(0.0f, 1.0f - (height * height)))};
-        const float theta{GOLDEN_ANGLE * static_cast<float>(index)};
+
+        const float turns{static_cast<float>(index) * GOLDEN_TURN_FRACTION};
+        const float theta{(turns - std::floor(turns)) * TWO_PI};
 
         return MathLib::Vec3{radius * std::cos(theta), height, radius * std::sin(theta)};
     }

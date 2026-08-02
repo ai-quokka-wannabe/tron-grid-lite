@@ -61,6 +61,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Phase 5's acoustic pass runs on the GPU.** `src/acoustics.slang` mirrors `src/acoustics.hpp` as
+  `trace.slang` mirrors `libs/bvh`, importing the same `grid_bvh` module and binding the same two
+  `World` buffers with no rebuild and no second structure. **One workgroup owns one ear**, keeping
+  that ear's histogram in shared memory as `uint`s — 4 bands by 64 bins is 1 KiB against the 16 KiB
+  Vulkan guarantees — so there is no cross-workgroup contention at all. Float atomics are not
+  available and are not wanted: integer addition is associative, so the histogram is bit-identical
+  however the threads are scheduled, which a float atomic could not have promised and which the
+  replay guarantee in `docs/PROGRAM_INTERFACE.md` could not have survived.
+- **`--verify-acoustics`** runs the gather on both the host and the device against the real Grid and
+  subtracts. It is the acceptance criterion `docs/ACOUSTICS.md` asks for, run by hand because it
+  needs a GPU and the build machines have none. On the reference GTX 1650 Ti the two agree to
+  **0.00005 %** of the total, with the largest single-bin disagreement at 0.00004 %.
+
 - **Every surface on the Grid is a perfect acoustic mirror.** Absorption removed, transmission
   confirmed absent as a decision rather than a deferral, scattering already absent — so there is no
   acoustic *material* model at all, only a source-strength table of one float per material, non-zero
@@ -236,6 +249,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tools/` gained a README, a requirements file and a `.venv` placeholder.
 
 ### Fixed
+
+- **The host and the device disagreed by 1.2 % at one ear, and it was a real bug rather than float
+  divergence.** `--verify-acoustics` found it on its first run. Both implementations built their ray
+  directions as `golden_angle * ray_index`, which reaches about 4,913 radians — some 782 revolutions
+  — at index 2047. A float32 argument that large already carries roughly 6e-4 radians of error, and
+  the host and the device then reduce it with *different* algorithms and disagree by about that
+  much. At three metres that is two millimetres of displacement, which is enough for a ray to strike
+  a two-centimetre neon tube on one and miss it on the other: exactly one ray in 2,048 did, and the
+  whole 1.2 % was that single extra arrival in a single bin.
+
+  The diagnosis is worth recording because the obvious explanation was wrong twice. A reflection-order
+  sweep showed the disagreement was already fully present at order zero, so it was not bounce
+  instability. Nudging the ear by 100 µm moved the host total by 1.6e-5, so nothing was on a knife
+  edge — but that test was *too weak* to prove it, since 100 µm only flips rays already within 100 µm
+  of an edge. What settled it was running the host's BVH against the host's own brute-force sweep:
+  they agreed **exactly**, which acquitted the traversal and left only the direction set.
+
+  Both sides now accumulate the turn *fraction* and reduce before the trigonometry: one multiply, one
+  floor, one subtract, one multiply, each of them an operation IEEE-754 specifies exactly, so the two
+  produce bit-identical arguments and `cos` only ever sees a value inside one turn. Agreement went
+  from 1.2 % to 0.004 %.
+- **The fixed-point deposit truncated where it should have rounded.** Losing half a quantum on each
+  of tens of thousands of deposits is a systematic deficit rather than noise, and it showed as the
+  device reading consistently below the host. Rounding is unbiased and took the remaining
+  disagreement from 0.004 % to 0.00005 %.
 
 - **A failed C runtime assertion no longer opens a modal dialog.** On Windows a Debug build's CRT
   reports a failed assertion — including the debug STL's own bounds check on
