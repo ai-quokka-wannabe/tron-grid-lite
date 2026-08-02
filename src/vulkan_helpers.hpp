@@ -15,6 +15,7 @@
 #pragma once
 
 #include "device.hpp"
+#include "memory_arena.hpp"
 #include <vulkan/vulkan_raii.hpp>
 #include <cstdint>
 #include <cstring>
@@ -37,10 +38,14 @@ namespace VulkanHelpers
     //! First word of every SPIR-V module, per the specification.
     inline constexpr uint32_t SPIRV_MAGIC{0x07230203u};
 
-    //! A device-local buffer and the memory backing it.
+    /*!
+        A device-local buffer.
+
+        There is no memory member: the backing store belongs to the `MemoryArena` the buffer was
+        uploaded into, which outlives it and reclaims everything at once.
+    */
     struct DeviceBuffer {
         vk::raii::Buffer buffer{nullptr};
-        vk::raii::DeviceMemory memory{nullptr};
     };
 
     /*!
@@ -116,16 +121,22 @@ namespace VulkanHelpers
         ray, and host-visible memory is the wrong side of the bus for that. The staging buffer and
         its command pool are local, so both are destroyed as soon as the copy has been waited on.
 
+        **The staging buffer keeps its own plain allocation**, and the validation layer duly grumbles
+        that it should have been sub-allocated. It is wrong here: the buffer exists for the duration
+        of one copy and is gone before this function returns, so putting it in an arena would either
+        grow that arena on every upload or need a reset protocol for a transfer nobody keeps.
+
         Synchronous — it submits and waits. Every caller runs at start-up, where one fence wait per
         buffer costs nothing and getting the data there before anybody draws is the whole point.
 
         \param device Logical device, its physical device and its graphics queue.
+        \param arena Device-local arena the finished buffer is bound into. Must outlive the buffer.
         \param data Bytes to upload. Must be at least `bytes` long.
         \param bytes Size of the buffer. Must not be zero — Vulkan rejects a zero-sized buffer, so a
                caller with nothing to upload has to pass one placeholder element instead.
         \return The buffer and the memory backing it, both owned by the caller.
     */
-    [[nodiscard]] inline DeviceBuffer uploadStorageBuffer(const Device& device, const void* data, vk::DeviceSize bytes)
+    [[nodiscard]] inline DeviceBuffer uploadStorageBuffer(const Device& device, MemoryArena& arena, const void* data, vk::DeviceSize bytes)
     {
         const vk::raii::Buffer staging_buffer{
             device.get(), vk::BufferCreateInfo{.size = bytes, .usage = vk::BufferUsageFlagBits::eTransferSrc, .sharingMode = vk::SharingMode::eExclusive}};
@@ -146,11 +157,7 @@ namespace VulkanHelpers
             vk::BufferCreateInfo{
                 .size = bytes, .usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, .sharingMode = vk::SharingMode::eExclusive}};
 
-        const vk::MemoryRequirements requirements{result.buffer.getMemoryRequirements()};
-        result.memory = vk::raii::DeviceMemory{device.get(),
-            vk::MemoryAllocateInfo{.allocationSize = requirements.size,
-                .memoryTypeIndex = findMemoryType(device.physicalDevice(), requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal)}};
-        result.buffer.bindMemory(*result.memory, 0u);
+        arena.bind(result.buffer);
 
         const vk::raii::CommandPool pool{
             device.get(), vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient, .queueFamilyIndex = device.graphicsFamilyIndex()}};

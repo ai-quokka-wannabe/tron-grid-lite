@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "memory_arena.hpp"
 #include "vulkan_helpers.hpp"
 #include <bvh/bvh.hpp>
 #include <log/logger.hpp>
@@ -92,6 +93,9 @@ public:
 private:
     uint32_t m_node_count{0u}; //!< Nodes in the hierarchy; zero means an empty Grid.
     uint32_t m_triangle_count{0u}; //!< Triangles the hierarchy indexes.
+
+    //! One block behind both buffers, rather than one allocation each. Declared first so it outlives them.
+    MemoryArena m_arena;
 
     VulkanHelpers::DeviceBuffer m_nodes; //!< Hierarchy nodes, 32 bytes each.
     VulkanHelpers::DeviceBuffer m_triangles; //!< Triangles in leaf order, 48 bytes each.

@@ -41,6 +41,15 @@ namespace
     //! Hard ceiling on pyramid depth, so a large window cannot allocate an unbounded chain.
     constexpr uint32_t MAX_BLOOM_MIPS{6u};
 
+    /*!
+        Block size for the image arena.
+
+        At 1280x720 the whole pyramid plus the output images comes to under 4 MiB, so the common case
+        is one allocation for the entire stage. A larger window gets a block sized to fit — the arena
+        treats this as a granularity rather than a ceiling.
+    */
+    constexpr vk::DeviceSize IMAGE_BLOCK_BYTES{16u * 1024u * 1024u};
+
     //! Push constants for bloom_downsample.slang.
     struct BloomPushConstants {
         float threshold{0.0f};
@@ -88,7 +97,8 @@ PostProcess::PostProcess(const Device& device, uint32_t frames_in_flight, const 
     LoggingLib::Logger& logger) :
     m_device(&device),
     m_logger(&logger),
-    m_frames_in_flight(frames_in_flight)
+    m_frames_in_flight(frames_in_flight),
+    m_image_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, IMAGE_BLOCK_BYTES)
 {
     m_bloom_layout = makeStorageImageLayout(m_device->get(), 3u);
     m_postprocess_layout = makeStorageImageLayout(m_device->get(), 3u);
@@ -130,7 +140,7 @@ PostProcess::PostProcess(const Device& device, uint32_t frames_in_flight, const 
     m_postprocess_pipeline = makeComputePipeline(m_device->get(), postprocess_module, "postprocessMain", m_postprocess_pipeline_layout);
 }
 
-PostProcess::OwnedImage PostProcess::createImage(vk::Extent2D extent, vk::Format format, vk::ImageUsageFlags usage) const
+PostProcess::OwnedImage PostProcess::createImage(vk::Extent2D extent, vk::Format format, vk::ImageUsageFlags usage)
 {
     OwnedImage owned{};
 
@@ -146,11 +156,7 @@ PostProcess::OwnedImage PostProcess::createImage(vk::Extent2D extent, vk::Format
             .sharingMode = vk::SharingMode::eExclusive,
             .initialLayout = vk::ImageLayout::eUndefined}};
 
-    const vk::MemoryRequirements requirements{owned.image.getMemoryRequirements()};
-    owned.memory = vk::raii::DeviceMemory{m_device->get(),
-        vk::MemoryAllocateInfo{.allocationSize = requirements.size,
-            .memoryTypeIndex = findMemoryType(m_device->physicalDevice(), requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal)}};
-    owned.image.bindMemory(*owned.memory, 0u);
+    m_image_arena.bind(owned.image);
 
     owned.view = vk::raii::ImageView{m_device->get(),
         vk::ImageViewCreateInfo{.image = *owned.image,
@@ -202,6 +208,7 @@ void PostProcess::resize(vk::Extent2D extent, const std::vector<vk::ImageView>& 
         m_all_sets.clear();
         m_bloom_mips.clear();
         m_output_images.clear();
+        m_image_arena.reset();
         return;
     }
 
@@ -218,6 +225,11 @@ void PostProcess::resize(vk::Extent2D extent, const std::vector<vk::ImageView>& 
     m_all_sets.clear();
     m_bloom_mips.clear();
     m_output_images.clear();
+
+    // Every image bound to the arena is gone, so the blocks behind them may go too. Freeing a block
+    // an image is still bound to is undefined behaviour, which is why this line follows the clears
+    // rather than leading them.
+    m_image_arena.reset();
 
     m_bloom_mips.resize(m_frames_in_flight);
     for (uint32_t frame{0u}; frame < m_frames_in_flight; ++frame) {

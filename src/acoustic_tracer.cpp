@@ -55,27 +55,19 @@ namespace
     static_assert(Acoustics::BAND_COUNT == 4u, "acoustics.slang declares BAND_COUNT as 4.");
     static_assert(Acoustics::BIN_COUNT == 64u, "acoustics.slang declares BIN_COUNT as 64.");
 
-    //! Creates a host-visible, host-coherent buffer and leaves it permanently mapped.
-    void createMappedBuffer(const Device& device, vk::DeviceSize bytes, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& memory, void*& mapped)
+    //! Creates a storage buffer and binds it into an arena, returning its mapped address if any.
+    void* createArenaBuffer(const Device& device, MemoryArena& arena, vk::DeviceSize bytes, vk::raii::Buffer& buffer)
     {
         buffer = vk::raii::Buffer{
             device.get(), vk::BufferCreateInfo{.size = bytes, .usage = vk::BufferUsageFlagBits::eStorageBuffer, .sharingMode = vk::SharingMode::eExclusive}};
-
-        const vk::MemoryRequirements requirements{buffer.getMemoryRequirements()};
-        memory = vk::raii::DeviceMemory{device.get(),
-            vk::MemoryAllocateInfo{.allocationSize = requirements.size,
-                .memoryTypeIndex = findMemoryType(device.physicalDevice(), requirements.memoryTypeBits,
-                    vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)}};
-        buffer.bindMemory(*memory, 0u);
-
-        /*
-            Mapped once and never unmapped. Vulkan explicitly permits a persistent mapping, and the
-            alternative — mapping and unmapping around every solve — costs a driver round trip per
-            access to buy nothing, since nothing else may touch the memory while a dispatch is in
-            flight either way.
-        */
-        mapped = memory.mapMemory(0u, bytes);
+        return arena.bind(buffer);
     }
+
+    //! Block size for the two host-visible buffers. Both are tiny; one block holds any sane ear count.
+    constexpr vk::DeviceSize HOST_BLOCK_BYTES{1u * 1024u * 1024u};
+
+    //! Block size for the device-local source-strength table, which is a handful of floats.
+    constexpr vk::DeviceSize DEVICE_BLOCK_BYTES{1u * 1024u * 1024u};
 
 } // namespace
 
@@ -85,7 +77,9 @@ AcousticTracer::AcousticTracer(const Device& device, const World& world, const s
     m_world(&world),
     m_logger(&logger),
     m_max_ears(max_ears),
-    m_material_count(static_cast<uint32_t>(source_strengths.size()))
+    m_material_count(static_cast<uint32_t>(source_strengths.size())),
+    m_device_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, DEVICE_BLOCK_BYTES),
+    m_host_arena(device, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, HOST_BLOCK_BYTES)
 {
     if (source_strengths.empty()) {
         throw std::runtime_error{"The acoustic pass needs at least one source strength."};
@@ -95,13 +89,15 @@ AcousticTracer::AcousticTracer(const Device& device, const World& world, const s
         throw std::runtime_error{"The acoustic pass needs at least one ear."};
     }
 
-    m_source_strengths = VulkanHelpers::uploadStorageBuffer(device, source_strengths.data(), source_strengths.size() * sizeof(float));
+    m_source_strengths = VulkanHelpers::uploadStorageBuffer(device, m_device_arena, source_strengths.data(), source_strengths.size() * sizeof(float));
 
     const vk::DeviceSize ear_bytes{static_cast<vk::DeviceSize>(max_ears) * sizeof(MathLib::Vec4)};
     const vk::DeviceSize histogram_bytes{static_cast<vk::DeviceSize>(max_ears) * HISTOGRAM_ENTRIES * sizeof(uint32_t)};
 
-    createMappedBuffer(device, ear_bytes, m_ears, m_ears_memory, m_ears_mapped);
-    createMappedBuffer(device, histogram_bytes, m_histogram, m_histogram_memory, m_histogram_mapped);
+    // Both land in the same host-visible block, which the arena maps once. Two allocations became
+    // one, and two mappings became one interior pointer each.
+    m_ears_mapped = createArenaBuffer(device, m_host_arena, ear_bytes, m_ears);
+    m_histogram_mapped = createArenaBuffer(device, m_host_arena, histogram_bytes, m_histogram);
 
     // Ears default to the origin rather than to whatever the allocator left behind, so a dispatch
     // recorded before setEars gathers from a defined place instead of from uninitialised floats.

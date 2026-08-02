@@ -16,19 +16,29 @@
 #include "device.hpp"
 #include <string>
 
+namespace
+{
+
+    //! Block size for the buffer arena. Comfortably larger than every table this owns put together.
+    constexpr vk::DeviceSize BUFFER_BLOCK_BYTES{4u * 1024u * 1024u};
+
+} // namespace
+
 World::World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& logger) :
     m_node_count(static_cast<uint32_t>(bvh.nodes.size())),
-    m_triangle_count(static_cast<uint32_t>(bvh.triangles.size()))
+    m_triangle_count(static_cast<uint32_t>(bvh.triangles.size())),
+    m_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, BUFFER_BLOCK_BYTES)
 {
     // A storage buffer of size zero is not legal, so an empty Grid still gets one element of each.
     // Every shader checks the node count and misses rather than reading them.
     const BvhLib::Node placeholder_node{};
     const BvhLib::Triangle placeholder_triangle{};
 
-    m_nodes = VulkanHelpers::uploadStorageBuffer(device, bvh.nodes.empty() ? static_cast<const void*>(&placeholder_node) : static_cast<const void*>(bvh.nodes.data()),
+    m_nodes = VulkanHelpers::uploadStorageBuffer(device, m_arena,
+        bvh.nodes.empty() ? static_cast<const void*>(&placeholder_node) : static_cast<const void*>(bvh.nodes.data()),
         bvh.nodes.empty() ? sizeof(BvhLib::Node) : (bvh.nodes.size() * sizeof(BvhLib::Node)));
 
-    m_triangles = VulkanHelpers::uploadStorageBuffer(device,
+    m_triangles = VulkanHelpers::uploadStorageBuffer(device, m_arena,
         bvh.triangles.empty() ? static_cast<const void*>(&placeholder_triangle) : static_cast<const void*>(bvh.triangles.data()),
         bvh.triangles.empty() ? sizeof(BvhLib::Triangle) : (bvh.triangles.size() * sizeof(BvhLib::Triangle)));
 

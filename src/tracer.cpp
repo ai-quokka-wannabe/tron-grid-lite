@@ -32,6 +32,20 @@ namespace
     constexpr uint32_t WORKGROUP_SIZE{8u};
 
     /*!
+        Block size for the output-image arena.
+
+        Two 1280x720 half-float images are about 7 MiB together, so at this size the common case is
+        a single allocation and a resize to anything reasonable stays a single allocation. A larger
+        window simply gets a block sized to fit — the arena treats this as a granularity rather than
+        a ceiling.
+    */
+    constexpr vk::DeviceSize IMAGE_BLOCK_BYTES{16u * 1024u * 1024u};
+
+    //! Block size for the buffer arena. Comfortably larger than every table this owns put together.
+    constexpr vk::DeviceSize BUFFER_BLOCK_BYTES{4u * 1024u * 1024u};
+
+
+    /*!
         Linear radiance, not a picture.
 
         Emissive surfaces in the Grid are far brighter than one, and the reflections of them
@@ -75,13 +89,15 @@ Tracer::Tracer(const Device& device, const World& world, const std::vector<Mater
     m_device(&device),
     m_world(&world),
     m_logger(&logger),
-    m_frames_in_flight(frames_in_flight)
+    m_frames_in_flight(frames_in_flight),
+    m_buffer_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, BUFFER_BLOCK_BYTES),
+    m_image_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, IMAGE_BLOCK_BYTES)
 {
     if (materials.empty()) {
         throw std::runtime_error{"The tracer needs at least one material."};
     }
 
-    m_materials = VulkanHelpers::uploadStorageBuffer(*m_device, materials.data(), materials.size() * sizeof(Material));
+    m_materials = VulkanHelpers::uploadStorageBuffer(*m_device, m_buffer_arena, materials.data(), materials.size() * sizeof(Material));
 
     m_logger->logInfo("Optical materials uploaded: " + std::to_string(materials.size()) + " entries, " + std::to_string(materials.size() * sizeof(Material))
         + " bytes of device-local storage.");
@@ -129,9 +145,13 @@ Tracer::Tracer(const Device& device, const World& world, const std::vector<Mater
 
 void Tracer::createOutputImages()
 {
+    // Views first, then images, then the memory they were bound to. The order is the reverse of
+    // creation and it is not cosmetic: freeing a block an image is still bound to is undefined
+    // behaviour, and this is the one place in the class where that could happen.
     m_output_views.clear();
     m_output_images.clear();
-    m_output_memory.clear();
+
+    m_image_arena.reset();
 
     for (uint32_t frame{0u}; frame < m_frames_in_flight; ++frame) {
         vk::raii::Image image{m_device->get(),
@@ -146,11 +166,7 @@ void Tracer::createOutputImages()
                 .sharingMode = vk::SharingMode::eExclusive,
                 .initialLayout = vk::ImageLayout::eUndefined}};
 
-        const vk::MemoryRequirements requirements{image.getMemoryRequirements()};
-        vk::raii::DeviceMemory memory{m_device->get(),
-            vk::MemoryAllocateInfo{.allocationSize = requirements.size,
-                .memoryTypeIndex = findMemoryType(m_device->physicalDevice(), requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal)}};
-        image.bindMemory(*memory, 0u);
+        m_image_arena.bind(image);
 
         vk::raii::ImageView view{m_device->get(),
             vk::ImageViewCreateInfo{.image = *image,
@@ -159,7 +175,6 @@ void Tracer::createOutputImages()
                 .subresourceRange = vk::ImageSubresourceRange{vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u}}};
 
         m_output_images.emplace_back(std::move(image));
-        m_output_memory.emplace_back(std::move(memory));
         m_output_views.emplace_back(std::move(view));
     }
 }
