@@ -69,7 +69,53 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 - [ ] Energy histogram per listener, banded by octave
 - [ ] Add ears to the Program interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md`. No version bump: `TGL_PROGRAM_ABI_VERSION` stays at 1 until 0.1.0
 
-## Etape 8 — Phase 6 prerequisite: sub-allocate device memory
+## Etape 8 — Move rendering onto its own thread
+
+The frame loop and the window message pump currently share a thread, and on Win32 that has a
+concrete consequence: a modal resize drag blocks the message loop, so the renderer stops until the
+user lets go of the window edge. `WindowLib::Window` already carries the `EventCallback` hook this
+needs, and its comment says exactly why it exists: "to react to events during modal operations when
+the main loop is blocked". It is not a workaround for the missing thread — it is **half of the
+threaded design, already in place**. During a modal drag `pumpEvents` is stuck inside the platform's
+own loop, but the window procedure still fires, so the callback keeps feeding the queue and a render
+thread on the other end keeps drawing.
+
+The earlier TronGrid solved this the straightforward way: the main thread pumps events and a render
+thread owns the Vulkan timeline, with a `SignalsLib::Signal<RenderEvent>` between them. That is the
+one place a mutex-protected queue earns its lock, and it is why `libs/signals` exists.
+
+- [x] Move the frame loop onto a render thread, with `Signal<RenderEvent>` carrying resize, input
+      and stop from the event thread
+- [x] Translate window events to `RenderEvent` inside the event callback, so a modal drag still feeds
+      the queue
+- [x] Keep cursor capture on the window's thread — `ShowCursor` is per-thread on Win32 and cannot
+      move to the render thread, which is how the earlier TronGrid handles it too
+- [x] Update `docs/ARCHITECTURE.md` § Signal-Based Communication, which currently records this as
+      decided-but-unbuilt
+
+**Done.** The interactive loop left `main` for `runRenderLoop`, and everything the two threads share
+is collected in one `RenderChannel` — so the boundary is checkable by reading rather than by
+reasoning: if a name is not a member of it, exactly one thread touches it.
+
+Two things the plan above did not anticipate, both found while building it:
+
+- `Window::wakeEvents` had to be added. `waitEvents` sleeps until the User does something, so a
+  render thread that had died could not tell the event loop to stop, and the window went on looking
+  alive until somebody moved the mouse. `PostMessageW(WM_NULL)` on Win32; a self-addressed client
+  message carrying `XCB_NONE` on X11.
+- The `std::thread` needed an RAII stop-and-join. A joinable thread reaching its destructor calls
+  `std::terminate`, so an exception from any of the platform calls in the event loop would have
+  aborted the process instead of being reported. The same guard detaches the event callback, because
+  `window` outlives the object that callback points at.
+
+Verified on a GTX 1650 Ti: four programmatic resizes, minimise, restore and close, with validation
+layers on and zero errors. The modal-drag freeze itself is the design's whole purpose but has not
+been measured — driving a real modal loop needs a hand on the window edge.
+
+Phase 5's acoustic solve is the next user after that: it runs at roughly a tenth of the visual rate,
+which is a second thread boundary and a second queue.
+
+## Etape 9 — Phase 6 prerequisite: sub-allocate device memory
 
 Deferred deliberately, and this entry exists so that deferral does not become forgetting.
 
@@ -98,7 +144,68 @@ ever exercised, and it drifts silently from the library it wraps. When this is p
 question to answer first is what Phase 6's allocation pattern actually looks like — the old wrapper
 was written speculatively, against a scene layout that has since been deleted too.
 
+## Etape 10 — Phase 6 prerequisite: parallelise the hierarchy build
+
+**Deliberately not done yet, and this entry records why, so that the deferral is a decision rather
+than an oversight.**
+
+`BvhLib::build` is single-threaded and takes **14 ms** for the Grid's 24,952 triangles on a 16-core
+machine — about 2 % of a 650 ms startup, nearly all of which is Vulkan device and pipeline creation
+that no amount of threading can touch. Parallelising it today would buy roughly 10 ms of startup in
+exchange for a concurrent node allocator, against a repo rule that says don't over-engineer.
+
+An earlier plan called this urgent on the strength of a 120 ms measurement. That was a Debug build;
+see the 2026-08-02 journal entry.
+
+**Phase 6 is where it changes**, because a hierarchy over moving creatures is rebuilt every tick
+rather than once at startup, and 14 ms against a frame budget is a different proposition entirely
+from 14 ms paid once at launch.
+
+- [ ] Parallelise the hierarchy build before creatures start moving
+
+The shape is already half-decided by the existing code. `subdivide` partitions its range before it
+recurses, so the two children own disjoint triangle ranges and never touch each other's — the only
+shared mutable state is `nodes`, which both children append to. The determinism requirement is what
+rules out the obvious atomic bump allocator: node indices would then depend on thread scheduling.
+Building each subtree into its own local vector and splicing them back in a fixed frontier order
+keeps the output bit-identical between runs, which a reproducible recording requires.
+
 ## Journal
+
+### 2026-08-02
+
+- Etape 8 done: the renderer runs on its own thread. See the etape above for what was built and for
+  the two things the plan did not anticipate.
+- **Every performance figure recorded in this project so far was measured with the validation layers
+  on, and they are all roughly 4.6× too slow.** Debug enables both core validation and *GPU-assisted*
+  validation, and GPU-AV instruments the shader — it adds a bounds check to every buffer access in
+  the traversal loop, which is the entire inner loop of a ray tracer. Measured both ways on the same
+  scene, same GPU, same resolution:
+
+  | 1280x720, GTX 1650 Ti | Debug + validation | Release |
+  |-----------------------|--------------------|---------|
+  | Frame | 16.9 ms | **3.7 ms** |
+  | Trace | 16.6 ms | **3.4 ms** |
+  | Post-processing | 0.33 ms | **0.29 ms** |
+  | Hierarchy build (CPU) | 120 ms | **14 ms** |
+
+  Note which row barely moves. Post-processing is a fixed number of texture reads per texel with no
+  data-dependent addressing, so there is little for GPU-AV to instrument; the trace pass is nothing
+  but data-dependent addressing. That is also why the ratio cannot be applied as a blanket correction
+  to old figures — it is not one factor, it is a different factor per pass.
+
+  `docs/ACOUSTICS.md` has been corrected: its delay table and the "twenty-six frames" headline were
+  computed from the 14.4 ms figure and are now computed from 3.7 ms. The journal entries below are
+  left as they were written — they record what was measured at the time, and rewriting them would
+  hide the mistake rather than fix it.
+
+- **The hierarchy build does not need parallelising yet, and the plan to do so was based on the wrong
+  number.** 14 ms in Release, not the 120 ms that a Debug measurement suggested — about 2 % of a
+  650 ms startup, nearly all of which is Vulkan device and pipeline creation that threading cannot
+  touch. Parallelising it now would buy roughly 10 ms of startup for something like eighty lines of
+  concurrent code, against a repo rule that says "don't over-engineer". It becomes worth doing in
+  Phase 6, when creatures move and the hierarchy is rebuilt every tick — a 14 ms rebuild against a
+  frame budget is a completely different proposition from a 14 ms cost paid once.
 
 ### 2026-08-01
 

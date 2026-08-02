@@ -50,6 +50,17 @@ namespace WindowLib
         //! Blocks until at least one platform event arrives, then drains all pending events.
         virtual void waitEvents() = 0;
 
+        /*!
+            Wakes a thread blocked in `waitEvents`, delivering nothing.
+
+            This is the one member that may be called from another thread, and it exists because
+            `waitEvents` otherwise sleeps until the user does something. A worker that has decided
+            the process should stop has no way to say so to a window that is waiting for a
+            keystroke, so it says it with this instead: the wait returns, the loop re-tests its own
+            conditions, and it exits without anybody having to touch the mouse.
+        */
+        virtual void wakeEvents() = 0;
+
         //! Captures or releases the mouse cursor for FPS-style look.
         //! When captured: cursor is hidden, locked to the window, and deltas are computed from centre.
         //! Must be called from the main (event) thread.

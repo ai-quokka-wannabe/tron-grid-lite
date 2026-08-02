@@ -189,6 +189,22 @@ void PostProcess::computeBloomExtents()
 
 void PostProcess::resize(vk::Extent2D extent, const std::vector<vk::ImageView>& hdr_views)
 {
+    /*
+        The zero-extent check comes first, and the order matters. A minimised window means the
+        tracer created no output images, so there are no HDR views to count — checking the count
+        first turned a minimised launch into a fatal error. See the note in Tracer::resize.
+    */
+    if ((extent.width == 0u) || (extent.height == 0u)) {
+        m_extent = vk::Extent2D{0u, 0u};
+        m_bloom_extents.clear();
+        m_bloom_sets.clear();
+        m_postprocess_sets.clear();
+        m_all_sets.clear();
+        m_bloom_mips.clear();
+        m_output_images.clear();
+        return;
+    }
+
     if (hdr_views.size() != m_frames_in_flight) {
         throw std::runtime_error{"The post-process stage needs one HDR view per frame in flight."};
     }
