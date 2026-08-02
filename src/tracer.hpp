@@ -22,7 +22,8 @@
 #include <vulkan/vulkan_raii.hpp>
 #include "camera.hpp"
 #include "components.hpp"
-#include <bvh/bvh.hpp>
+#include "vulkan_helpers.hpp"
+#include "world.hpp"
 #include <log/logger.hpp>
 #include <cstdint>
 #include <string>
@@ -49,13 +50,13 @@ public:
         Uploads the Grid and builds everything needed to trace it.
 
         \param device Logical device.
-        \param bvh Hierarchy to upload. May be empty, in which case the tracer renders black.
-        \param materials Material table the triangles index into. Must not be empty.
+        \param world The Grid's geometry. Must outlive this tracer; an empty one renders black.
+        \param materials Optical material table the triangles index into. Must not be empty.
         \param frames_in_flight Number of independent output images to allocate.
         \param shader_path Path to the compiled `trace.spv`, relative to the working directory.
         \param logger Logger for the upload summary.
     */
-    Tracer(const Device& device, const BvhLib::Bvh& bvh, const std::vector<Material>& materials, uint32_t frames_in_flight, const std::string& shader_path,
+    Tracer(const Device& device, const World& world, const std::vector<Material>& materials, uint32_t frames_in_flight, const std::string& shader_path,
         LoggingLib::Logger& logger);
 
     // Non-copyable, non-movable: it owns Vulkan objects and is referenced by the frame loop.
@@ -108,22 +109,7 @@ public:
         return m_extent;
     }
 
-    //! Returns the number of triangles the hierarchy holds.
-    [[nodiscard]] uint32_t triangleCount() const
-    {
-        return m_triangle_count;
-    }
-
 private:
-    //! A device-local buffer and the memory backing it.
-    struct DeviceBuffer {
-        vk::raii::Buffer buffer{nullptr};
-        vk::raii::DeviceMemory memory{nullptr};
-    };
-
-    //! Uploads `bytes` into a fresh device-local storage buffer through a staging copy.
-    [[nodiscard]] DeviceBuffer uploadStorageBuffer(const void* data, vk::DeviceSize bytes) const;
-
     //! Allocates the per-frame output images and their views.
     void createOutputImages();
 
@@ -131,16 +117,13 @@ private:
     void writeDescriptorSets();
 
     const Device* m_device{nullptr}; //!< Logical device (non-owning).
+    const World* m_world{nullptr}; //!< The Grid's geometry (non-owning). Shared with the acoustic pass.
     LoggingLib::Logger* m_logger{nullptr}; //!< Logger (non-owning).
 
     uint32_t m_frames_in_flight{0u}; //!< Number of output images and descriptor sets.
-    uint32_t m_node_count{0u}; //!< Nodes in the hierarchy; zero means an empty Grid.
-    uint32_t m_triangle_count{0u}; //!< Triangles in the hierarchy.
     vk::Extent2D m_extent{}; //!< Current output image size.
 
-    DeviceBuffer m_nodes; //!< Hierarchy nodes, 32 bytes each.
-    DeviceBuffer m_triangles; //!< Triangles in leaf order, 48 bytes each.
-    DeviceBuffer m_materials; //!< Material table, 64 bytes each.
+    VulkanHelpers::DeviceBuffer m_materials; //!< Optical material table, 32 bytes each.
 
     std::vector<vk::raii::Image> m_output_images; //!< One per frame in flight.
     std::vector<vk::raii::DeviceMemory> m_output_memory; //!< Backing memory for each output image.

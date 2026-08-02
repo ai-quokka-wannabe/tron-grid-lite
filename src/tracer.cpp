@@ -70,35 +70,21 @@ namespace
 
 } // namespace
 
-Tracer::Tracer(const Device& device, const BvhLib::Bvh& bvh, const std::vector<Material>& materials, uint32_t frames_in_flight, const std::string& shader_path,
+Tracer::Tracer(const Device& device, const World& world, const std::vector<Material>& materials, uint32_t frames_in_flight, const std::string& shader_path,
     LoggingLib::Logger& logger) :
     m_device(&device),
+    m_world(&world),
     m_logger(&logger),
-    m_frames_in_flight(frames_in_flight),
-    m_node_count(static_cast<uint32_t>(bvh.nodes.size())),
-    m_triangle_count(static_cast<uint32_t>(bvh.triangles.size()))
+    m_frames_in_flight(frames_in_flight)
 {
     if (materials.empty()) {
         throw std::runtime_error{"The tracer needs at least one material."};
     }
 
-    // A storage buffer of size zero is not legal, so an empty Grid still gets one element of each.
-    // The shader checks node_count and renders black rather than reading them.
-    const BvhLib::Node placeholder_node{};
-    const BvhLib::Triangle placeholder_triangle{};
+    m_materials = VulkanHelpers::uploadStorageBuffer(*m_device, materials.data(), materials.size() * sizeof(Material));
 
-    m_nodes = uploadStorageBuffer(bvh.nodes.empty() ? static_cast<const void*>(&placeholder_node) : static_cast<const void*>(bvh.nodes.data()),
-        bvh.nodes.empty() ? sizeof(BvhLib::Node) : (bvh.nodes.size() * sizeof(BvhLib::Node)));
-
-    m_triangles = uploadStorageBuffer(bvh.triangles.empty() ? static_cast<const void*>(&placeholder_triangle) : static_cast<const void*>(bvh.triangles.data()),
-        bvh.triangles.empty() ? sizeof(BvhLib::Triangle) : (bvh.triangles.size() * sizeof(BvhLib::Triangle)));
-
-    m_materials = uploadStorageBuffer(materials.data(), materials.size() * sizeof(Material));
-
-    const vk::DeviceSize total_bytes{(static_cast<vk::DeviceSize>(m_node_count) * sizeof(BvhLib::Node))
-        + (static_cast<vk::DeviceSize>(m_triangle_count) * sizeof(BvhLib::Triangle)) + (materials.size() * sizeof(Material))};
-    m_logger->logInfo("Grid uploaded: " + std::to_string(m_triangle_count) + " triangles, " + std::to_string(m_node_count) + " hierarchy nodes, "
-        + std::to_string(materials.size()) + " materials, " + std::to_string(total_bytes / 1024u) + " KiB of device-local storage.");
+    m_logger->logInfo("Optical materials uploaded: " + std::to_string(materials.size()) + " entries, " + std::to_string(materials.size() * sizeof(Material))
+        + " bytes of device-local storage.");
 
     const std::array<vk::DescriptorSetLayoutBinding, 4> bindings{
         vk::DescriptorSetLayoutBinding{
@@ -139,56 +125,6 @@ Tracer::Tracer(const Device& device, const BvhLib::Bvh& bvh, const std::vector<M
     m_pipeline = vk::raii::Pipeline{m_device->get(), nullptr,
         vk::ComputePipelineCreateInfo{.stage = vk::PipelineShaderStageCreateInfo{.stage = vk::ShaderStageFlagBits::eCompute, .module = *module, .pName = "traceMain"},
             .layout = *m_pipeline_layout}};
-}
-
-Tracer::DeviceBuffer Tracer::uploadStorageBuffer(const void* data, vk::DeviceSize bytes) const
-{
-    // Staging into device-local memory rather than leaving the data host-visible. Traversal reads
-    // these buffers many times per pixel, and host-visible memory is the wrong side of the bus.
-    const vk::raii::Buffer staging_buffer{
-        m_device->get(), vk::BufferCreateInfo{.size = bytes, .usage = vk::BufferUsageFlagBits::eTransferSrc, .sharingMode = vk::SharingMode::eExclusive}};
-
-    const vk::MemoryRequirements staging_requirements{staging_buffer.getMemoryRequirements()};
-    const vk::raii::DeviceMemory staging_memory{m_device->get(),
-        vk::MemoryAllocateInfo{.allocationSize = staging_requirements.size,
-            .memoryTypeIndex = findMemoryType(m_device->physicalDevice(), staging_requirements.memoryTypeBits,
-                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent)}};
-    staging_buffer.bindMemory(*staging_memory, 0u);
-
-    void* mapped{staging_memory.mapMemory(0u, bytes)};
-    std::memcpy(mapped, data, static_cast<size_t>(bytes));
-    staging_memory.unmapMemory();
-
-    DeviceBuffer result{};
-    result.buffer = vk::raii::Buffer{m_device->get(),
-        vk::BufferCreateInfo{
-            .size = bytes, .usage = vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst, .sharingMode = vk::SharingMode::eExclusive}};
-
-    const vk::MemoryRequirements requirements{result.buffer.getMemoryRequirements()};
-    result.memory = vk::raii::DeviceMemory{m_device->get(),
-        vk::MemoryAllocateInfo{.allocationSize = requirements.size,
-            .memoryTypeIndex = findMemoryType(m_device->physicalDevice(), requirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal)}};
-    result.buffer.bindMemory(*result.memory, 0u);
-
-    const vk::raii::CommandPool pool{
-        m_device->get(), vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient, .queueFamilyIndex = m_device->graphicsFamilyIndex()}};
-
-    vk::raii::CommandBuffers command_buffers{
-        m_device->get(), vk::CommandBufferAllocateInfo{.commandPool = *pool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1u}};
-    const vk::raii::CommandBuffer& command_buffer{command_buffers.front()};
-
-    command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    command_buffer.copyBuffer(*staging_buffer, *result.buffer, {vk::BufferCopy{.srcOffset = 0u, .dstOffset = 0u, .size = bytes}});
-    command_buffer.end();
-
-    const vk::raii::Fence fence{m_device->get(), vk::FenceCreateInfo{}};
-    m_device->graphicsQueue().submit({vk::SubmitInfo{.commandBufferCount = 1u, .pCommandBuffers = &*command_buffer}}, *fence);
-
-    while (m_device->get().waitForFences({*fence}, vk::True, UINT64_MAX) == vk::Result::eTimeout) {
-        // Retry — a timeout here is not an error.
-    }
-
-    return result;
 }
 
 void Tracer::createOutputImages()
@@ -233,8 +169,8 @@ void Tracer::writeDescriptorSets()
     for (uint32_t frame{0u}; frame < m_frames_in_flight; ++frame) {
         const vk::DescriptorImageInfo image_info{.imageView = *m_output_views[frame], .imageLayout = vk::ImageLayout::eGeneral};
 
-        const vk::DescriptorBufferInfo nodes_info{.buffer = *m_nodes.buffer, .offset = 0u, .range = vk::WholeSize};
-        const vk::DescriptorBufferInfo triangles_info{.buffer = *m_triangles.buffer, .offset = 0u, .range = vk::WholeSize};
+        const vk::DescriptorBufferInfo nodes_info{.buffer = m_world->nodes(), .offset = 0u, .range = vk::WholeSize};
+        const vk::DescriptorBufferInfo triangles_info{.buffer = m_world->triangles(), .offset = 0u, .range = vk::WholeSize};
         const vk::DescriptorBufferInfo materials_info{.buffer = *m_materials.buffer, .offset = 0u, .range = vk::WholeSize};
 
         const std::array<vk::WriteDescriptorSet, 4> writes{vk::WriteDescriptorSet{.dstSet = *m_descriptor_sets[frame],
@@ -332,7 +268,7 @@ void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t fram
         .resolution_x = m_extent.width,
         .resolution_y = m_extent.height,
         .max_bounces = max_bounces,
-        .node_count = m_node_count};
+        .node_count = m_world->nodeCount()};
 
     command_buffer.pushConstants<TracePushConstants>(*m_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0u, {push});
 

@@ -40,6 +40,7 @@
 #include "swapchain.hpp"
 #include "tracer.hpp"
 #include "vulkan_helpers.hpp"
+#include "world.hpp"
 #include <bvh/bvh.hpp>
 #include <log/logger.hpp>
 #include <math/vector.hpp>
@@ -942,7 +943,9 @@ int main(int argc, char** argv)
         // its own output folder.
         const std::filesystem::path shader_directory{executableDirectory()};
 
-        Tracer tracer{device, bvh, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
+        const World world{device, bvh, logger};
+
+        Tracer tracer{device, world, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
         tracer.resize(swapchain.extent());
 
         PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};

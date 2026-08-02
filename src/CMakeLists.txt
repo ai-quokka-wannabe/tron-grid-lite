@@ -6,6 +6,7 @@ add_executable(${PROJECT_NAME}
     surface.cpp
     swapchain.cpp
     tracer.cpp
+    world.cpp
     postprocess.cpp
     geometry.cpp
     profiler.cpp
