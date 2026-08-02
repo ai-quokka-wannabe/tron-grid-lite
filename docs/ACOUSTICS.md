@@ -812,7 +812,13 @@ typedef struct TglEarDesc
 /*! One ear's arrivals for this tick. */
 typedef struct TglEarView
 {
-    /*! Energy per (bin, band), bin-major, bin_count * band_count floats. Never NULL.
+    /*! Energy per (band, bin), **band-major**: element [(band * bin_count) + bin], and therefore
+        band_count * bin_count floats in total. Never NULL.
+
+        Band-major rather than bin-major because that is what a listener walks. Finding the
+        arrival times within a band means stepping through bins, and this layout makes that
+        one contiguous run per band; the transpose would make every step a stride.
+
         Relative to the emitting source's energy; there is no absolute reference level.
         A bin no sound has reached yet reads zero, which is the physical answer and not a
         sentinel: there is no "not yet filled" state to flag. */
@@ -1229,7 +1235,9 @@ absorption at 8 kHz adds 1.5 dB over that distance. Surfaces contribute nothing,
 whole delivered response therefore spans under about 28 dB — a factor of a thousand, not many orders of
 magnitude.** So one scale suffices: put a unit relative arrival at `2^18`, which leaves roughly eight
 bits of resolution on the quietest arrival the cap permits and, against a worst case of 2,048 directions
-by four orders, 8,192 full-strength deposits landing in one bin — `2^18 × 2^13 = 2^31`, inside a `uint`
+by four orders, 10,240 full-strength deposits landing in one bin — a ray makes `max_order + 1`
+segments, the direct one plus one per reflection, which is the off-by-one this sentence used to make.
+`2^18 × 10,240` is about `2.7 × 10^9`, inside a `uint`
 with a bit to spare. Those two numbers are coupled, so **assert the product at dispatch time** rather
 than discovering the wrap in a histogram. The quantisation floor and the saturation bound both belong in
 the shader's header comment, next to the scale.

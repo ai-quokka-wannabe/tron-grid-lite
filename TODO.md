@@ -129,8 +129,9 @@ Verified on a GTX 1650 Ti: four programmatic resizes, minimise, restore and clos
 layers on and zero errors. The modal-drag freeze itself is the design's whole purpose but has not
 been measured — driving a real modal loop needs a hand on the window edge.
 
-Phase 5's acoustic solve is the next user after that: it runs at roughly a tenth of the visual rate,
-which is a second thread boundary and a second queue.
+The acoustic solve is the next user after that. It is built now but still runs on whichever thread
+asks for it; at roughly a tenth of the visual rate it wants a second thread boundary and a second
+queue, which is a Phase 6 concern rather than a Phase 5 one.
 
 ## Etape 9 — Phase 6 prerequisite: sub-allocate device memory
 
@@ -262,6 +263,41 @@ Decisions worth pinning now, while they are cheap:
    Grid's own never changes.
 
 ## Journal
+
+### 2026-08-03 (bug hunt)
+
+A deliberate hunt rather than a reaction to anything breaking. Twelve findings, and the two worth
+remembering are both **silent** failures — no crash, no validation error, no test going red.
+
+- **The acoustic histogram was read without a host-visibility barrier.** A fence proves the work
+  finished; it does not make shader writes available to the host domain, and host-coherent memory
+  removes the need to *invalidate* rather than the need for the dependency. `recordCinematic` has done
+  it correctly since Phase 4, forty lines from the new code. It worked on this driver, which is the
+  weakest evidence there is.
+- **The ABI said bin-major; every implementation is band-major.** Four bands by sixty-four bins does
+  not crash when transposed — it produces plausible nonsense in whichever Program trusted the
+  documentation. Caught by comparing the doc's index expression against the two that exist.
+- **`MAX_DEPTH` was tied across the host/shader boundary by a comment.** Raise the host's and the
+  shader silently *drops* far children it cannot stack, losing hits with no diagnostic. Now asserted,
+  and the assert was mutation-tested. The same gap existed for three acoustic constants.
+- The fixed-point overflow guard assumed unit amplitude when both inputs are caller-supplied, and
+  `ACOUSTICS.md` was an order out on the same arithmetic — a ray makes `max_order + 1` segments, not
+  `max_order`.
+- Assorted stale claims, including `README.md` asserting that the embedded clip "is the current
+  output" when it predates the terraced floor.
+
+**What actually found them.** Not reading code top to bottom. Three specific questions, each of which
+had already caught something once before:
+
+1. *Where does this cross a boundary the compiler cannot see?* — host/shader constants, host/device
+   memory visibility, the ABI's layout against the code's.
+2. *Where does a document state a number I could check?* — the deposit count, the warning count, the
+   phase status.
+3. *Where does an existing part of this repo already do the same thing?* — the cinematic readback had
+   the barrier the acoustic pass lacked, and `BAND_COUNT` had the assert `MAX_DEPTH` lacked.
+
+The pattern behind the first is worth stating: **every one of the serious findings was a duplicated
+fact with no mechanism holding the copies together.** Comments saying "must equal" are not mechanisms.
 
 ### 2026-08-03
 

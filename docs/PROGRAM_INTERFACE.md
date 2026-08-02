@@ -401,7 +401,13 @@ typedef struct TglEarDesc
 /*! One ear's arrivals for this tick. */
 typedef struct TglEarView
 {
-    /*! Energy per (bin, band), bin-major, bin_count * band_count floats. Never NULL.
+    /*! Energy per (band, bin), **band-major**: element [(band * bin_count) + bin], and therefore
+        band_count * bin_count floats in total. Never NULL.
+
+        Band-major rather than bin-major because that is what a listener walks. Finding the
+        arrival times within a band means stepping through bins, and this layout makes that
+        one contiguous run per band; the transpose would make every step a stride.
+
         Relative to the emitting source's energy; there is no absolute reference level.
         A bin no sound has reached yet reads zero, which is the physical answer and not a
         sentinel: there is no "not yet filled" state to flag. */
