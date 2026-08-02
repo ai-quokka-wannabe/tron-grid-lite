@@ -39,12 +39,6 @@ public:
     Instance(Instance&&) = delete;
     Instance& operator=(Instance&&) = delete;
 
-    //! Raw VkInstance handle (for surface creation, etc.).
-    [[nodiscard]] VkInstance handle() const
-    {
-        return *m_instance;
-    }
-
     //! RAII instance reference.
     [[nodiscard]] const vk::raii::Instance& get() const
     {

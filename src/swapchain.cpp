@@ -24,46 +24,22 @@
 
 namespace
 {
-    //! True when the given format may be used as a storage image with optimal tiling.
-    [[nodiscard]] bool formatSupportsStorageWrites(const vk::raii::PhysicalDevice& physical_device, vk::Format format)
-    {
-        const vk::FormatProperties format_props{physical_device.getFormatProperties(format)};
-        return static_cast<bool>(format_props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eStorageImage);
-    }
-
     /*!
-        Selects the best surface format, preferring B8G8R8A8 UNORM so that the compute ray
-        tracer can write its result straight into the presented image. UNORM is chosen over
-        the sRGB variant deliberately: sRGB formats cannot be used as storage images, and the
-        tracer applies the sRGB transfer function itself. The display still interprets the
-        values as sRGB because the colour space stays eSrgbNonlinear.
+        Selects the surface format, preferring B8G8R8A8 UNORM with an sRGB-nonlinear colour space.
+
+        UNORM rather than the sRGB variant deliberately: the post-processing pass applies the sRGB
+        transfer function itself, and the display still interprets the values correctly because the
+        colour space stays eSrgbNonlinear.
     */
-    [[nodiscard]] vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::raii::PhysicalDevice& physical_device, const std::vector<vk::SurfaceFormatKHR>& available)
+    [[nodiscard]] vk::SurfaceFormatKHR chooseSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& available)
     {
         assert(!available.empty());
 
-        // First choice: the canonical BGRA UNORM / sRGB-nonlinear pair, if it can take storage writes.
-        const std::vector<vk::SurfaceFormatKHR>::const_iterator preferred{std::ranges::find_if(available, [&physical_device](const vk::SurfaceFormatKHR& fmt) {
-            return (fmt.format == vk::Format::eB8G8R8A8Unorm) && (fmt.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
-                && formatSupportsStorageWrites(physical_device, fmt.format);
+        const std::vector<vk::SurfaceFormatKHR>::const_iterator preferred{std::ranges::find_if(available, [](const vk::SurfaceFormatKHR& fmt) {
+            return (fmt.format == vk::Format::eB8G8R8A8Unorm) && (fmt.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear);
         })};
 
-        if (preferred != available.end()) {
-            return *preferred;
-        }
-
-        // Second choice: any offered format that supports storage writes.
-        const std::vector<vk::SurfaceFormatKHR>::const_iterator storage_capable{std::ranges::find_if(available, [&physical_device](const vk::SurfaceFormatKHR& fmt) {
-            return formatSupportsStorageWrites(physical_device, fmt.format);
-        })};
-
-        if (storage_capable != available.end()) {
-            return *storage_capable;
-        }
-
-        // Last resort: whatever the surface offers first. The tracer will then have to render
-        // offscreen and copy into the swapchain image via eTransferDst.
-        return available.front();
+        return (preferred != available.end()) ? *preferred : available.front();
     }
 
     //! Selects the best present mode, preferring MAILBOX for low latency.
@@ -112,7 +88,6 @@ void Swapchain::recreate(uint32_t width, uint32_t height)
     m_device->get().waitIdle();
 
     // Clear old views first (they reference old images).
-    m_views.clear();
     m_images.clear();
 
     // Rebuild with old swapchain for smoother transition.
@@ -143,7 +118,7 @@ void Swapchain::build(uint32_t width, uint32_t height)
     }
 
     // Choose optimal settings.
-    m_format = chooseSurfaceFormat(physical_device, formats);
+    m_format = chooseSurfaceFormat(formats);
     m_present_mode = choosePresentMode(present_modes);
     m_extent = chooseExtent(capabilities, width, height);
 
@@ -168,29 +143,9 @@ void Swapchain::build(uint32_t width, uint32_t height)
     }
 
     /*
-        The compute ray tracer would like to write its result straight into the acquired
-        swapchain image. That requires two independent things: the surface must advertise
-        eStorage in its supported usage flags, and the chosen format must expose the storage
-        image feature with optimal tiling. Neither is guaranteed, so both are probed and the
-        absence of either is a logged degradation rather than a fatal error — the images are
-        always created with eTransferDst, so the tracer can fall back to rendering into an
-        offscreen image and copying it across.
-    */
-    const bool surface_allows_storage{static_cast<bool>(capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eStorage)};
-    const bool format_allows_storage{formatSupportsStorageWrites(physical_device, m_format.format)};
-    m_storage_writes_supported = (surface_allows_storage && format_allows_storage);
-
-    if (!surface_allows_storage) {
-        m_logger->logWarning("Surface does not support storage image usage; the tracer must present via a transfer copy.");
-    } else if (!format_allows_storage) {
-        m_logger->logWarning("Chosen swapchain format does not support storage image writes; the tracer must present via a transfer copy.");
-    }
-
-    /*
-        Only COLOR_ATTACHMENT is guaranteed to appear in supportedUsageFlags. Storage is carefully
-        probed above and then not even used, while transfer-destination — the one usage this
-        renderer genuinely cannot do without, since every frame ends in a blit into the swapchain
-        image — was requested unconditionally. On a surface that omits it, swapchain creation fails
+        Only COLOR_ATTACHMENT is guaranteed to appear in supportedUsageFlags, and
+        transfer-destination is the one usage this renderer cannot do without: every frame ends in a
+        blit into the swapchain image. On a surface that omits it, swapchain creation fails
         VUID-VkSwapchainCreateInfoKHR-imageUsage-01276 and surfaces as a generic fatal error with no
         indication of the cause.
     */
@@ -200,9 +155,6 @@ void Swapchain::build(uint32_t width, uint32_t height)
     }
 
     m_image_usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
-    if (m_storage_writes_supported) {
-        m_image_usage |= vk::ImageUsageFlagBits::eStorage;
-    }
 
     // Create swapchain.
     vk::SwapchainCreateInfoKHR create_info{};
@@ -239,28 +191,5 @@ void Swapchain::build(uint32_t width, uint32_t height)
     m_images = m_swapchain.getImages();
 
     m_logger->logInfo("Swapchain created: " + std::to_string(m_extent.width) + "x" + std::to_string(m_extent.height) + " (" + std::to_string(m_images.size())
-        + " images, " + ((m_present_mode == vk::PresentModeKHR::eMailbox) ? "MAILBOX" : "FIFO") + ", " + (m_storage_writes_supported ? "storage writes" : "transfer copy")
-        + ").");
-
-    // Create image views.
-    m_views.clear();
-    m_views.reserve(m_images.size());
-
-    for (vk::Image image : m_images) {
-        vk::ImageViewCreateInfo view_info{};
-        view_info.image = image;
-        view_info.viewType = vk::ImageViewType::e2D;
-        view_info.format = m_format.format;
-        view_info.components.r = vk::ComponentSwizzle::eIdentity;
-        view_info.components.g = vk::ComponentSwizzle::eIdentity;
-        view_info.components.b = vk::ComponentSwizzle::eIdentity;
-        view_info.components.a = vk::ComponentSwizzle::eIdentity;
-        view_info.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-        view_info.subresourceRange.baseMipLevel = 0;
-        view_info.subresourceRange.levelCount = 1;
-        view_info.subresourceRange.baseArrayLayer = 0;
-        view_info.subresourceRange.layerCount = 1;
-
-        m_views.push_back(vk::raii::ImageView(m_device->get(), view_info));
-    }
+        + " images, " + ((m_present_mode == vk::PresentModeKHR::eMailbox) ? "MAILBOX" : "FIFO") + ").");
 }

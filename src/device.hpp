@@ -88,12 +88,6 @@ public:
         return m_device_name;
     }
 
-    //! True if the graphics queue family also supports compute (required for the ray traversal passes).
-    [[nodiscard]] bool graphicsQueueSupportsCompute() const
-    {
-        return m_graphics_queue_supports_compute;
-    }
-
 private:
     LoggingLib::Logger& m_logger; //!< Logger reference (non-owning).
     vk::raii::PhysicalDevice m_physical_device{nullptr}; //!< Selected physical device.
@@ -103,5 +97,4 @@ private:
     uint32_t m_graphics_family_index{UINT32_MAX}; //!< Graphics queue family index (sentinel until assigned).
     uint32_t m_present_family_index{UINT32_MAX}; //!< Present queue family index (sentinel until assigned).
     std::string m_device_name; //!< Human-readable GPU name.
-    bool m_graphics_queue_supports_compute{false}; //!< Whether the graphics queue family also exposes compute.
 };

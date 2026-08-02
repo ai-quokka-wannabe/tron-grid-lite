@@ -194,21 +194,6 @@ namespace
 
 }
 
-float Mesh::boundingRadius() const
-{
-    float max_squared{0.0f};
-
-    for (const Vertex& vertex : vertices) {
-        const float squared{(vertex.position[0] * vertex.position[0]) + (vertex.position[1] * vertex.position[1]) + (vertex.position[2] * vertex.position[2])};
-
-        if (squared > max_squared) {
-            max_squared = squared;
-        }
-    }
-
-    return std::sqrt(max_squared);
-}
-
 void Mesh::append(const Mesh& other)
 {
     const uint32_t offset{static_cast<uint32_t>(vertices.size())};

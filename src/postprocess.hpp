@@ -103,12 +103,6 @@ public:
         return m_extent;
     }
 
-    //! Returns how many mip levels the bloom pyramid currently has.
-    [[nodiscard]] uint32_t bloomMipCount() const
-    {
-        return static_cast<uint32_t>(m_bloom_extents.size());
-    }
-
 private:
     //! An image with its memory and view, owned together because they always live and die together.
     struct OwnedImage {

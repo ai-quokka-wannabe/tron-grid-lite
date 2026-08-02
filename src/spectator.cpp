@@ -131,12 +131,6 @@ void SpectatorController::setCursorCaptured(bool captured)
     }
 }
 
-bool SpectatorController::isMoving() const
-{
-    return (isHeld(KEY_W) || isHeld(KEY_A) || isHeld(KEY_S) || isHeld(KEY_D) || isHeld(KEY_UP) || isHeld(KEY_LEFT) || isHeld(KEY_DOWN) || isHeld(KEY_RIGHT)
-        || isHeld(KEY_E) || isHeld(KEY_Q) || isHeld(KEY_SPACE) || isHeld(KEY_CTRL));
-}
-
 void SpectatorController::reset()
 {
     m_keys_held.clear();

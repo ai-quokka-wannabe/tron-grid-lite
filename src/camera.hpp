@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <math/matrix.hpp>
-#include <math/projection.hpp>
 #include <math/quaternion.hpp>
 #include <math/vector.hpp>
 
@@ -40,24 +38,10 @@
 class Camera {
 public:
     //! Constructs a debug camera at the given position looking along -Z.
-    explicit Camera(const MathLib::Vec3& position = {0.0f, 0.0f, 0.0f}, float fov_y = MathLib::PI / 4.0f, float near_plane = 0.1f, float far_plane = 100.0f) :
+    explicit Camera(const MathLib::Vec3& position = {0.0f, 0.0f, 0.0f}, float fov_y = MathLib::PI / 4.0f) :
         m_position(position),
-        m_fov_y(fov_y),
-        m_near_plane(near_plane),
-        m_far_plane(far_plane)
+        m_fov_y(fov_y)
     {
-    }
-
-    //! Returns the view matrix from position and orientation.
-    [[nodiscard]] MathLib::Mat4 viewMatrix() const
-    {
-        return MathLib::viewFromQuaternion(m_position, m_orientation);
-    }
-
-    //! Returns the perspective projection matrix for the given aspect ratio.
-    [[nodiscard]] MathLib::Mat4 projectionMatrix(float aspect) const
-    {
-        return MathLib::perspective(m_fov_y, aspect, m_near_plane, m_far_plane);
     }
 
     //! Moves the camera forward (along local -Z axis).
@@ -128,6 +112,4 @@ private:
     MathLib::Vec3 m_position{0.0f, 0.0f, 0.0f}; //!< World-space position, in metres.
     MathLib::Quat m_orientation{MathLib::Quat::identity()}; //!< Orientation (default: looking along -Z).
     float m_fov_y{MathLib::PI / 4.0f}; //!< Vertical field of view in radians.
-    float m_near_plane{0.1f}; //!< Near clipping plane distance, in metres.
-    float m_far_plane{100.0f}; //!< Far clipping plane distance, in metres.
 };

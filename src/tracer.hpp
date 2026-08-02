@@ -114,12 +114,6 @@ public:
         return m_triangle_count;
     }
 
-    //! Returns the number of nodes the hierarchy holds.
-    [[nodiscard]] uint32_t nodeCount() const
-    {
-        return m_node_count;
-    }
-
 private:
     //! A device-local buffer and the memory backing it.
     struct DeviceBuffer {

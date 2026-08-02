@@ -140,47 +140,8 @@ public:
     */
     void setCursorCaptured(bool captured);
 
-    //! Returns true if any bound movement key is currently held.
-    [[nodiscard]] bool isMoving() const;
-
     //! Releases every held key and discards pending mouse look, leaving the camera stationary.
     void reset();
-
-    //! Base movement speed, in metres per second.
-    [[nodiscard]] float moveSpeed() const
-    {
-        return m_move_speed;
-    }
-
-    //! Sets the base movement speed, in metres per second.
-    void setMoveSpeed(float speed)
-    {
-        m_move_speed = speed;
-    }
-
-    //! Multiplier applied to the movement speed while the fast modifier is held.
-    [[nodiscard]] float fastMultiplier() const
-    {
-        return m_fast_multiplier;
-    }
-
-    //! Sets the fast-movement multiplier.
-    void setFastMultiplier(float multiplier)
-    {
-        m_fast_multiplier = multiplier;
-    }
-
-    //! Mouse look sensitivity, in radians per pixel.
-    [[nodiscard]] float mouseSensitivity() const
-    {
-        return m_mouse_sensitivity;
-    }
-
-    //! Sets the mouse look sensitivity, in radians per pixel.
-    void setMouseSensitivity(float sensitivity)
-    {
-        m_mouse_sensitivity = sensitivity;
-    }
 
 private:
     //! Returns true if the given key code is currently held down.
