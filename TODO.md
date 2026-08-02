@@ -67,7 +67,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 - [ ] Give surfaces something to be heard: sound sources on the Grid
 - [ ] Acoustic ray traversal through the same hierarchy
 - [ ] Energy histogram per listener, banded by octave
-- [ ] Add ears to the Program interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md` — and bump `TGL_PROGRAM_ABI_VERSION` to 2
+- [ ] Add ears to the Program interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md`. No version bump: `TGL_PROGRAM_ABI_VERSION` stays at 1 until 0.1.0
 
 ## Etape 8 — Phase 6 prerequisite: sub-allocate device memory
 

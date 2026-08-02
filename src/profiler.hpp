@@ -112,12 +112,6 @@ public:
     */
     void logSummary();
 
-    //! Whether timestamp profiling is actually running on this device.
-    [[nodiscard]] bool enabled() const
-    {
-        return m_enabled;
-    }
-
 private:
     //! Number of queries per frame slot: a (start, end) pair for every pass.
     static constexpr uint32_t TIMESTAMPS_PER_FRAME{static_cast<uint32_t>(GpuPass::Count) * 2u};

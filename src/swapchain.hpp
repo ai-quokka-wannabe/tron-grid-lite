@@ -56,18 +56,6 @@ public:
         return m_images;
     }
 
-    //! Per-image views.
-    [[nodiscard]] const std::vector<vk::raii::ImageView>& views() const
-    {
-        return m_views;
-    }
-
-    //! Chosen surface format.
-    [[nodiscard]] vk::SurfaceFormatKHR format() const
-    {
-        return m_format;
-    }
-
     //! Current swapchain extent.
     [[nodiscard]] vk::Extent2D extent() const
     {
@@ -80,23 +68,6 @@ public:
         return static_cast<uint32_t>(m_images.size());
     }
 
-    /*!
-        True when the swapchain images were created with storage image usage, so that the
-        compute ray tracer may write its result directly into the acquired image. When this
-        is false the caller must instead render into an offscreen image and copy it across
-        with a transfer (the images always carry eTransferDst).
-    */
-    [[nodiscard]] bool supportsStorageWrites() const
-    {
-        return m_storage_writes_supported;
-    }
-
-    //! Image usage flags the swapchain images were actually created with.
-    [[nodiscard]] vk::ImageUsageFlags imageUsage() const
-    {
-        return m_image_usage;
-    }
-
 private:
     //! Internal: query surface and build swapchain + views.
     void build(uint32_t width, uint32_t height);
@@ -106,10 +77,8 @@ private:
     VkSurfaceKHR m_surface{VK_NULL_HANDLE}; //!< Surface handle (non-owning).
     vk::raii::SwapchainKHR m_swapchain{nullptr}; //!< Swapchain handle.
     std::vector<vk::Image> m_images; //!< Swapchain images (non-owning).
-    std::vector<vk::raii::ImageView> m_views; //!< Per-image views.
     vk::SurfaceFormatKHR m_format{}; //!< Chosen surface format.
     vk::PresentModeKHR m_present_mode{}; //!< Chosen present mode.
     vk::Extent2D m_extent{}; //!< Current extent.
     vk::ImageUsageFlags m_image_usage{}; //!< Image usage flags actually requested.
-    bool m_storage_writes_supported{false}; //!< True when eStorage was included in the usage flags.
 };

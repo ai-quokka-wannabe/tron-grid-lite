@@ -61,6 +61,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **There is no ABI versioning, deliberately, until 0.1.0.** `TGL_PROGRAM_ABI_VERSION` is pinned at
+  `1u` and stays there. The interface changes whenever it needs to and both sides rebuild; nobody is
+  owed backward compatibility by a project that has not reached its first release. The constant is
+  kept only for the one job it can still do honestly — catching a stale `.dll` or `.so` loaded
+  against struct layouts that have moved underneath it. The rising-number rule had already drifted
+  once: the roadmap asked for a bump that a rename had silently spent.
+
 - **BREAKING — the agent ABI is renamed throughout, and `TGL_PROGRAM_ABI_VERSION` is `2u`.** The
   project now uses Tron's vocabulary as its own: a **Program** is the thing that thinks, a
   **creature** is the body it drives, the **User** is the human at the debug window, and the world
@@ -110,6 +117,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   highest terrace.
 
 ### Removed
+
+- The swapchain's storage-write path: a format search preferring storage-capable formats, a
+  two-part capability probe, two warnings, a conditional usage flag, an accessor and a member — all
+  serving a "write straight into the swapchain image" strategy the renderer abandoned when it
+  retired the rasteriser. It always blits. The image views built alongside them were not merely
+  unused but actively wasteful: one created per swapchain image, on every build and every resize,
+  and never looked at by anything.
+- Twelve accessors with no callers, and the members that existed only to feed them: `Camera`'s view
+  and projection matrices along with the near and far clipping planes a ray tracer has no use for,
+  `Mesh::boundingRadius`, `Device::graphicsQueueSupportsCompute` (redundant since missing compute
+  became fatal), and the whole tunable-but-never-tuned getter/setter surface on the User's camera
+  controller.
 
 - Compatibility machinery from the agent ABI: per-struct `struct_size` fields, duplicated
   `abi_version` members, hand-written padding members, and fields reserved for modalities that do

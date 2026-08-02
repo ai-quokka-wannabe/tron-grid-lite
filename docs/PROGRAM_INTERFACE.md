@@ -125,8 +125,9 @@ receives a `program_derez` — the Grid skips that body and there is nothing to 
 - **No memory ownership transfer.** Every pointer in a struct passed to a Program is owned by the
   Grid and is valid only for the duration of that call. The Program must copy anything it wishes to
   keep. Symmetrically, the Grid never frees anything a Program allocated.
-- **One version number, checked once.** `TGL_PROGRAM_ABI_VERSION` is the whole versioning mechanism.
-  There are no per-struct size fields and no compatibility shims — see [Versioning](#versioning).
+- **One version number, checked once, and it does not move.** `TGL_PROGRAM_ABI_VERSION` catches a
+  stale library; it does not express compatibility. There are no per-struct size fields and no
+  compatibility shims — see [Versioning](#versioning).
 - **Fixed-width types only.** `uint32_t`, `int32_t`, `float`, `uint64_t`. No `int`, no `long`, no
   `size_t`, no `bool`, no enums with unspecified underlying type, no bitfields.
 - **Standard layout, natural padding.** Every struct here is a plain C standard-layout type of
@@ -138,7 +139,7 @@ receives a `program_derez` — the Grid skips that body and there is nothing to 
 ### Vtable
 
 ```c
-#define TGL_PROGRAM_ABI_VERSION 2u  /*!< Bumped on every breaking change until 1.0. */
+#define TGL_PROGRAM_ABI_VERSION 1u  /*!< Stays at 1 until 0.1.0. See Versioning. */
 
 /*! Opaque per-creature Program state. The Grid never dereferences this. */
 typedef struct TglProgram TglProgram;
@@ -179,8 +180,9 @@ The two library-scope members keep plain names on purpose. They are `LoadLibrary
 `FreeLibrary`/`dlclose`: facts about Windows and Linux rather than events on the Grid. Tron words
 name events on the Grid; plain words name events in the operating system.
 
-Version `2u` is this rename: the exported symbol, both type names and three of the five members are
-new, so nothing built against `1u` can load. See [Versioning](#versioning).
+The rename that produced these names — `TglBrain` and `creature_create` and their siblings — changed
+the exported symbol, both type names and three of the five members. No number records it, because
+nothing external was built against the old ones. See [Versioning](#versioning).
 
 ### Library and creature descriptors
 
@@ -470,18 +472,27 @@ non-deterministic internally, which is allowed but should be a deliberate choice
 
 ## Versioning
 
-Until 1.0.0 the rule is simple: **breaking changes only, no compatibility machinery.**
+**There is none, and that is deliberate until 0.1.0.**
 
-- `TGL_PROGRAM_ABI_VERSION` increases by one on every change to any struct layout, function
-  signature or semantic contract in this document.
-- `tglGetProgramVTable` returns `NULL` if it cannot serve the requested version. The Grid then
-  refuses to load that Program and says so. That single check is the entire mechanism.
-- The Grid's own release version and the ABI version are independent. Only the ABI version governs
-  Program compatibility.
+`TGL_PROGRAM_ABI_VERSION` is `1u` and stays at `1u`. This interface changes whenever it needs to —
+structs gain fields, functions change signature, semantics get corrected — and none of that bumps
+the number, because nobody is owed backward compatibility by a project that has not reached its
+first release. Every Program that exists is built from this repository, at whatever commit the Grid
+is built from. When the ABI changes, both sides rebuild. That is the whole story.
 
-Version `2u` records the rename: `TglBrain`, `TglBrainVTable` and `tglGetBrainVTable` became
-`TglProgram`, `TglProgramVTable` and `tglGetProgramVTable`, and `creature_create`, `creature_tick`
-and `creature_destroy` became `program_rez`, `program_tick` and `program_derez`.
+The constant is kept for the one job it can still do honestly: catching a **stale library**. A
+`.dll` or `.so` left over from an older build, loaded against a Grid whose struct layouts have moved
+underneath it, is memory corruption with no diagnostic. One integer compared at load time turns that
+into a refusal and a log line.
+
+- `tglGetProgramVTable` returns `NULL` if the requested version is not `1u`. The Grid refuses to
+  load that Program and says so. That single check is the entire mechanism.
+- The Grid's own release version is unrelated and moves independently.
+
+Real versioning arrives when there is something to version — a released Grid, and Programs written
+by somebody who cannot simply rebuild them. Until then a rising number would record ceremony rather
+than compatibility, and it has already drifted once: the roadmap asked for a bump that a rename had
+silently already spent.
 
 There is deliberately nothing else — no per-struct size fields, no reserved members held back for
 future growth, no negotiation. Those exist to let mismatched builds keep working, and while the

@@ -93,16 +93,6 @@ struct Mesh {
     }
 
     /*!
-        Returns the radius of a bounding sphere centred on the object-space origin.
-
-        This is a linear scan over the vertices, so it is cheap enough to call once after
-        generation. It is the coarsest possible spatial bound and exists to seed the `Bounds`
-        component and to give the BVH builder a first cut before it computes proper axis-aligned
-        boxes per node.
-    */
-    [[nodiscard]] float boundingRadius() const;
-
-    /*!
         Appends another mesh, shifting its indices so they address the merged vertex array.
 
         This is how the several sub-meshes of the Grid are concatenated into the single flat

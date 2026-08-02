@@ -216,9 +216,7 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     QueueFamilyIndices indices{findQueueFamilies(m_physical_device, surface)};
     m_graphics_family_index = indices.graphics;
     m_present_family_index = indices.present;
-    m_graphics_queue_supports_compute = indices.graphics_has_compute;
-
-    if (!m_graphics_queue_supports_compute) {
+    if (!indices.graphics_has_compute) {
         /*
             Fatal, not a warning. The warning this replaces said in its own words that the traversal
             passes could not be dispatched — and then execution carried on to record a compute
