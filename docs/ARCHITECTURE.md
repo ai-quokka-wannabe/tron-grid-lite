@@ -225,12 +225,13 @@ once and removed again: reserving two further std430 rows doubled the material b
 field nothing reads is a field nothing maintains. Worse, the stale acoustic members outlived their removal in the
 shader's copy of the struct and produced an out-of-bounds read that only GPU-assisted validation caught.
 
-Phase 5 will therefore **have to put those values somewhere**, and that is the intended cost. They go in a **parallel
-buffer indexed by the same material index**, not in a wider `Material`, for two reasons that both come out of the
-history above.
+Hearing therefore **had to put its value somewhere**, and it went into a **parallel buffer indexed by the same
+material index** rather than into a wider `Material`, for two reasons that both come out of the history above. In the
+event there is only one such value — source strength — because acoustically every surface is a perfect mirror, so the
+parallel table is six floats.
 
-The first is bandwidth, and it is the same argument that removed them. `Material` is exactly two std430 rows; two
-more floats round up to three, half again as wide. The visual pass reads a material at every hit of every ray of
+The first is bandwidth, and it is the same argument that removed them. `Material` is exactly two std430 rows; even one
+more float rounds up to three, half again as wide. The visual pass reads a material at every hit of every ray of
 every pixel, and the acoustic pass re-solves at something closer to ten hertz — so widening the shared record makes
 the hot path carry cold data on every fetch, forever, to spare the cold path one buffer binding.
 
@@ -262,7 +263,7 @@ the nearer one immediately and push only the farther one when it was hit as well
 nodes run Möller-Trumbore against their triangle range. Nothing exotic, nothing vendor-specific, and every step of it
 is visible in a shader the author wrote.
 
-The same buffers will be bound by the acoustic pass in Phase 5. The BVH is built once per frame at most — in practice
+The same buffers are bound by the acoustic pass, unchanged. The BVH is built once per frame at most — in practice
 only when the Grid changes — and is shared by every sensor and by the debug view.
 
 ---
@@ -410,7 +411,7 @@ to synchronise, because there is no temporal accumulation anywhere in the pipeli
 
 ---
 
-## Acoustic Rays *(Phase 5, planned)*
+## Acoustic Rays
 
 Sound is traced the same way light is, through the same structure:
 

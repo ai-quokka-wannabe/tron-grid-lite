@@ -100,7 +100,7 @@ machine: GTX 1650 Ti laptop (exposes zero VK RT extensions; that is the point).
 ## Roadmap
 
 Phases 0 to 4 are **Done** — toolchain, window and frame loop, compute BVH tracer, full ray tree,
-and post processing. **Phase 5 — acoustic rays** is beginning; Phase 6 opens the sensor interface
+and post processing, and **Phase 5 — acoustic rays** is done too. Phase 6 opens the sensor interface
 Programs plug into.
 
 The phase table is canonical in [`TODO.md` § Roadmap](../TODO.md), which also holds the active

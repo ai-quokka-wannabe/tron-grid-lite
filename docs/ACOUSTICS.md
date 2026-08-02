@@ -835,10 +835,15 @@ If echolocation is wanted — and PROGRAM_INTERFACE.md already observes that it 
 once hearing and vocalisation exist — `TglActions` gains a vocalisation field in the **same** bump, not
 a later one. That is the whole of the second breaking change, and it should not be split.
 
-`TGL_PROGRAM_ABI_VERSION` goes from `1u` to `2u`, per the pre-1.0 rule of breaking changes only with no
-compatibility machinery. **The cost of this breaking change is currently zero**: there is no header
-to edit, no Program repository consuming it, and `tglGetProgramVTable` is unimplemented on the Grid
-side too.
+`TGL_PROGRAM_ABI_VERSION` **does not move**. It is pinned at `1u` until 0.1.0 and stays there: this
+project owes nobody backward compatibility before its first release, so the interface changes whenever
+it needs to and both sides rebuild. The constant is kept only for the one job it can still do
+honestly, which is catching a stale `.dll` or `.so` loaded against struct layouts that have moved
+underneath it. (An earlier revision of this document specified a bump to `2u`; that was written before
+the versioning rule was settled, and `PROGRAM_INTERFACE.md` § Versioning is authoritative.)
+
+**The cost of this breaking change is in any case zero**: there is no header to edit, no Program
+repository consuming it, and `tglGetProgramVTable` is unimplemented on the Grid side too.
 
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
 time bin per ear, and stops.** Anything that names a source, separates streams, reports "a wall is

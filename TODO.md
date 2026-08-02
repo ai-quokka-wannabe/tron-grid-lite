@@ -12,7 +12,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 | 2     | BVH + primary rays in compute | Mirror world, first bounce         | **Done** |
 | 3     | Full ray tree                 | Reflections, emissives, glass      | **Done** |
 | 4     | Post processing               | Bloom, tonemapping                 | **Done** |
-| 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | Pending |
+| 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | **Done** |
 | 6     | Programs                      | Creature sensor interface plugs in | Pending |
 
 ## Etape 1 — Adopt project infrastructure from TronGrid
@@ -64,10 +64,27 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Etape 7 — Phase 5: acoustic rays
 
-- [ ] Give surfaces something to be heard: sound sources on the Grid
-- [ ] Acoustic ray traversal through the same hierarchy
-- [ ] Energy histogram per listener, banded by octave
-- [ ] Add ears to the Program interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md`. No version bump: `TGL_PROGRAM_ABI_VERSION` stays at 1 until 0.1.0
+- [x] Give surfaces something to be heard: sound sources on the Grid
+- [x] Acoustic ray traversal through the same hierarchy
+- [x] Energy histogram per listener, banded
+- [x] Add ears to the Program interface — `TglEarDesc` and `TglEarView` as shaped in `docs/ACOUSTICS.md`. No version bump: `TGL_PROGRAM_ABI_VERSION` stays at 1 until 0.1.0
+
+**Done.** The gather runs on the host as the specification (`src/acoustics.hpp`) and on the device as
+`acoustics.slang`, and `--verify-acoustics` holds the two to each other on the real Grid — they agree
+to about four parts per million. `TglEarDesc`, `TglEarView` and the `vocalisation_strength` action are
+written into `docs/PROGRAM_INTERFACE.md`, which is where the ABI lives until there is a header.
+
+Two things Phase 5 deliberately did **not** build, both specified and both waiting for a reason to
+exist rather than for time:
+
+- **Direct occlusion and enumerated image sources** (Phase 5b). Both exist only to serve *point*
+  sources, and the only point source on the roadmap is a creature vocalisation. Building them now
+  would be building for a caller that does not exist. When they are built, the occlusion result must
+  be a **fraction and never a bit** — "ray blocked implies silence" is the single largest error
+  available in this subsystem.
+- **ISO 9613-1 above 8 kHz.** The standard tabulates nothing past 8 kHz, so the formulae must be
+  evaluated once, offline, and the constants written down. Needed before the `rodent` preset listens,
+  since its top band reaches 85.5 kHz, and not before.
 
 ## Etape 8 — Move rendering onto its own thread
 
@@ -163,12 +180,59 @@ from 14 ms paid once at launch.
 
 - [ ] Parallelise the hierarchy build before creatures start moving
 
+**Read Etape 11's second question first.** This etape assumes the thing being rebuilt every tick is
+the one hierarchy over the whole Grid. If bodies get their own small structures under a tiny top
+level instead, the Grid's own hierarchy never changes at all and the per-body ones are trivial to
+build — in which case this etape is not a smaller problem, it is the wrong problem.
+
 The shape is already half-decided by the existing code. `subdivide` partitions its range before it
 recurses, so the two children own disjoint triangle ranges and never touch each other's — the only
 shared mutable state is `nodes`, which both children append to. The determinism requirement is what
 rules out the obvious atomic bump allocator: node indices would then depend on thread scheduling.
 Building each subtree into its own local vector and splicing them back in a fixed frontier order
 keeps the output bit-identical between runs, which a reproducible recording requires.
+
+## Etape 11 — Import creature bodies as glTF
+
+**Not now, and this entry exists so that "not now" is a decision rather than a gap.**
+
+Creature bodies will be modelled in Blender rather than generated procedurally as the Grid's own
+furniture is, so the Grid needs to read a mesh file. **glTF 2.0 is the right format** and there is no
+serious competition: it is the Khronos standard, Blender exports it natively with no plugin, and it
+is the only interchange format that is both openly specified and actually ubiquitous. OBJ carries no
+transforms or hierarchy; FBX is proprietary; USD is enormous.
+
+Decisions worth pinning now, while they are cheap:
+
+- **`.glb`, not `.gltf`.** The binary container is a single self-contained file. The JSON form
+  references external buffers and images by URI, which means path resolution, relative-path rules and
+  a class of "works on my machine" failures for no benefit here.
+- **A very small subset.** Positions, indices, and node transforms. That is the whole of it, and it
+  is a small fraction of the format.
+- **No materials are imported, ever.** A creature's optical properties are the Grid's business, not
+  Blender's — the Grid has a four-float material model with no textures, and a glTF PBR material has
+  no way to express it and several ways to be misread. A body arrives as geometry and is assigned a
+  `MaterialSlot` on this side. The same goes doubly for the acoustic table, which Blender cannot know
+  anything about.
+- **The work is the JSON, not the glTF.** The mesh extraction is a few dozen lines of accessor
+  arithmetic; parsing JSON with no dependency is the bulk. That is worth knowing before estimating it.
+
+- [ ] `libs/gltf` — a `.glb` reader for positions, indices and node transforms
+
+**Two questions to answer before writing a line of it**, because both could change the shape:
+
+1. **Skinning.** A creature that walks has joints. glTF expresses that with `skins`, inverse bind
+   matrices and per-vertex joint weights, and supporting it is a large step up from static meshes. If
+   bodies are rigid segments connected by the Grid's own physics rather than skinned meshes, none of
+   it is needed — and rigid segments are the likelier answer for a world whose whole aesthetic is
+   flat-shaded facets.
+2. **What it does to the hierarchy.** This is the sharper one, and it reaches back into Etape 10. The
+   Grid's BVH is built once over static geometry. A moving body cannot live in it without a rebuild
+   every tick, which is the wrong shape: the standard answer is two-level, a static Grid structure and
+   one small structure per body with a tiny top level over them. **That is a decision that belongs
+   before parallelising the single-level build, not after**, because it may make the parallel build
+   unnecessary — a per-body structure over a few hundred triangles is trivial to rebuild, and the
+   Grid's own never changes.
 
 ## Journal
 
