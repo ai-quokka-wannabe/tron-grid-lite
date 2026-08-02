@@ -87,7 +87,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   it now asks for the *why* in the changelog entry instead. Six other documents pointed at the
   journal and now point where the content actually went.
 
-
 - **Device memory is sub-allocated** (`src/memory_arena.hpp`). A bump allocator hands out offsets into
   a few large blocks instead of taking one `vkAllocateMemory` per resource, and the validation layer's
   sub-allocation complaints go from sixteen to two. The reason was not memory pressure — eighteen
