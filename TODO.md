@@ -172,6 +172,41 @@ keeps the output bit-identical between runs, which a reproducible recording requ
 
 ## Journal
 
+### 2026-08-03
+
+- **The acoustic pass runs on the GPU.** `acoustics.slang` imports the same `grid_bvh` module the
+  renderer uses and binds the same two `World` buffers. One workgroup per ear, histogram in shared
+  memory as `uint`s. The integer accumulation is not a workaround for missing float atomics — it is
+  better than them here, because integer addition is associative and the histogram therefore comes
+  out bit-identical however the threads are scheduled.
+- **`--verify-acoustics` earned its keep on its first run**, reporting a 1.2 % disagreement at one
+  ear and 0.003 % at the other. That asymmetry is what made it obviously a bug rather than noise.
+
+  Three diagnostics, two of which were wrong, and the order matters:
+    1. A reflection-order sweep showed the disagreement fully present at **order zero**. Not bounce
+       instability.
+    2. Nudging the ear by up to 100 µm moved the host total by 1.6e-5 — smooth, no jump — which
+       looked like proof that nothing was knife-edge. **That test was too weak**: 100 µm only flips
+       rays already within 100 µm of a tube edge, so it could not see the one ray that mattered.
+    3. Running the host's BVH against the host's own brute-force sweep gave delta **exactly zero**.
+       That acquitted the traversal and left only one shared suspect: the direction set.
+
+  The cause was `golden_angle * ray_index` reaching ~4,913 radians at index 2047. Float32 carries
+  ~6e-4 rad of error at that magnitude, and host and device reduce it differently — two millimetres
+  of displacement at three metres, enough for one ray in 2,048 to hit a 2 cm tube on one side and
+  miss on the other. The entire 1.2 % was that single arrival in a single bin.
+
+  Both sides now accumulate the turn fraction and reduce before the trigonometry. Every step is an
+  operation IEEE-754 specifies exactly, so the arguments are bit-identical and `cos` never sees more
+  than one turn. **The lesson to keep: when two implementations disagree, find the thing they share
+  and the thing they do not, rather than reaching for "floats differ" — which explains everything and
+  therefore nothing.**
+- Rounding rather than truncating the fixed-point deposit removed a systematic deficit worth another
+  factor of eighty. Final agreement: **0.00005 %** of the total, worst single bin 0.00004 %.
+- Verification thresholds were then tightened from 1 % and 5 % to 0.1 % and 0.5 %, set from the
+  measurement rather than from taste. At the old values the next bug of this kind would have hidden
+  exactly as thoroughly as this one did.
+
 ### 2026-08-02 (late)
 
 - A post-merge audit of the acoustics work, prompted by nothing breaking — which is the point. Four

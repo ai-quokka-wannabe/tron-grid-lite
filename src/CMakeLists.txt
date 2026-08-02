@@ -8,6 +8,7 @@ add_executable(${PROJECT_NAME}
     tracer.cpp
     world.cpp
     acoustics.cpp
+    acoustic_tracer.cpp
     postprocess.cpp
     geometry.cpp
     profiler.cpp
@@ -98,6 +99,9 @@ endfunction()
 # Phase 2 compute ray tracer — the renderer proper.
 add_slang_shader(trace trace.slang traceMain)
 
+# Phase 5 acoustic gather — the same hierarchy, a different sense.
+add_slang_shader(acoustics acoustics.slang acousticMain)
+
 # Phase 4 post-processing.
 add_slang_shader(postprocess postprocess.slang postprocessMain)
 
@@ -108,6 +112,7 @@ add_slang_shader(bloom bloom_downsample.slang bloomExtractMain bloomDownsampleMa
 
 set(SHADER_MODULES
     trace
+    acoustics
     postprocess
     bloom
 )

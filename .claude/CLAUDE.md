@@ -70,6 +70,12 @@ cmake --preset linux-x11-gcc
 cmake --build build/linux-x11-gcc --config Debug
 ```
 
+**Build `windows-clang-cl` too before pushing, not just `windows-msvc`.** The two disagree about
+which warnings exist, and CI runs both under `/WX` and `-Werror`. Clang alone rejects an unused
+namespace-scope constant (`-Wunused-const-variable`); MSVC alone rejects an unused local
+(`C4189`). A change that builds clean under one can and does fail four CI jobs under the other,
+and building the second preset locally costs about a minute against a round trip through CI.
+
 ## Target Hardware
 
 Any Vulkan 1.3 GPU — **no ray tracing extensions required or used**. Reference dev

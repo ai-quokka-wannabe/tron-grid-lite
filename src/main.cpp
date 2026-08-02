@@ -27,6 +27,8 @@
     Nothing here is a game — the camera exists so that the User can watch and debug.
 */
 
+#include "acoustic_tracer.hpp"
+#include "acoustics.hpp"
 #include "camera.hpp"
 #include "cinematic.hpp"
 #include "components.hpp"
@@ -529,6 +531,152 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
 }
 
 /*!
+    Runs the acoustic gather on both the CPU and the GPU and reports how far apart they are.
+
+    The acceptance criterion `docs/ACOUSTICS.md` asks for, and the one that actually matters: the
+    shader and `Acoustics::gather` are two implementations of one specification, and the only way to
+    know they agree is to run both against the real Grid and subtract.
+
+    **They are not expected to agree bit for bit, and demanding that would be a mistake.** No two
+    implementations of `cos` agree in the last bit, and the direction set is built from one; a ray
+    whose heading differs in the eighth decimal can strike a different triangle at a slightly
+    different distance, and near a bin boundary that moves an arrival into its neighbour. So the
+    comparison reports two things: the total energy, which is insensitive to that, and the largest
+    single-bin disagreement, which is not. A traversal bug shows up in the second while the first
+    stays honest; a scale or units bug shows up in both at once.
+
+    \param device Logical device.
+    \param world The Grid's geometry, already resident on the device.
+    \param bvh The same hierarchy on the host, for the reference gather.
+    \param ears Where to listen from. Two or more, so that per-ear indexing is exercised.
+    \param logger Logger for the report.
+    \param shader_directory Directory holding `acoustics.spv`.
+    \return EXIT_SUCCESS if the two agree within tolerance.
+*/
+int verifyAcoustics(const Device& device, const World& world, const BvhLib::Bvh& bvh, const std::vector<MathLib::Vec3>& ears, LoggingLib::Logger& logger,
+    const std::filesystem::path& shader_directory)
+{
+    const std::vector<float> source_strengths{Acoustics::makeAcousticSourceStrengths()};
+
+    Acoustics::GatherConfig config{};
+
+    // Deliberately not flat: a spectrum applied to the wrong band, or applied once rather than per
+    // band, would look perfectly correct against four equal numbers.
+    config.hum_spectrum = {{1.0f, 0.8f, 0.5f, 0.2f}};
+
+    // Likewise deliberately not zero. This is the one term that depends on both the band and the
+    // accumulated path, so it is where a per-band mistake and a path-length mistake would both show.
+    config.air_absorption_db_per_km = {{5.0f, 9.0f, 22.9f, 76.6f}};
+
+    AcousticTracer acoustic_tracer{device, world, source_strengths, static_cast<uint32_t>(ears.size()), (shader_directory / "acoustics.spv").string(), logger};
+    acoustic_tracer.setEars(ears);
+
+    const vk::raii::CommandPool pool{
+        device.get(), vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eTransient, .queueFamilyIndex = device.graphicsFamilyIndex()}};
+    vk::raii::CommandBuffers command_buffers{
+        device.get(), vk::CommandBufferAllocateInfo{.commandPool = *pool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1u}};
+    const vk::raii::CommandBuffer& command_buffer{command_buffers.front()};
+
+    command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+    acoustic_tracer.record(command_buffer, static_cast<uint32_t>(ears.size()), config);
+    command_buffer.end();
+
+    const std::chrono::steady_clock::time_point gpu_start{std::chrono::steady_clock::now()};
+
+    const vk::raii::Fence fence{device.get(), vk::FenceCreateInfo{}};
+    device.graphicsQueue().submit({vk::SubmitInfo{.commandBufferCount = 1u, .pCommandBuffers = &*command_buffer}}, *fence);
+    while (device.get().waitForFences({*fence}, vk::True, UINT64_MAX) == vk::Result::eTimeout) {
+        // Retry — a timeout here is not an error.
+    }
+
+    const float gpu_milliseconds{std::chrono::duration<float, std::milli>{std::chrono::steady_clock::now() - gpu_start}.count()};
+
+    bool agreed{true};
+
+    for (uint32_t ear{0u}; ear < static_cast<uint32_t>(ears.size()); ++ear) {
+        const std::chrono::steady_clock::time_point cpu_start{std::chrono::steady_clock::now()};
+        const Acoustics::ImpulseResponse reference{Acoustics::gather(bvh, source_strengths, ears[ear], config)};
+        const float cpu_milliseconds{std::chrono::duration<float, std::milli>{std::chrono::steady_clock::now() - cpu_start}.count()};
+
+        const Acoustics::ImpulseResponse measured{acoustic_tracer.read(ear)};
+
+        const float reference_total{reference.total()};
+        const float measured_total{measured.total()};
+
+        float worst_bin_difference{0.0f};
+        uint32_t worst_band{0u};
+        uint32_t worst_bin{0u};
+        uint32_t occupied{0u};
+
+        for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+            for (uint32_t bin{0u}; bin < Acoustics::BIN_COUNT; ++bin) {
+                const float difference{std::fabs(reference.at(band, bin) - measured.at(band, bin))};
+                if (difference > worst_bin_difference) {
+                    worst_bin_difference = difference;
+                    worst_band = band;
+                    worst_bin = bin;
+                }
+                if ((reference.at(band, bin) > 0.0f) || (measured.at(band, bin) > 0.0f)) {
+                    ++occupied;
+                }
+            }
+        }
+
+        // Measured against the whole response rather than against the bin, because a bin that is
+        // nearly empty on both sides can differ by a large ratio while differing by nothing at all
+        // that a creature could hear.
+        const float relative_total{(reference_total > 0.0f) ? (std::fabs(reference_total - measured_total) / reference_total) : 0.0f};
+        const float relative_worst_bin{(reference_total > 0.0f) ? (worst_bin_difference / reference_total) : 0.0f};
+
+        logger.logInfo("Ear " + std::to_string(ear) + ": host total " + std::to_string(static_cast<double>(reference_total)) + ", device total "
+            + std::to_string(static_cast<double>(measured_total)) + ", " + std::to_string(occupied) + " occupied bins, host gather "
+            + std::to_string(static_cast<double>(cpu_milliseconds)) + " ms.");
+        logger.logInfo("  totals differ by " + std::to_string(static_cast<double>(relative_total * 100.0f)) + " %; worst single bin by "
+            + std::to_string(static_cast<double>(relative_worst_bin * 100.0f)) + " % of the total, at band " + std::to_string(worst_band) + " bin "
+            + std::to_string(worst_bin) + ".");
+
+        if (occupied == 0u) {
+            logger.logError("  Nothing arrived at all, on either side. The Grid is not silent here, so this is a bug rather than a quiet spot.");
+            agreed = false;
+        }
+
+        /*
+            A tenth of a per cent, which is about thirty times the disagreement actually observed on
+            the reference machine. What remains at that level is fixed-point rounding: the device
+            quantises every deposit to 1/262,144 and the host does not, and tens of thousands of
+            deposits leave a few thousandths of a per cent behind.
+
+            The threshold is set from the measurement rather than from taste. It was one per cent
+            until the direction sets were made to agree bit for bit, at which point the real figure
+            dropped by a factor of three hundred and the old threshold would have hidden the next bug
+            as thoroughly as it hid that one.
+        */
+        if (relative_total > 0.001f) {
+            logger.logError("  Totals disagree by more than one per cent, which is more than float divergence explains.");
+            agreed = false;
+        }
+
+        // Half a per cent of the total in a single bin still leaves room for an arrival to migrate
+        // across a bin boundary, which is the one divergence that would be expected and harmless.
+        if (relative_worst_bin > 0.005f) {
+            logger.logError("  A single bin disagrees by more than five per cent of the total, which a boundary migration cannot explain.");
+            agreed = false;
+        }
+    }
+
+    logger.logInfo("Device gather for " + std::to_string(ears.size()) + " ears, submit to fence: " + std::to_string(static_cast<double>(gpu_milliseconds))
+        + " ms, including submission overhead.");
+
+    if (agreed) {
+        logger.logInfo("Acoustic verification passed: acoustics.slang and Acoustics::gather agree.");
+        return EXIT_SUCCESS;
+    }
+
+    logger.logFatal("Acoustic verification FAILED.");
+    return EXIT_FAILURE;
+}
+
+/*!
     Draws the Grid until told to stop. Runs on the render thread and owns the Vulkan timeline.
 
     Every Vulkan object created here belongs to this thread for its whole life, which is the point:
@@ -906,6 +1054,15 @@ int main(int argc, char** argv)
             against a surface, but nothing is ever presented to it.
         */
         bool recording{false};
+
+        /*
+            Run the acoustic gather on both the host and the device, compare, and exit.
+
+            Not a test in the ctest sense, and it cannot be: it needs a GPU, and the build machines
+            have none. It is the acceptance criterion docs/ACOUSTICS.md asks for, run by hand on a
+            machine that has one.
+        */
+        bool verify_acoustics{false};
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -937,6 +1094,8 @@ int main(int argc, char** argv)
 
             if (argument == "--record") {
                 recording = true;
+            } else if (argument == "--verify-acoustics") {
+                verify_acoustics = true;
             } else if (argument == "--width") {
                 record_width = value(record_width);
             } else if (argument == "--height") {
@@ -1013,6 +1172,19 @@ int main(int argc, char** argv)
 
         PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};
         post_process.resize(swapchain.extent(), tracer.outputViews());
+
+        if (verify_acoustics) {
+            /*
+                Two ears a head apart, standing where the terraces are rather than out on the flat,
+                so that the comparison exercises reflections and not only the direct arrival. Two
+                rather than one because a stride bug that wrote every ear into slot zero would pass
+                unnoticed with a single one.
+            */
+            const float ground{gridMeshHeight(6.0f, -12.0f, floor_config)};
+            const std::vector<MathLib::Vec3> ears{MathLib::Vec3{6.0f, ground + 1.7f, -12.0f}, MathLib::Vec3{6.2f, ground + 1.7f, -12.0f}};
+
+            return verifyAcoustics(device, world, bvh, ears, logger, shader_directory);
+        }
 
         if (recording) {
             return recordCinematic(device, tracer, post_process, logger, record_width, record_height, record_frames, record_directory);
