@@ -320,8 +320,9 @@ thing this program can do for no result — it holds a laptop GPU at full clock,
 implies, to produce a picture nobody can tell from the last.
 
 Measured on the reference machine, on the static Grid with the camera still: **0.09 s of CPU over 12 s of wall clock,
-against 7.56 s for the same period drawing continuously.** Roughly eighty times less, and the GPU drops off its clocks
-entirely.
+against 7.56 s for the same period on the build that drew unconditionally.** Roughly eighty times less, and the GPU
+drops off its clocks entirely. The second figure is what holding a movement key still costs today, because a moving
+camera draws every pass — the saving is only ever claimed for a Grid and a view that are both standing still.
 
 The rule applies to both senses, but they earn it differently:
 
@@ -338,8 +339,9 @@ The rule applies to both senses, but they earn it differently:
   key is the Grid's generation, the ear's position and the config, and `src/tests/acoustics_tests.cpp` pins that each
   of the three can change the answer — which is what makes them the key rather than a guess.
 
-The renderer's `--continuous` flag opts out, and exists for one reason: the GPU profiler averages over frames, and a
-still camera produces none. Every frame timing quoted in this repository was taken with it.
+There is deliberately no flag to draw unconditionally. The GPU profiler averages over frames and a still camera
+produces none, so a run of frames to average is obtained by holding a movement key — which is what a flag would have
+done anyway, and is how every frame timing quoted in this repository was taken.
 
 ## Frame Flow
 

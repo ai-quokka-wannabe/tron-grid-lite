@@ -543,10 +543,8 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
     \param post_process Bloom, tone mapping and sRGB encoding.
     \param logger Thread-safe logger.
     \param channel The only state shared with the event thread.
-    \param continuous Draw every pass instead of only when something changed. For profiling.
 */
-void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel,
-    bool continuous)
+void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel)
 {
     const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
     const vk::raii::CommandPool command_pool{device.get(), pool_info};
@@ -693,15 +691,16 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
             keeps the loop running; releasing it stops the motion, the state stops changing, and the
             renderer goes quiet on its own without anybody having to say so.
 
-            `--continuous` opts out, for profiling. A renderer that only draws when something moves
-            gives the GPU profiler nothing to average over while the camera is still, and the frame
-            timings in the documentation have to come from somewhere.
+            That last property is also how the GPU profiler is fed: it averages over frames, so
+            holding a movement key is what produces a run of them to average. There is deliberately
+            no flag to draw unconditionally — it would exist solely to do what holding W already
+            does.
         */
         const ViewState wanted{
             .position = camera.position(), .orientation = camera.orientation(), .fov_y = camera.fovY(), .width = surface_width, .height = surface_height};
 
         const bool blank{(surface_width == 0u) || (surface_height == 0u)};
-        const bool idle{has_presented && (wanted == presented) && !needs_recreate && !continuous};
+        const bool idle{has_presented && (wanted == presented) && !needs_recreate};
 
         if (blank || idle) {
             {
@@ -907,16 +906,6 @@ int main(int argc, char** argv)
             against a surface, but nothing is ever presented to it.
         */
         bool recording{false};
-
-        /*
-            Draw every pass rather than only when the picture would differ.
-
-            Purely a measurement aid. The renderer is otherwise idle whenever the Grid and the
-            camera are both still, which is correct and is also exactly the wrong behaviour for
-            timing a frame: the GPU profiler averages over frames, and a still camera produces
-            none. Every timing figure quoted in this repository's documentation was taken with this.
-        */
-        bool continuous{false};
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -948,8 +937,6 @@ int main(int argc, char** argv)
 
             if (argument == "--record") {
                 recording = true;
-            } else if (argument == "--continuous") {
-                continuous = true;
             } else if (argument == "--width") {
                 record_width = value(record_width);
             } else if (argument == "--height") {
@@ -1047,9 +1034,9 @@ int main(int argc, char** argv)
         */
         RenderChannel channel;
 
-        std::thread render_thread{[&device, &swapchain, &tracer, &post_process, &logger, &channel, &window, continuous]() {
+        std::thread render_thread{[&device, &swapchain, &tracer, &post_process, &logger, &channel, &window]() {
             try {
-                runRenderLoop(device, swapchain, tracer, post_process, logger, channel, continuous);
+                runRenderLoop(device, swapchain, tracer, post_process, logger, channel);
             } catch (const std::exception& error) {
                 channel.render_failed = true;
 

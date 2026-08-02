@@ -184,8 +184,8 @@ keeps the output bit-identical between runs, which a reproducible recording requ
   are where the claim is actually kept, on the device and on the host.
 - **Nothing runs without a reason.** The renderer was spinning at 270 fps redrawing an identical
   picture of a Grid that cannot yet change. It now compares the state it drew from and sleeps on the
-  render channel's condition variable: **0.09 s of CPU over 12 s against 7.56 s continuous**, roughly
-  eighty times less. State comparison rather than dirty flags, because a flag is only correct if
+  render channel's condition variable: **0.09 s of CPU over 12 s against 7.56 s drawing every pass**,
+  roughly eighty times less. State comparison rather than dirty flags, because a flag is only correct if
   every writer remembers it. One hazard found while building it and fixed: a swapchain rebuild leaves
   images with undefined contents, so a resize that happened to leave the camera and size unchanged
   would have looked idle and left garbage on screen — a rebuild now forces the next frame.
