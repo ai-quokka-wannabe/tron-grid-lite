@@ -19,7 +19,7 @@ footage. It is also the one setting that makes the clip longer and smaller at th
 the duration is the frame count divided by the rate.
 
 Usage:
-    python tools/record_flyby.py --executable build/windows-msvc/src/Debug/TronGridLite.exe
+    python tools/record_flyby.py --preset windows-msvc --config Release
 
 Requires ffmpeg on PATH.
 """
@@ -36,47 +36,59 @@ from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 
-# Where the renderer is usually found, tried in order, relative to the repository root.
-DEFAULT_EXECUTABLES = (
-    "build/windows-msvc/src/Debug/TronGridLite.exe",
-    "build/windows-msvc/src/Release/TronGridLite.exe",
-    "build/windows-clang-cl/src/Debug/TronGridLite.exe",
-    "build/linux-x11-gcc/src/Debug/TronGridLite",
-    "build/linux-x11-clang/src/Debug/TronGridLite",
+# Every renderer the build system can produce, as literals. The build layout is fixed by
+# CMakePresets.json, so this is an enumeration rather than a guess — and enumerating it is what lets
+# --preset and --config be names checked against a constant set instead of a path taken on trust.
+BUILD_PRESETS = (
+    "windows-msvc",
+    "windows-clang-cl",
+    "windows-mingw",
+    "linux-x11-gcc",
+    "linux-x11-clang",
+    "linux-x11-clang-asan",
+    "linux-x11-clang-tsan",
 )
 
+BUILD_CONFIGS = ("Release", "Debug")
 
-def find_executable(explicit: str | None) -> Path:
+
+def candidate_paths(preset: str | None, config: str | None) -> list[Path]:
+    """Returns the build outputs to try, most preferred first.
+
+    Release before Debug, deliberately. The two produce byte-identical recordings — verified — and
+    Debug runs several times slower with the validation layers instrumenting every dispatch, so
+    preferring it merely wastes minutes. The previous ordering preferred Debug.
+    """
+    presets = (preset,) if preset else BUILD_PRESETS
+    configs = (config,) if config else BUILD_CONFIGS
+
+    paths: list[Path] = []
+    for chosen_config in configs:
+        for chosen_preset in presets:
+            binary = "TronGridLite.exe" if chosen_preset.startswith("windows") else "TronGridLite"
+            paths.append(REPOSITORY_ROOT / "build" / chosen_preset / "src" / chosen_config / binary)
+    return paths
+
+
+def find_executable(preset: str | None, config: str | None) -> Path:
     """Returns the renderer to run, or exits with an explanation.
 
-    Whatever is returned is confined to the repository's build tree. That is a deliberate
-    restriction rather than an incidental one: this script exists to run a locally built renderer,
-    and a --executable that can name any file on the machine is a sharper tool than the job needs.
-    The path is resolved before the check, so a symlink inside build/ that points outside it is
-    refused too.
+    There is deliberately no way to name an arbitrary path. The renderer this script runs is always
+    something this repository built, the build layout is fixed, so a preset and a configuration name
+    say everything a path could — and neither of them is a path, which means nothing taken from the
+    command line is ever resolved on the filesystem or handed to a subprocess. That was previously an
+    --executable flag; it bought nothing that this does not, and it made the script capable of
+    running any binary on the machine.
     """
-    build_root = (REPOSITORY_ROOT / "build").resolve()
+    candidates = candidate_paths(preset, config)
 
-    if explicit:
-        candidate = Path(explicit)
-        if not candidate.is_absolute():
-            candidate = REPOSITORY_ROOT / candidate
-        candidate = candidate.resolve()
-
-        if not candidate.is_relative_to(build_root):
-            sys.exit(f"Refusing to run {candidate}: --executable must name something under {build_root}")
-        if not candidate.is_file():
-            sys.exit(f"No renderer at {candidate}")
-        return candidate
-
-    for relative in DEFAULT_EXECUTABLES:
-        candidate = (REPOSITORY_ROOT / relative).resolve()
+    for candidate in candidates:
         if candidate.is_file():
             return candidate
 
     sys.exit(
-        "Could not find a built renderer. Build one first, or pass --executable.\n"
-        "Looked in:\n  " + "\n  ".join(DEFAULT_EXECUTABLES)
+        "Could not find a built renderer. Build one first.\n"
+        "Looked in:\n  " + "\n  ".join(str(path) for path in candidates)
     )
 
 
@@ -176,7 +188,8 @@ def encode_mp4(ffmpeg: str, directory: Path, output: Path, fps: int, output_widt
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--executable", help="Renderer to run. Found automatically if omitted.")
+    parser.add_argument("--preset", choices=BUILD_PRESETS, help="Build preset to take the renderer from. All are tried if omitted.")
+    parser.add_argument("--config", choices=BUILD_CONFIGS, help="Build configuration. Release then Debug if omitted.")
     parser.add_argument("--frames", type=int, default=84, help="Frames in the loop (default: 84).")
     parser.add_argument("--fps", type=int, default=12, help="Playback rate (default: 12).")
     parser.add_argument("--render-width", type=int, default=1280, help="Render width (default: 1280).")
@@ -188,7 +201,7 @@ def main() -> None:
     parser.add_argument("--keep-frames", action="store_true", help="Do not delete the rendered frames afterwards.")
     arguments = parser.parse_args()
 
-    executable = find_executable(arguments.executable)
+    executable = find_executable(arguments.preset, arguments.config)
     ffmpeg = require_ffmpeg()
 
     gif_path = REPOSITORY_ROOT / arguments.gif
