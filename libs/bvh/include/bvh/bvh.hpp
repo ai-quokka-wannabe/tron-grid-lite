@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <math/matrix.hpp>
 #include <math/vector.hpp>
 #include <cstdint>
 #include <vector>
@@ -157,6 +158,15 @@ namespace BvhLib
         float barycentric_u{0.0f}; //!< Barycentric coordinate along edge1.
         float barycentric_v{0.0f}; //!< Barycentric coordinate along edge2.
         bool valid{false}; //!< False when the ray struck nothing.
+
+        /*!
+            Which instance was struck, for a scene traversal. Zero for a single-hierarchy trace.
+
+            The triangle index is into *that instance's* geometry, and its vertices are in that
+            geometry's own frame rather than the world's. A caller that needs a world-space normal
+            must transform it — see `intersectScene`.
+        */
+        uint32_t instance{0u};
     };
 
     /*!
@@ -175,5 +185,75 @@ namespace BvhLib
 
     //! Tests every triangle in turn. The reference the hierarchy is checked against.
     [[nodiscard]] Hit intersectBruteForce(const std::vector<Triangle>& triangles, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance);
+
+    /*!
+        One placement of a geometry in the world.
+
+        The Grid is an instance like any other, sitting at the identity transform, and a creature body
+        is an instance of a geometry built once when the body is rezzed. **That is the entire point:
+        a rigid body's hierarchy is never rebuilt, only its transform changes**, which is what turns a
+        31 ms per-tick rebuild into a 0.003 ms one. See `docs/ARCHITECTURE.md` § One hierarchy today,
+        two when creatures move.
+
+        The inverse is stored rather than computed, because it is needed once per instance per ray and
+        inverting a matrix in that loop would undo the saving this structure exists for.
+    */
+    struct Instance {
+        MathLib::Mat4 to_world{MathLib::Mat4::identity()}; //!< Geometry frame to world frame.
+        MathLib::Mat4 to_instance{MathLib::Mat4::identity()}; //!< World frame to geometry frame. The inverse of `to_world`, cached.
+        uint32_t geometry{0u}; //!< Index into `Scene::geometries`.
+
+        MathLib::Vec3 bounds_min{}; //!< World-space bounds of the whole instance, for the cheap rejection test.
+        MathLib::Vec3 bounds_max{};
+    };
+
+    /*!
+        A world made of instanced geometries: the two-level structure.
+
+        Geometries are built once and shared; instances place them. Nothing here rebuilds when things
+        move, which is the whole reason it exists.
+    */
+    struct Scene {
+        std::vector<Bvh> geometries; //!< Bottom level. Built once each.
+        std::vector<Instance> instances; //!< Top level. One box per placement.
+    };
+
+    /*!
+        Builds an instance of a geometry at a transform, computing its inverse and world bounds.
+
+        \param geometry The hierarchy being placed. Its root bounds are transformed to get the
+               instance's world bounds, so it must already be built.
+        \param geometry_index Index of that hierarchy within `Scene::geometries`.
+        \param to_world Placement. Any affine transform; see `intersectScene` on what scale costs.
+        eturn An instance ready to be added to a scene.
+    */
+    [[nodiscard]] Instance makeInstance(const Bvh& geometry, uint32_t geometry_index, const MathLib::Mat4& to_world);
+
+    /*!
+        Traces one ray against a whole scene and returns the nearest hit across every instance.
+
+        The host-side twin of the two-level traversal the compute shader will perform, and the
+        specification it is checked against — the same relationship `intersect` has with the
+        single-level shader path.
+
+        **The ray is transformed into instance space without normalising it**, and that is not an
+        oversight. Leaving the transformed direction unnormalised means the ray parameter is identical
+        in both frames, so a distance found in instance space is already the distance in world space
+        and no rescaling is needed. It is also what makes a scaled instance work at all.
+
+        What a scale *does* cost is the normal: a triangle's geometric normal is computed from its
+        edges in the geometry's own frame, and under a non-uniform scale the world normal is not the
+        transformed normal but the inverse-transpose of it. `Hit` deliberately does not return a
+        normal, so the caller decides — and for a rigid placement, which is what creature bodies are
+        expected to use, the linear part of `to_world` transforms the normal correctly as it stands.
+
+        \param scene Instances and the geometries they place.
+        \param origin Ray origin in world space.
+        \param direction Ray direction in world space; need not be normalised, and the returned
+               distance is in its units.
+        \param max_distance Furthest hit to accept.
+        eturn The nearest hit, with `instance` naming which placement it belongs to.
+    */
+    [[nodiscard]] Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance);
 
 } // namespace BvhLib
