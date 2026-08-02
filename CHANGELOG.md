@@ -299,6 +299,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the divergence has a use: a Program whose behaviour changes when a pixel moves by two parts in 255
   has learned the graphics card rather than the Grid, which running both devices makes cheap to find
   out.
+- `tools/record_flyby.py` now confines `--executable` to the repository's `build/` tree, resolving
+  the path first so that a symlink inside it pointing outside is refused too. The script exists to
+  run a locally built renderer, and a flag that can name any file on the machine is a sharper tool
+  than the job needs. CodeQL had flagged the `subprocess` call as command-line injection; the alert
+  was dismissed once already and returned only because the line was edited, but the restriction is
+  worth having on its own terms rather than because a scanner asked.
 - `tools/record_flyby.py` forced the renderer's working directory to the executable's own, justified by
   a comment saying it "loads its compiled shaders from beside itself". It does — from its *executable*
   path, deliberately, so that the working directory does not matter. The workaround outlived its

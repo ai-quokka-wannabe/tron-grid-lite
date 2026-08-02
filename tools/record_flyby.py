@@ -47,17 +47,30 @@ DEFAULT_EXECUTABLES = (
 
 
 def find_executable(explicit: str | None) -> Path:
-    """Returns the renderer to run, or exits with an explanation."""
+    """Returns the renderer to run, or exits with an explanation.
+
+    Whatever is returned is confined to the repository's build tree. That is a deliberate
+    restriction rather than an incidental one: this script exists to run a locally built renderer,
+    and a --executable that can name any file on the machine is a sharper tool than the job needs.
+    The path is resolved before the check, so a symlink inside build/ that points outside it is
+    refused too.
+    """
+    build_root = (REPOSITORY_ROOT / "build").resolve()
+
     if explicit:
         candidate = Path(explicit)
         if not candidate.is_absolute():
             candidate = REPOSITORY_ROOT / candidate
+        candidate = candidate.resolve()
+
+        if not candidate.is_relative_to(build_root):
+            sys.exit(f"Refusing to run {candidate}: --executable must name something under {build_root}")
         if not candidate.is_file():
             sys.exit(f"No renderer at {candidate}")
         return candidate
 
     for relative in DEFAULT_EXECUTABLES:
-        candidate = REPOSITORY_ROOT / relative
+        candidate = (REPOSITORY_ROOT / relative).resolve()
         if candidate.is_file():
             return candidate
 
