@@ -272,6 +272,79 @@ is visible in a shader the author wrote.
 The same buffers are bound by the acoustic pass, unchanged. The BVH is built once per frame at most — in practice
 only when the Grid changes — and is shared by every sensor and by the debug view.
 
+### One hierarchy today, two when creatures move
+
+**Decision: the Grid keeps one hierarchy until bodies exist, and gains a second level rather than a
+faster builder when they do.** This is written down before Phase 6 because it decides the shape of
+two etapes, and because the obvious optimisation is the wrong one.
+
+The Grid's hierarchy is built once at start-up and never touched again, which is correct for geometry
+that cannot move. A creature can. The naive extension — put the bodies in the same hierarchy and
+rebuild it every tick — has an obvious cost, and the obvious response is to make the builder faster.
+Both were measured before either was believed.
+
+Rebuild cost against triangle count, on the reference machine, at twenty repetitions taking the best.
+The harness is synthetic — a deterministic scatter rather than the real Grid — and calibrates against
+it closely: 16.1 ms here for 24,952 triangles against 14.4 ms measured in the renderer itself.
+
+| Rebuilt every tick | Triangles | Cost |
+|--------------------|----------:|-----:|
+| The Grid alone | 24,952 | 16.1 ms |
+| The Grid and five bodies | 30,072 | 19.7 ms |
+| The Grid and twenty bodies | 45,432 | **31.0 ms** |
+| The Grid and forty bodies | 66,392 | 48.8 ms |
+
+Against a top level built over one box per object, rebuilt every tick:
+
+| Objects in the top level | Cost |
+|--------------------------|-----:|
+| 2 | 0.0001 ms |
+| 8 | 0.0006 ms |
+| 20 | **0.0031 ms** |
+| 200 | 0.0584 ms |
+
+**Twenty creatures: 31 ms against 0.0031 ms, a factor of ten thousand.** And the 31 ms is spent
+rebuilding the Grid's own 24,952 triangles, which did not move, twenty-five times a second.
+
+#### Why this deletes the etape that was going to fix it
+
+Etape 10 proposed parallelising the builder. Sixteen cores might turn 31 ms into something near 3 ms
+— a real gain, and still a thousand times worse than not rebuilding at all, achieved by occupying
+every core on the machine to recompute a structure that did not change. **Parallelising it would have
+been a good solution to a problem that should not exist.**
+
+That is the whole argument for writing the decision down first. The 31 ms is real, the instinct to
+make it faster is reasonable, and it is the wrong instinct.
+
+#### What the second level costs
+
+Not nothing, and the cost is in the shader rather than on the host. A ray must be transformed into
+each instance's local frame before descending into that instance's hierarchy, which means an inverse
+transform per instance tested and an outer traversal wrapped around the inner one. Rays that only
+ever meet the Grid — the great majority — pay one extra level of descent.
+
+Two properties make that affordable:
+
+- **A rigid body's hierarchy is built once and never again.** Only its transform changes per tick,
+  which is why the per-tick cost collapses to the top level alone. This is the same reason
+  ray-tracing hardware separates a top-level structure from bottom-level ones, and building it by
+  hand is the same exercise this repository already performs for the single-level case.
+- **The Grid is one instance among a handful.** The top level holds the Grid's box plus one per body,
+  so it is a structure over twenty-odd objects, not over fifty thousand triangles.
+
+#### The case that is not free, and what it implies
+
+If bodies are **skinned** rather than rigid, their vertices move relative to each other and their
+hierarchies must be rebuilt every tick: about 0.45 ms for a thousand-triangle body, so roughly 9 ms
+for twenty of them. Still three times better than rebuilding everything, but no longer free.
+
+That connects the two open questions in Etape 11 rather than leaving them independent. **Rigid
+segments driven by the Grid's own physics make the two-level structure nearly free; skinned meshes
+make it merely much better.** A world whose entire aesthetic is flat-shaded facets has little use for
+smooth skinning, so the cheap answer and the fitting answer are the same one — which is the most
+comfortable position an argument like this can end in, and worth being suspicious of exactly for that
+reason.
+
 ---
 
 ## The Compute Whitted Tracer

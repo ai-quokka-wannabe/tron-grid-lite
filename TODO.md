@@ -44,36 +44,36 @@ and are worth knowing before touching either area:
   before `uploadStorageBuffer` returns; the validation layer's advice is simply wrong for a one-shot
   transfer scratch. That is why two warnings remain and should stay.
 
-## Etape 10 — Phase 6 prerequisite: parallelise the hierarchy build
+## Etape 10 — Phase 6 prerequisite: a two-level hierarchy
 
-**Deliberately not done yet, and this entry records why, so that the deferral is a decision rather
-than an oversight.**
+**This etape used to say "parallelise the hierarchy build". It was measured and replaced, because the
+measurement argued it out of existence.**
 
-`BvhLib::build` is single-threaded and takes **14 ms** for the Grid's 24,952 triangles on a 16-core
-machine — about 2 % of a 650 ms startup, nearly all of which is Vulkan device and pipeline creation
-that no amount of threading can touch. Parallelising it today would buy roughly 10 ms of startup in
-exchange for a concurrent node allocator, against a repo rule that says don't over-engineer.
+The Grid's hierarchy is built once and never touched, which is right for geometry that cannot move.
+Creatures can. Putting bodies in the same hierarchy means rebuilding it every tick — **31 ms with
+twenty creatures**, most of it spent rebuilding the Grid's own 24,952 triangles, which did not move.
+A top level over one box per object costs **0.0031 ms**. The full measurements and the reasoning are
+in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) § One hierarchy today, two when creatures move.
 
-An earlier plan called this urgent on the strength of a 120 ms measurement. That was a Debug build;
-see the 2026-08-02 journal entry.
+Parallelising the old build across sixteen cores might have reached 3 ms — a real gain, a thousand
+times worse than not rebuilding at all, and achieved by occupying the whole machine to recompute
+something unchanged. **A good solution to a problem that should not exist.**
 
-**Phase 6 is where it changes**, because a hierarchy over moving creatures is rebuilt every tick
-rather than once at startup, and 14 ms against a frame budget is a different proposition entirely
-from 14 ms paid once at launch.
+- [ ] Give the Grid a top-level structure over instances, with one bottom-level structure per body
+- [ ] Transform the ray into an instance's local frame in the traversal, rather than transforming geometry
+- [ ] Keep the single-level path working while nothing moves, since it is what every pass uses today
 
-- [ ] Parallelise the hierarchy build before creatures start moving
+Three things to hold on to when this is built:
 
-**Read Etape 11's second question first.** This etape assumes the thing being rebuilt every tick is
-the one hierarchy over the whole Grid. If bodies get their own small structures under a tiny top
-level instead, the Grid's own hierarchy never changes at all and the per-body ones are trivial to
-build — in which case this etape is not a smaller problem, it is the wrong problem.
-
-The shape is already half-decided by the existing code. `subdivide` partitions its range before it
-recurses, so the two children own disjoint triangle ranges and never touch each other's — the only
-shared mutable state is `nodes`, which both children append to. The determinism requirement is what
-rules out the obvious atomic bump allocator: node indices would then depend on thread scheduling.
-Building each subtree into its own local vector and splicing them back in a fixed frontier order
-keeps the output bit-identical between runs, which a reproducible recording requires.
+- **A rigid body's hierarchy is built once, when the body is rezzed, and never again.** Only its
+  transform changes. That is the entire source of the ten-thousand-fold difference, so anything that
+  quietly reintroduces a per-tick rebuild has given the whole thing away.
+- **The cost moves to the shader**, as an inverse transform per instance tested and an outer
+  traversal around the inner one. Rays that only meet the Grid pay one extra level of descent, and
+  they are the majority — so measure the traversal before and after, not just the build.
+- **`grid_bvh.slang` is shared by both senses.** A second level lands in that module, which means the
+  acoustic pass inherits it for free and `--verify-acoustics` becomes a check on the new traversal as
+  well as the old.
 
 ## Etape 11 — Import creature bodies as glTF
 
@@ -109,13 +109,16 @@ Decisions worth pinning now, while they are cheap:
    bodies are rigid segments connected by the Grid's own physics rather than skinned meshes, none of
    it is needed — and rigid segments are the likelier answer for a world whose whole aesthetic is
    flat-shaded facets.
-2. **What it does to the hierarchy.** This is the sharper one, and it reaches back into Etape 10. The
-   Grid's BVH is built once over static geometry. A moving body cannot live in it without a rebuild
-   every tick, which is the wrong shape: the standard answer is two-level, a static Grid structure and
-   one small structure per body with a tiny top level over them. **That is a decision that belongs
-   before parallelising the single-level build, not after**, because it may make the parallel build
-   unnecessary — a per-body structure over a few hundred triangles is trivial to rebuild, and the
-   Grid's own never changes.
+2. **What it does to the hierarchy — now answered.** Two-level, and the measurements are in
+   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) § One hierarchy today, two when creatures move. This
+   is no longer a question for Etape 11 to resolve; it is Etape 10's subject.
+
+   It does leave the first question sharper than it was. **Rigid segments make the two-level structure
+   nearly free, because a rigid body's hierarchy is built once; skinning makes it merely much
+   better**, since a deforming body must rebuild its own — about 0.45 ms per thousand triangles, so
+   roughly 9 ms for twenty creatures. A world of flat-shaded facets has little use for smooth
+   skinning, so the cheap answer and the fitting answer coincide, which is worth being slightly
+   suspicious of.
 
 ## Etape 12 — Phase 6 prerequisite: confine Program library paths
 
