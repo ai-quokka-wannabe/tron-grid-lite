@@ -48,6 +48,19 @@ find_program(SPIRV_VAL_EXECUTABLE spirv-val HINTS $ENV{VULKAN_SDK}/bin REQUIRED)
 
 set(SHADER_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
+# Slang modules that entry-point shaders `import` rather than compile on their own. They produce no
+# .spv of their own and are listed here only so that editing one rebuilds the shaders built from it.
+# A module missing from this list compiles fine and then goes stale silently, which is the whole
+# reason the list exists.
+#
+# Every shader depends on every module here rather than on the ones it actually imports, so editing
+# one module rebuilds all three. That is deliberate: the alternative is a per-shader import list,
+# which is one more thing to forget to update, and the failure mode of forgetting is a stale binary
+# rather than a slow build. Three shaders take about a second between them.
+set(SLANG_SHARED_MODULES
+    ${CMAKE_CURRENT_SOURCE_DIR}/grid_bvh.slang
+)
+
 #[[
     Compiles one Slang source into a single SPIR-V module and validates it.
 
@@ -70,10 +83,11 @@ function(add_slang_shader name source)
             -emit-spirv-directly
             -fvk-use-entrypoint-name
             -warnings-as-errors all
+            -I ${CMAKE_CURRENT_SOURCE_DIR}
             ${entry_args}
             -o ${SHADER_OUTPUT_DIR}/${name}.spv
         COMMAND ${SPIRV_VAL_EXECUTABLE} --target-env vulkan1.3 ${SHADER_OUTPUT_DIR}/${name}.spv
-        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${source}
+        DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/${source} ${SLANG_SHARED_MODULES}
         COMMENT "Compiling ${source} -> ${name}.spv (with validation)"
         VERBATIM
     )
