@@ -25,9 +25,6 @@ namespace
     using VulkanHelpers::findMemoryType;
     using VulkanHelpers::readSpirv;
 
-    //! Threads per workgroup. Must equal the `numthreads` in acoustics.slang.
-    constexpr uint32_t WORKGROUP_SIZE{64u};
-
     //! Fixed-point scale. Must equal FIXED_POINT_SCALE in acoustics.slang.
     constexpr float FIXED_POINT_SCALE{262144.0f};
 
@@ -217,9 +214,15 @@ void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, uint3
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *m_pipeline_layout, 0u, {*m_descriptor_sets[0]}, {});
     command_buffer.pushConstants<AcousticPushConstants>(*m_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0u, {push});
 
-    // One workgroup per ear, which is what makes the histogram a shared-memory reduction with no
-    // cross-workgroup contention at all. The workgroup size is fixed at WORKGROUP_SIZE threads, each
-    // striding over the direction set.
+    /*
+        One workgroup per ear, which is what makes the histogram a shared-memory reduction with no
+        cross-workgroup contention at all.
+
+        The workgroup's own size is deliberately not named here. It is 64 threads, declared once in
+        `acoustics.slang`'s `numthreads`, and the host has no business knowing it: the dispatch is
+        counted in ears, and each thread strides over the direction set by itself. A copy of the
+        number on this side would be a second place for it to be wrong.
+    */
     command_buffer.dispatch(ear_count, 1u, 1u);
 }
 
