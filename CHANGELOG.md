@@ -306,6 +306,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replaces could name any binary on the machine, which is a sharper tool than recording a flyby
   needs. This is what CodeQL had been objecting to, twice; the objection was right about the shape
   even though the previously-dismissed alerts were correctly dismissed as unexploitable.
+- **`tools/record_flyby.py` validated none of its numeric options.** `--frames -5 --render-width 0`
+  was accepted, announced as "Rendering -5 frames at 0x720", and then failed inside the renderer as a
+  bare exit code — the complaint arriving from the wrong process, about a value the script had held
+  all along. Every numeric flag now carries an inclusive range, checked by `argparse` before anything
+  is launched, and says what it wanted when it refuses.
 - **The recorder preferred the Debug build over Release.** Both produce byte-identical recordings —
   verified — but Debug runs several times slower with the validation layers instrumenting every
   dispatch, so the old ordering merely wasted minutes. Release is now tried first.

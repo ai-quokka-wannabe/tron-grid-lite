@@ -186,16 +186,37 @@ def encode_mp4(ffmpeg: str, directory: Path, output: Path, fps: int, output_widt
     )
 
 
+def bounded_int(minimum: int, maximum: int):
+    """Returns an argparse type accepting a whole number inside an inclusive range.
+
+    Every numeric option here ends up on the renderer's command line or ffmpeg's, and until this
+    existed none of them was checked. `--frames -5 --render-width 0` was accepted, announced as
+    "Rendering -5 frames at 0x720", and then failed inside the renderer as a bare exit code — the
+    complaint arriving from the wrong process, about a value this script had in its hand all along.
+
+    Bounds are generous rather than tuned. They exist to catch a typo or a negative, not to express
+    an opinion about how large a recording may be.
+    """
+
+    def parse(text: str) -> int:
+        value = int(text)
+        if (value < minimum) or (value > maximum):
+            raise argparse.ArgumentTypeError(f"must be between {minimum} and {maximum}, not {value}")
+        return value
+
+    return parse
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--preset", choices=BUILD_PRESETS, help="Build preset to take the renderer from. All are tried if omitted.")
     parser.add_argument("--config", choices=BUILD_CONFIGS, help="Build configuration. Release then Debug if omitted.")
-    parser.add_argument("--frames", type=int, default=84, help="Frames in the loop (default: 84).")
-    parser.add_argument("--fps", type=int, default=12, help="Playback rate (default: 12).")
-    parser.add_argument("--render-width", type=int, default=1280, help="Render width (default: 1280).")
-    parser.add_argument("--render-height", type=int, default=720, help="Render height (default: 720).")
-    parser.add_argument("--output-width", type=int, default=480, help="Width of the encoded clip (default: 480).")
-    parser.add_argument("--max-colors", type=int, default=128, help="Palette size, 2 to 256 (default: 128).")
+    parser.add_argument("--frames", type=bounded_int(1, 100_000), default=84, help="Frames in the loop (default: 84).")
+    parser.add_argument("--fps", type=bounded_int(1, 240), default=12, help="Playback rate (default: 12).")
+    parser.add_argument("--render-width", type=bounded_int(16, 16_384), default=1280, help="Render width (default: 1280).")
+    parser.add_argument("--render-height", type=bounded_int(16, 16_384), default=720, help="Render height (default: 720).")
+    parser.add_argument("--output-width", type=bounded_int(16, 16_384), default=480, help="Width of the encoded clip (default: 480).")
+    parser.add_argument("--max-colors", type=bounded_int(2, 256), default=128, help="Palette size, 2 to 256 (default: 128).")
     parser.add_argument("--gif", default="images/flyby.gif", help="GIF path, relative to the repository root.")
     parser.add_argument("--mp4", default=None, help="Also write an MP4 here, relative to the repository root.")
     parser.add_argument("--keep-frames", action="store_true", help="Do not delete the rendered frames afterwards.")
