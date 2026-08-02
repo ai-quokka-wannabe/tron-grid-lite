@@ -106,7 +106,13 @@ namespace Acoustics
                 path += hit.distance;
 
                 const BvhLib::Triangle& triangle{bvh.triangles[hit.triangle]};
-                const float source_strength{source_strengths[triangle.material]};
+                /*
+                    A material index past the end of the table is a caller error, but reading past a
+                    vector's end is undefined behaviour and would be found by a crash somewhere else
+                    entirely. One compare per hit makes it defined: an unknown surface is silent, and
+                    still reflects, which is the only sane reading of a surface nobody described.
+                */
+                const float source_strength{(triangle.material < source_strengths.size()) ? source_strengths[triangle.material] : 0.0f};
 
                 if (source_strength > 0.0f) {
                     /*

@@ -237,6 +237,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A failed C runtime assertion no longer opens a modal dialog.** On Windows a Debug build's CRT
+  reports a failed assertion — including the debug STL's own bounds check on
+  `std::vector::operator[]` — by opening a message box and waiting for somebody to click it. In an
+  interactive session that is rude; **in CI it is a hang**, because the job has nobody to click the
+  box, so a test that would have failed in milliseconds instead sits there until the runner's timeout
+  kills it and the log says nothing about which test it was. `TestingLib::runAll` now routes the
+  report to stderr, turning it into an ordinary failure with the assertion text and source line
+  attached. Guarded on `_DEBUG` as well as `_WIN32`, because outside a debug CRT those calls are
+  macros that expand to nothing and the unread loop variable fails the build under `/WX`.
+- **An out-of-range material index in the acoustic gather was undefined behaviour.** The source
+  table is indexed by a triangle's material with nothing in the type system holding the two to the
+  same length, so a short table read past the end of a vector. It is now one compare per hit: an
+  undescribed surface is silent and still reflects, which is the only sane reading of a surface
+  nobody described. Pinned by a test, and confirmed by mutation — without the guard the process
+  aborts on the debug STL's bounds check.
+- **`makeMaterials` sized the optical table with a literal `6u`** while the acoustic table used
+  `MATERIAL_SLOT_COUNT`. Adding a slot would have grown one table and silently left the other short,
+  with the out-of-range read above as the consequence. Both now use the constant.
+- Stale attributions in code comments and `static_assert` messages that still credited `trace.slang`
+  with declaring `Node` and `Triangle`, and with performing the traversal. `grid_bvh.slang` has owned
+  both since the module was extracted.
 - The renderer had no DPI awareness, so on any scaled display Windows created a virtual-pixel window
   and DWM upscaled the result — every traced pixel reaching the panel through a bilinear stretch.
 - A pointer warp that did not move the pointer swallowed the user's next real mouse movement, and a
