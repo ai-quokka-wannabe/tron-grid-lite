@@ -41,17 +41,31 @@ namespace
         out.push_back(BvhLib::Triangle{.v0 = a, .material = material, .edge1 = c - a, .padding0 = 0u, .edge2 = d - a, .padding1 = 0u});
     }
 
-    /*!
-        The analytic scene: a sounding floor at y = 0 and a silent ceiling at y = 10.
+    //! Half-extent of the sounding patch, in metres. Small, and the size is load-bearing — see below.
+    constexpr float PATCH_HALF_EXTENT{3.0f};
 
-        Both are wide enough that a ray leaving the ear anywhere but exactly sideways meets one of
-        them, and the two are parallel so that the arrival times are a hand calculation rather than
-        a simulation.
+    /*!
+        The analytic scene: a small sounding patch at y = 0 under a wide silent ceiling at y = 10.
+
+        The ceiling is wide so that a ray leaving the ear upwards always meets it. **The patch is
+        deliberately small, and getting this wrong makes the whole scene prove less than it looks
+        like it proves.** With a patch as wide as the ceiling, a shallow *direct* ray reaches the
+        floor at fifteen metres just as the ceiling echo does, so the two paths land in the same
+        bins and finding energy there says nothing about whether reflection works at all.
+
+        At three metres the arithmetic separates them cleanly, with the ear five metres up:
+
+        - Direct, straight down: 5 m. Direct, to the patch corner: sqrt(25 + 18) = 6.56 m.
+          Bins 14 to 19.
+        - Reflected, straight up and back: 5 + 10 = 15 m. To the corner via the ceiling, which is
+          the mirror image of the patch at y = 20: sqrt(225 + 18) = 15.59 m. Bins 43 to 45.
+
+        Nothing direct can reach bin 43, and nothing reflected can reach bin 14.
     */
     [[nodiscard]] BvhLib::Bvh parallelPlateScene()
     {
         std::vector<BvhLib::Triangle> triangles;
-        appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_NEON_PRIMARY); // Sings.
+        appendHorizontalQuad(triangles, 0.0f, PATCH_HALF_EXTENT, MATERIAL_NEON_PRIMARY); // Sings.
         appendHorizontalQuad(triangles, 10.0f, 200.0f, MATERIAL_PILLAR); // Silent, and reflects.
         return BvhLib::build(std::move(triangles));
     }
@@ -103,10 +117,10 @@ namespace
 TEST_CASE(the_gather_is_bit_identical_between_runs)
 {
     const BvhLib::Bvh bvh{parallelPlateScene()};
-    const std::vector<Acoustics::AcousticMaterial> materials{Acoustics::makeAcousticMaterials()};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
 
-    const Acoustics::ImpulseResponse first{Acoustics::gather(bvh, materials, EAR, plainConfig())};
-    const Acoustics::ImpulseResponse second{Acoustics::gather(bvh, materials, EAR, plainConfig())};
+    const Acoustics::ImpulseResponse first{Acoustics::gather(bvh, strengths, EAR, plainConfig())};
+    const Acoustics::ImpulseResponse second{Acoustics::gather(bvh, strengths, EAR, plainConfig())};
 
     /*
         Exact equality, not a tolerance. PROGRAM_INTERFACE.md publishes bit-identical replay as a
@@ -146,8 +160,8 @@ TEST_CASE(fibonacci_directions_are_unit_length_and_distinct)
 TEST_CASE(arrivals_land_in_the_bins_arithmetic_predicts)
 {
     const BvhLib::Bvh bvh{parallelPlateScene()};
-    const std::vector<Acoustics::AcousticMaterial> materials{Acoustics::makeAcousticMaterials()};
-    const Acoustics::ImpulseResponse response{Acoustics::gather(bvh, materials, EAR, plainConfig())};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
+    const Acoustics::ImpulseResponse response{Acoustics::gather(bvh, strengths, EAR, plainConfig())};
 
     /*
         Two arrivals are exactly calculable, and if either is in the wrong bin the delay
@@ -166,6 +180,12 @@ TEST_CASE(arrivals_land_in_the_bins_arithmetic_predicts)
     TEST_CHECK(energyInBin(response, direct_bin) > 0.0f);
     TEST_CHECK(energyInBin(response, reflected_bin) > 0.0f);
 
+    // The patch is small enough that no direct ray can reach the echo's bin, so energy there is
+    // proof the reflection happened rather than a coincidence of a wide floor.
+    for (uint32_t bin{binOf(7.0f)}; bin < binOf(14.0f); ++bin) {
+        TEST_CHECK(energyInBin(response, bin) == 0.0f);
+    }
+
     /*
         Nothing may arrive sooner than the perpendicular distance to the nearest sounding surface.
         This is the assertion that actually catches an off-by-one in the bin index, because it
@@ -177,32 +197,39 @@ TEST_CASE(arrivals_land_in_the_bins_arithmetic_predicts)
     }
 }
 
-TEST_CASE(no_path_gains_energy_and_absorption_only_takes_it_away)
+TEST_CASE(reflections_are_lossless_so_more_orders_only_ever_add)
 {
     const BvhLib::Bvh bvh{parallelPlateScene()};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
 
-    // Absorption is swept while everything else is held fixed, so the only thing that can move the
-    // total is the surface term. This is what catches spreading being counted twice: a detection
-    // sphere on top of the explicit 1/r squared would show up as a total that does not respond to
-    // absorption the way the arithmetic says it must.
-    float previous_total{-1.0f};
+    /*
+        Every surface on the Grid is a perfect acoustic mirror, and this is what that means
+        observably. Raising the reflection order cap can only add arrivals — it cannot change or
+        diminish the ones already found, because nothing is subtracted on contact. If a later order
+        ever moved an earlier bin, energy would be leaking backwards through the model.
+    */
+    Acoustics::GatherConfig direct_only{plainConfig()};
+    direct_only.max_order = 0u;
 
-    for (const float absorption : {0.0f, 0.1f, 0.25f, 0.5f, 0.9f, 1.0f}) {
-        std::vector<Acoustics::AcousticMaterial> materials{Acoustics::makeAcousticMaterials()};
-        for (Acoustics::AcousticMaterial& material : materials) {
-            material.absorption = absorption;
-        }
+    Acoustics::GatherConfig bounced{plainConfig()};
+    bounced.max_order = 4u;
 
-        const Acoustics::ImpulseResponse response{Acoustics::gather(bvh, materials, EAR, plainConfig())};
-        const float total{response.total()};
+    const Acoustics::ImpulseResponse first{Acoustics::gather(bvh, strengths, EAR, direct_only)};
+    const Acoustics::ImpulseResponse full{Acoustics::gather(bvh, strengths, EAR, bounced)};
 
-        TEST_CHECK(total > 0.0f); // The direct arrival survives any absorption: it is deposited before the first reflection.
+    TEST_CHECK(full.total() > first.total());
 
-        if (previous_total >= 0.0f) {
-            TEST_CHECK(total <= previous_total);
-        }
-        previous_total = total;
+    for (uint32_t index{0u}; index < first.bins.size(); ++index) {
+        TEST_CHECK(full.bins[index] >= first.bins[index]);
     }
+
+    // The direct arrival is unchanged by anything that happens later, bit for bit.
+    TEST_CHECK(full.at(0u, binOf(5.0f)) == first.at(0u, binOf(5.0f)));
+
+    // With no reflections at all the ceiling echo cannot exist; with four it must. The patch is
+    // sized so that nothing direct can land in that bin either way.
+    TEST_CHECK(energyInBin(first, binOf(15.0f)) == 0.0f);
+    TEST_CHECK(energyInBin(full, binOf(15.0f)) > 0.0f);
 }
 
 TEST_CASE(a_single_arrival_never_exceeds_the_source_strength)
@@ -214,12 +241,12 @@ TEST_CASE(a_single_arrival_never_exceeds_the_source_strength)
     appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_NEON_PRIMARY);
     const BvhLib::Bvh bvh{BvhLib::build(std::move(triangles))};
 
-    const std::vector<Acoustics::AcousticMaterial> materials{Acoustics::makeAcousticMaterials()};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
 
     Acoustics::GatherConfig config{plainConfig()};
     config.direction_count = 1024u;
 
-    const Acoustics::ImpulseResponse response{Acoustics::gather(bvh, materials, MathLib::Vec3{0.0f, 1.0f, 0.0f}, config)};
+    const Acoustics::ImpulseResponse response{Acoustics::gather(bvh, strengths, MathLib::Vec3{0.0f, 1.0f, 0.0f}, config)};
 
     for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
         for (uint32_t bin{0u}; bin < Acoustics::BIN_COUNT; ++bin) {
@@ -235,37 +262,44 @@ TEST_CASE(a_single_arrival_never_exceeds_the_source_strength)
     }
 }
 
-TEST_CASE(air_absorption_matches_the_tabulated_iso_row)
+TEST_CASE(air_absorption_is_applied_and_grows_with_distance)
 {
-    // The eight tabulated octave centres must come back exactly, or the interpolation has moved the
-    // data it is supposed to interpolate between.
-    TEST_CHECK(std::fabs(Acoustics::airAbsorptionDbPerKm(63.0f) - 0.1f) < 1e-4f);
-    TEST_CHECK(std::fabs(Acoustics::airAbsorptionDbPerKm(1000.0f) - 5.0f) < 1e-3f);
-    TEST_CHECK(std::fabs(Acoustics::airAbsorptionDbPerKm(4000.0f) - 22.9f) < 1e-2f);
-    TEST_CHECK(std::fabs(Acoustics::airAbsorptionDbPerKm(8000.0f) - 76.6f) < 1e-2f);
+    /*
+        The values are authored per listener rather than computed, so what is left to check is that
+        the gather actually applies them and applies them per band. This is the term that gives the
+        Grid a physical acoustic horizon — without it the range cap would be a budget decision
+        rather than a consequence of the air.
+    */
+    const BvhLib::Bvh bvh{parallelPlateScene()};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
 
-    // Monotonically increasing with frequency across the whole tabulated range.
-    float previous{0.0f};
-    for (float frequency{63.0f}; frequency <= 8000.0f; frequency *= 1.1f) {
-        const float value{Acoustics::airAbsorptionDbPerKm(frequency)};
-        TEST_CHECK(value >= previous);
-        previous = value;
+    Acoustics::GatherConfig config{plainConfig()};
+    config.air_absorption_db_per_km = {{0.0f, 100.0f, 1000.0f, 10000.0f}};
+
+    const Acoustics::ImpulseResponse response{Acoustics::gather(bvh, strengths, EAR, config)};
+
+    // Band 0 has transparent air; the rest are progressively more opaque, so they must be
+    // progressively quieter in every bin that holds anything at all.
+    for (uint32_t bin{0u}; bin < Acoustics::BIN_COUNT; ++bin) {
+        if (response.at(0u, bin) <= 0.0f) {
+            continue;
+        }
+        TEST_CHECK(response.at(1u, bin) < response.at(0u, bin));
+        TEST_CHECK(response.at(2u, bin) < response.at(1u, bin));
+        TEST_CHECK(response.at(3u, bin) < response.at(2u, bin));
     }
 
-    /*
-        The figures docs/ACOUSTICS.md quotes must be reproducible from this function, because the
-        whole range-cap argument rests on them: 1.5 dB at 8 kHz over 20 m, and 9.8 dB over 128 m.
-    */
-    const float eight_khz{Acoustics::airAbsorptionDbPerKm(8000.0f)};
-    TEST_CHECK(std::fabs((eight_khz * 0.020f) - 1.53f) < 0.05f);
-    TEST_CHECK(std::fabs((eight_khz * 0.128f) - 9.80f) < 0.05f);
+    // And the loss must grow with path length: the late echo is hit harder than the direct arrival.
+    const float direct_ratio{response.at(1u, binOf(5.0f)) / response.at(0u, binOf(5.0f))};
+    const float echo_ratio{response.at(1u, binOf(15.0f)) / response.at(0u, binOf(15.0f))};
+    TEST_CHECK(echo_ratio < direct_ratio);
 }
 
 TEST_CASE(an_empty_grid_is_silent)
 {
     const BvhLib::Bvh empty{};
-    const std::vector<Acoustics::AcousticMaterial> materials{Acoustics::makeAcousticMaterials()};
-    const Acoustics::ImpulseResponse response{Acoustics::gather(empty, materials, EAR, plainConfig())};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
+    const Acoustics::ImpulseResponse response{Acoustics::gather(empty, strengths, EAR, plainConfig())};
 
     TEST_CHECK(response.total() == 0.0f);
 }
@@ -285,15 +319,15 @@ TEST_CASE(the_response_is_a_pure_function_of_the_grid_and_the_ear)
         would return a stale answer for a listener that had moved.
     */
     const BvhLib::Bvh bvh{parallelPlateScene()};
-    const std::vector<Acoustics::AcousticMaterial> materials{Acoustics::makeAcousticMaterials()};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
 
-    const Acoustics::ImpulseResponse here{Acoustics::gather(bvh, materials, EAR, plainConfig())};
-    const Acoustics::ImpulseResponse here_again{Acoustics::gather(bvh, materials, EAR, plainConfig())};
+    const Acoustics::ImpulseResponse here{Acoustics::gather(bvh, strengths, EAR, plainConfig())};
+    const Acoustics::ImpulseResponse here_again{Acoustics::gather(bvh, strengths, EAR, plainConfig())};
 
     TEST_CHECK(here.bins == here_again.bins);
 
     // Moving the ear must move the answer, or ear position does not belong in the key.
-    const Acoustics::ImpulseResponse lower{Acoustics::gather(bvh, materials, MathLib::Vec3{0.0f, 2.0f, 0.0f}, plainConfig())};
+    const Acoustics::ImpulseResponse lower{Acoustics::gather(bvh, strengths, MathLib::Vec3{0.0f, 2.0f, 0.0f}, plainConfig())};
     TEST_CHECK(!(lower.bins == here.bins));
 
     // An ear closer to the sounding floor hears it sooner: the first occupied bin is the
@@ -305,7 +339,7 @@ TEST_CASE(the_response_is_a_pure_function_of_the_grid_and_the_ear)
     // The config must be in the key too: a different ray budget is a different answer.
     Acoustics::GatherConfig sparse{plainConfig()};
     sparse.direction_count = 256u;
-    const Acoustics::ImpulseResponse coarse{Acoustics::gather(bvh, materials, EAR, sparse)};
+    const Acoustics::ImpulseResponse coarse{Acoustics::gather(bvh, strengths, EAR, sparse)};
     TEST_CHECK(!(coarse.bins == here.bins));
 }
 

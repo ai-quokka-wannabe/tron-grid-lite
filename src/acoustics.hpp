@@ -43,7 +43,7 @@
     gives the same coverage for the same count, identically, every run.
 
     **`gather` is a pure function, and that is a load-bearing property rather than a tidiness one.**
-    The same Grid, materials, ear and config give a bit-identical response, which means a solve
+    The same Grid, source strengths, ear and config give a bit-identical response, which means a solve
     whose inputs have not changed may simply be skipped — and the answer that was skipped is not an
     approximation of the right one, it *is* the right one. A stationary creature in a static Grid
     hears exactly what it heard last tick, so re-solving is not cheap-and-approximate, it is
@@ -123,58 +123,60 @@ namespace Acoustics
     inline constexpr float SURFACE_EPSILON{1e-3f};
 
     /*!
-        A surface's acoustic properties. Two floats, and that is the whole model.
+        Every surface on the Grid is a perfect acoustic mirror.
 
-        This is not a cheap approximation of a fuller one. The optical model is physically-based
-        rendering at the smooth limit, where the microfacet distribution collapses to a delta
-        function and the BRDF reduces analytically to Fresnel plus Snell; the acoustic model has the
-        same character — the correct closed form for the geometry the Grid actually contains, which
-        is flat hard specular surfaces and nothing else.
+        No absorption, no transmission, no scattering and no frequency dependence: a surface returns
+        all of the energy that reaches it, at the mirror angle, and that is the whole surface
+        response. There is consequently no acoustic *material* table at all — only the source
+        strengths below, which say what a surface emits rather than what it does to what hits it.
 
-        Keeping it at two is also a response to the input data. Treble's documentation states that
-        measured absorption coefficients "can have errors of about ±0.2", which for a hard surface
-        at 0.03 is a nominal uncertainty several times the value itself. The input data are worse
-        than the algorithms, and that is a licence to keep the model small rather than a defect to
-        engineer around.
+        This is the same choice the optical model makes, for the same reason. That model is not a
+        cheap approximation of physically-based rendering; it is PBR at the smooth limit, where the
+        microfacet distribution collapses to a delta function and the BRDF reduces analytically to
+        Fresnel-weighted mirror reflection plus Snell refraction. The acoustic model is likewise the
+        correct closed form for what the Grid actually contains, which is flat hard specular
+        surfaces and nothing else.
+
+        **Absorption was modelled first and then removed, on its own numbers.** At the authored
+        `alpha = 0.02` of a polished hard surface, ten bounces cost 0.88 dB — and on an open plane
+        rays escape after one or two, so the realistic figure is nearer 0.2 dB. Against spherical
+        spreading's 26 dB across the range cap it was already the smallest term in the model by an
+        order of magnitude, and Treble's documentation puts the measurement uncertainty on such a
+        coefficient at about ±0.2, which is larger than the effect it produced. A term whose error
+        bar exceeds its value is decoration rather than physics.
+
+        **Transmission was never modelled, and its absence is a decision rather than an oversight.**
+        Sound does pass through a glass slab in reality. Representing that honestly would need a
+        thickness, a transmission coefficient and an interface model — the acoustic counterpart of
+        exactly the microfacet machinery the optical side deliberately does without. On the Grid a
+        slab is an obstacle, and behind one there is quiet.
+
+        **The regime in which this is correct, written down so it can be checked later.** A lossless
+        reflector is only safe because the Grid is an open half-space: rays leave and do not come
+        back, total path is capped at `RANGE_METRES`, and reflection order is capped at `MAX_ORDER`,
+        so nothing can accumulate without bound. Enclose any part of the Grid — a room, a tunnel, a
+        lid over a terrace hollow — and perfect mirrors would ring forever. That is the condition
+        under which this decision has to be reopened, and it is a geometry decision rather than an
+        acoustic one.
     */
-    struct AcousticMaterial {
-        /*!
-            Fraction of incident energy the surface swallows per reflection, from 0 to 1.
-
-            Broadband: one number, no bands. Put the decay in proportion before adding any — at
-            `absorption = 0.02`, ten bounces cost 0.88 dB, while spherical spreading over the same
-            128 m costs about 42 dB and air absorption at 8 kHz costs 9.8 dB. **Surface absorption
-            is the smallest term in the entire model by an order of magnitude.**
-        */
-        float absorption{0.0f};
-
-        /*!
-            How loudly this surface radiates the Grid's hum, relative to a primary neon tube.
-
-            Authored separately from `Material::emission` rather than derived from it, and this is
-            the whole reason the acoustic table exists: the pillars and the glowing column are
-            optically emissive and acoustically silent. A gather keyed on optical emission would
-            find 16,724 triangles where the design calls for 16,640.
-
-            A scalar rather than a spectrum because every sounding surface on the Grid radiates the
-            *same* spectrum — what differs between one and another is how loudly, not with what
-            colour. The spectrum is a Grid-level constant supplied per solve.
-        */
-        float source_strength{0.0f};
-    };
-
-    static_assert(sizeof(AcousticMaterial) == 8u, "AcousticMaterial must be two tightly packed floats for the std430 layout.");
-    static_assert(alignof(AcousticMaterial) == 4u, "AcousticMaterial must be 4-byte aligned so the array is tightly packed.");
 
     /*!
-        Returns the Grid's acoustic material table, in `MaterialSlot` order.
+        Returns how loudly each material radiates the Grid's hum, in `MaterialSlot` order.
 
-        The values and their provenance are tabulated in `docs/ACOUSTICS.md`. In short: everything
-        is a hard surface, so absorption is 0.02 or 0.03 throughout, and only the two neon tube
-        materials sing. The primary tube is the unit of the source scale — there is no reference
-        level on the Grid at all, so the number is relative by construction.
+        Authored rather than derived from `Material::emission`, and that is the whole reason this
+        table exists: the pillars and the glowing column are optically emissive and acoustically
+        silent, so a gather keyed on optical emission would find 16,724 triangles where the design
+        calls for 16,640. Only the two neon tube materials sing, and they sing equally — they are
+        identical hardware differing in gas colour, which is an optical property and not an acoustic
+        one.
+
+        A scalar rather than a spectrum, because every sounding surface on the Grid radiates the
+        *same* spectrum. What differs between one and another is how loudly, not with what colour,
+        so the spectrum is a Grid-level constant supplied once per solve and this table carries only
+        the number that multiplies it. The primary tube is the unit of that scale: there is no
+        reference level anywhere on the Grid, so the value is relative by construction.
     */
-    [[nodiscard]] std::vector<AcousticMaterial> makeAcousticMaterials();
+    [[nodiscard]] std::vector<float> makeAcousticSourceStrengths();
 
     /*!
         An impulse response: energy per band per time bin, at one ear.
@@ -182,6 +184,26 @@ namespace Acoustics
         Bin `b` of band `k` holds everything that arrived between `b * BIN_SECONDS` and
         `(b + 1) * BIN_SECONDS` after the sound left its source. Bin zero is the direct arrival's
         home only for a source less than 34 cm away; on this Grid it is usually empty.
+
+        **This is an impulse response and not a signal, and the distinction is the whole reason
+        nothing on the Grid needs a notion of time inside the gather.** It answers "if this source
+        fired an impulse now, where in time does its energy arrive", which is a property of geometry
+        alone. What a source actually does in time — a pulse, a one-shot call, a scrape — is an
+        envelope that multiplies this at delivery, and the traversal never sees it.
+
+        That separation is what lets the Grid hold to a rule it does hold to: **nothing on the Grid
+        sounds continuously.** The neon pulses rather than holding a tone. A creature vocalising
+        emits a call and stops, as an animal does. A worm dragging itself across the floor scrapes —
+        sustained, but noisy and modulated by its own gait rather than held at a level. All three are
+        this same object with different envelopes.
+
+        The reason the rule exists is perceptual rather than computational. **A continuous tone
+        carries almost no delay information**: every arrival overlaps every other and the listener
+        receives a steady level with nothing to measure, which would make the millimetre-scale
+        ambitions of `BIN_SECONDS` describe something no creature could extract. Onsets are what make
+        a delay measurable, which is exactly why bats pulse instead of humming. It also yields the
+        right asymmetry for nothing: a scraping worm is easy to detect and hard to range, because a
+        sustained noisy source has no sharp onset to range from.
     */
     struct ImpulseResponse {
         //! Band-major: `bins[(band * BIN_COUNT) + bin]`.
@@ -206,17 +228,41 @@ namespace Acoustics
     //! What one solve needs to know that is not the Grid and not the listener's position.
     struct GatherConfig {
         /*!
-            The hum's strength in each of the listener's bands.
+            The source's strength in each of the listener's bands, **at full amplitude**.
 
             One spectrum for the whole Grid: a 3 kHz fundamental and its harmonics, resolved into
             whichever bands the listening ear happens to have. Three kilohertz because the
             intersection of *C. elegans* (100 Hz – 5 kHz) and the house mouse (2.3 – 85.5 kHz) is
             2.3 – 5 kHz, and it is the only window in which the simplest and the most acoustically
             capable creatures on the roster can hear the same sound.
+
+            "At full amplitude" is the load-bearing phrase. Nothing on the Grid sounds continuously
+            — see `ImpulseResponse` — so this is the spectrum a source has while it is sounding, not
+            an average over time and not a level it holds.
         */
         std::array<float, BAND_COUNT> hum_spectrum{{1.0f, 1.0f, 1.0f, 1.0f}};
 
-        //! Air absorption in each band, dB per kilometre. See `airAbsorptionDbPerKm`.
+        /*!
+            Atmospheric absorption in each band, in decibels per kilometre.
+
+            Authored per listener rather than computed, for the same reason the band edges are: both
+            follow from the audiogram, and a creature that hears in a different place needs different
+            numbers in both. There is deliberately no function here that turns a frequency into an
+            absorption — the Grid is fixed at 20 °C and 70 % humidity, so the values are constants,
+            and a constant is better written down where somebody can see it than derived by an
+            interpolation that has to be trusted.
+
+            ISO 9613-2's row for those conditions, at the octave centres, is the source: 0.1, 0.3,
+            1.1, 2.8, 5.0, 9.0, 22.9 and 76.6 dB/km at 63 Hz through 8 kHz. Above 8 kHz the standard
+            tabulates nothing and ISO 9613-1's formulae have to be evaluated — which is a thing to do
+            once, offline, and paste in, not a thing to guess at. That matters for anything
+            ultrasonic: this is the term that gives the Grid a physical acoustic horizon, since past
+            about 7 m a 100 kHz call loses more to the air than to the inverse square law, while at
+            8 kHz the same crossover lies out beyond 400 m.
+
+            Zero is a legitimate value and means a listener for whom air is transparent over the
+            distances involved, which is very nearly true below a few kilohertz across 20 m.
+        */
         std::array<float, BAND_COUNT> air_absorption_db_per_km{{0.0f, 0.0f, 0.0f, 0.0f}};
 
         //! Directions cast from the ear. Must be at least one.
@@ -244,30 +290,6 @@ namespace Acoustics
     [[nodiscard]] MathLib::Vec3 fibonacciDirection(uint32_t index, uint32_t count);
 
     /*!
-        Returns atmospheric absorption at a frequency, in decibels per kilometre.
-
-        Tabulated from ISO 9613-2's 20 °C / 70 % relative humidity row at the eight octave centres
-        from 63 Hz to 8 kHz, and interpolated logarithmically in both frequency and level between
-        them. The Grid is fixed at those conditions, so nothing evaluates a relaxation-frequency
-        model at run time; if temperature ever becomes a scene parameter, that is when ISO 9613-1's
-        formulae move into the code.
-
-        **Above 8 kHz this extrapolates and must not be trusted.** The tabulated curve is steepening
-        towards `f²` at its top end and the extrapolation continues that, which is the right
-        asymptotic shape and the wrong number — the real curve turns over as the relaxation terms
-        saturate. It is enough for the `elegans` and `macropod` presets, whose bands stop at 5 and
-        40 kHz, and it is *not* enough for the `rodent`, whose top band reaches 85.5 kHz. Before a
-        rodent listens, ISO 9613-1 must be evaluated offline at the octave centres above 8 kHz and
-        the constants pasted into the table beside the tabulated ones, exactly as
-        `docs/ACOUSTICS.md` specifies. That is recorded as an open item rather than done here,
-        because no creature exists yet to be wronged by it.
-
-        \param frequency_hz Frequency of interest. Must be positive.
-        \return Absorption in dB/km.
-    */
-    [[nodiscard]] float airAbsorptionDbPerKm(float frequency_hz);
-
-    /*!
         Traces the Grid from one ear and returns what it hears.
 
         A **gather**: rays leave the ear rather than the sources. The literature is unanimous that
@@ -285,12 +307,18 @@ namespace Acoustics
         receiver it can afford. The failure mode of getting this wrong is a silent 6 dB per doubling
         that looks like a material problem.
 
+        Surfaces reflect losslessly, so nothing here attenuates on contact. What bounds the
+        response instead is the range cap, the reflection order cap, spreading and air — see the
+        note on the perfect acoustic mirror above for why that is safe on an open plane and where it
+        would stop being safe.
+
         \param bvh The Grid. An empty one returns silence.
-        \param materials Acoustic table indexed by a triangle's material. Must cover every index used.
+        \param source_strengths How loudly each material sings, indexed by a triangle's material.
+               Must cover every index the Grid uses.
         \param ear World-space position of the ear, in metres.
         \param config Spectrum, air absorption, ray budget and caps.
         \return Energy per band per time bin.
     */
-    [[nodiscard]] ImpulseResponse gather(const BvhLib::Bvh& bvh, const std::vector<AcousticMaterial>& materials, const MathLib::Vec3& ear, const GatherConfig& config);
+    [[nodiscard]] ImpulseResponse gather(const BvhLib::Bvh& bvh, const std::vector<float>& source_strengths, const MathLib::Vec3& ear, const GatherConfig& config);
 
 } // namespace Acoustics
