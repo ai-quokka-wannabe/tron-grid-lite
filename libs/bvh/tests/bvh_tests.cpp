@@ -18,6 +18,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <utility>
 #include <vector>
 
 namespace
@@ -582,6 +584,292 @@ TEST_CASE(scene_traversal_agrees_with_brute_force_over_transformed_geometry)
 
     // Prove the comparison had something to compare. A scene the rays all miss agrees perfectly and
     // says nothing, which is a trap this suite has fallen into once already.
+    TEST_CHECK(hits > (RAY_COUNT / 20u));
+}
+
+/*
+    A second traversal, written against the flat form the shader reads.
+
+    This is not production code and deliberately does not live in the library: nothing on the host
+    needs it, because the host has `Scene` with its vector of hierarchies and does not have to resolve
+    an offset to find anything. `grid_bvh.slang` does, and this is the only way to exercise that
+    arithmetic without a GPU.
+
+    It is written from the shader rather than from `intersectScene`, down to the slab test and the
+    `1e-30` substitution, so that agreement between the two means the flat layout and the offsetting
+    are right — and not merely that the same code was called twice.
+*/
+namespace
+{
+
+    [[nodiscard]] float flatIntersectAabb(const MathLib::Vec3& origin, const MathLib::Vec3& inverse_direction, const MathLib::Vec3& low, const MathLib::Vec3& high,
+        float max_distance)
+    {
+        const auto slab = [](float lo, float hi, float o, float inverse) {
+            return std::pair<float, float>{(lo - o) * inverse, (hi - o) * inverse};
+        };
+
+        const auto [x1, x2] = slab(low.x, high.x, origin.x, inverse_direction.x);
+        const auto [y1, y2] = slab(low.y, high.y, origin.y, inverse_direction.y);
+        const auto [z1, z2] = slab(low.z, high.z, origin.z, inverse_direction.z);
+
+        const float tmin{std::max(std::max(std::min(x1, x2), std::min(y1, y2)), std::min(z1, z2))};
+        const float tmax{std::min(std::min(std::max(x1, x2), std::max(y1, y2)), std::max(z1, z2))};
+
+        if ((tmax >= std::max(tmin, 0.0f)) && (tmin < max_distance)) {
+            return std::max(tmin, 0.0f);
+        }
+        return std::numeric_limits<float>::infinity();
+    }
+
+    void flatIntersectTriangle(const BvhLib::Triangle& triangle, uint32_t index, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance,
+        BvhLib::Hit& nearest)
+    {
+        constexpr float EPSILON{1e-8f};
+
+        const MathLib::Vec3 pvec{direction.cross(triangle.edge2)};
+        const float determinant{triangle.edge1.dot(pvec)};
+        if (std::fabs(determinant) < EPSILON) {
+            return;
+        }
+
+        const float inverse_determinant{1.0f / determinant};
+        const MathLib::Vec3 tvec{origin - triangle.v0};
+        const float u{tvec.dot(pvec) * inverse_determinant};
+        if ((u < 0.0f) || (u > 1.0f)) {
+            return;
+        }
+
+        const MathLib::Vec3 qvec{tvec.cross(triangle.edge1)};
+        const float v{direction.dot(qvec) * inverse_determinant};
+        if ((v < 0.0f) || ((u + v) > 1.0f)) {
+            return;
+        }
+
+        const float distance{triangle.edge2.dot(qvec) * inverse_determinant};
+        if ((distance <= EPSILON) || (distance >= max_distance)) {
+            return;
+        }
+        if (nearest.valid && (distance >= nearest.distance)) {
+            return;
+        }
+
+        nearest.distance = distance;
+        nearest.triangle = index;
+        nearest.barycentric_u = u;
+        nearest.barycentric_v = v;
+        nearest.valid = true;
+    }
+
+    //! Walks one geometry inside the shared arrays, as `traceGeometry` does.
+    [[nodiscard]] BvhLib::Hit flatTraceGeometry(const BvhLib::FlatScene& flat, uint32_t node_offset, uint32_t triangle_offset, uint32_t node_count,
+        const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance)
+    {
+        BvhLib::Hit nearest{};
+        nearest.distance = max_distance;
+        if (node_count == 0u) {
+            return nearest;
+        }
+
+        constexpr float TINY{1e-30f};
+        const auto safeInverse = [](float value) {
+            return 1.0f / ((value == 0.0f) ? TINY : value);
+        };
+        const MathLib::Vec3 inverse_direction{safeInverse(direction.x), safeInverse(direction.y), safeInverse(direction.z)};
+
+        std::array<uint32_t, BvhLib::MAX_DEPTH> stack{};
+        uint32_t stack_size{0u};
+        uint32_t current{0u};
+
+        for (;;) {
+            const BvhLib::Node& node{flat.nodes[node_offset + current]};
+
+            if (node.isLeaf()) {
+                for (uint32_t offset{0u}; offset < node.triangle_count; ++offset) {
+                    const uint32_t index{triangle_offset + node.left_or_first + offset};
+                    flatIntersectTriangle(flat.triangles[index], index, origin, direction, max_distance, nearest);
+                }
+            } else {
+                const uint32_t left{node.left_or_first};
+                const uint32_t right{left + 1u};
+
+                const float limit{nearest.valid ? nearest.distance : max_distance};
+                float left_distance{
+                    flatIntersectAabb(origin, inverse_direction, flat.nodes[node_offset + left].bounds_min, flat.nodes[node_offset + left].bounds_max, limit)};
+                float right_distance{
+                    flatIntersectAabb(origin, inverse_direction, flat.nodes[node_offset + right].bounds_min, flat.nodes[node_offset + right].bounds_max, limit)};
+
+                uint32_t near_child{left};
+                uint32_t far_child{right};
+                if (right_distance < left_distance) {
+                    std::swap(left_distance, right_distance);
+                    near_child = right;
+                    far_child = left;
+                }
+
+                if (!std::isinf(left_distance)) {
+                    if ((!std::isinf(right_distance)) && (stack_size < BvhLib::MAX_DEPTH)) {
+                        stack[stack_size] = far_child;
+                        ++stack_size;
+                    }
+                    current = near_child;
+                    continue;
+                }
+            }
+
+            if (stack_size == 0u) {
+                break;
+            }
+            --stack_size;
+            current = stack[stack_size];
+        }
+
+        return nearest;
+    }
+
+    //! Sweeps the top level, as `traceScene` does.
+    [[nodiscard]] BvhLib::Hit flatTraceScene(const BvhLib::FlatScene& flat, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance)
+    {
+        BvhLib::Hit nearest{};
+        nearest.distance = max_distance;
+
+        constexpr float TINY{1e-30f};
+        const auto safeInverse = [](float value) {
+            return 1.0f / ((value == 0.0f) ? TINY : value);
+        };
+        const MathLib::Vec3 inverse_direction{safeInverse(direction.x), safeInverse(direction.y), safeInverse(direction.z)};
+
+        const auto transform = [](const MathLib::Vec4& r0, const MathLib::Vec4& r1, const MathLib::Vec4& r2, const MathLib::Vec3& v, float w) {
+            return MathLib::Vec3{(r0.x * v.x) + (r0.y * v.y) + (r0.z * v.z) + (r0.w * w), (r1.x * v.x) + (r1.y * v.y) + (r1.z * v.z) + (r1.w * w),
+                (r2.x * v.x) + (r2.y * v.y) + (r2.z * v.z) + (r2.w * w)};
+        };
+
+        for (uint32_t index{0u}; index < static_cast<uint32_t>(flat.instances.size()); ++index) {
+            const BvhLib::InstanceRecord& record{flat.instances[index]};
+            if (record.node_count == 0u) {
+                continue;
+            }
+
+            const float limit{nearest.valid ? nearest.distance : max_distance};
+            if (std::isinf(flatIntersectAabb(origin, inverse_direction, record.bounds_min, record.bounds_max, limit))) {
+                continue;
+            }
+
+            const MathLib::Vec3 local_origin{transform(record.to_instance_row0, record.to_instance_row1, record.to_instance_row2, origin, 1.0f)};
+            const MathLib::Vec3 local_direction{transform(record.to_instance_row0, record.to_instance_row1, record.to_instance_row2, direction, 0.0f)};
+
+            const BvhLib::Hit hit{flatTraceGeometry(flat, record.node_offset, record.triangle_offset, record.node_count, local_origin, local_direction, limit)};
+
+            if (hit.valid && ((!nearest.valid) || (hit.distance < nearest.distance))) {
+                nearest = hit;
+                nearest.instance = index;
+            }
+        }
+
+        return nearest;
+    }
+
+} // namespace
+
+TEST_CASE(flatten_names_each_geometry_range_and_keeps_instance_order)
+{
+    const BvhLib::Bvh first{BvhLib::build(randomCloud(300u, 11u))};
+    const BvhLib::Bvh second{BvhLib::build(randomCloud(700u, 22u))};
+
+    BvhLib::Scene scene{};
+    scene.geometries.push_back(first);
+    scene.geometries.push_back(second);
+    scene.instances.push_back(BvhLib::makeInstance(second, 1u, MathLib::Mat4::identity()));
+    scene.instances.push_back(BvhLib::makeInstance(first, 0u, MathLib::Mat4::translate(MathLib::Vec3{10.0f, 0.0f, 0.0f})));
+    scene.instances.push_back(BvhLib::makeInstance(second, 1u, MathLib::Mat4::translate(MathLib::Vec3{0.0f, 10.0f, 0.0f})));
+
+    // An instance naming a geometry that is not there. The shader has no way to skip it other than a
+    // node count of zero, so that is what the flat form must produce.
+    scene.instances.push_back(BvhLib::makeInstance(first, 7u, MathLib::Mat4::identity()));
+
+    const BvhLib::FlatScene flat{BvhLib::flatten(scene)};
+
+    TEST_CHECK_EQUAL(flat.nodes.size(), first.nodes.size() + second.nodes.size());
+    TEST_CHECK_EQUAL(flat.triangles.size(), first.triangles.size() + second.triangles.size());
+    TEST_CHECK_EQUAL(flat.instances.size(), scene.instances.size());
+
+    // Geometries are concatenated in their own order, so the first starts at zero and the second
+    // starts where the first ended. Three instances share two geometries, which is the sharing the
+    // whole two-level arrangement exists for.
+    TEST_CHECK_EQUAL(flat.instances[1].node_offset, 0u);
+    TEST_CHECK_EQUAL(flat.instances[1].triangle_offset, 0u);
+    TEST_CHECK_EQUAL(flat.instances[1].node_count, static_cast<uint32_t>(first.nodes.size()));
+
+    TEST_CHECK_EQUAL(flat.instances[0].node_offset, static_cast<uint32_t>(first.nodes.size()));
+    TEST_CHECK_EQUAL(flat.instances[0].triangle_offset, static_cast<uint32_t>(first.triangles.size()));
+    TEST_CHECK_EQUAL(flat.instances[0].node_count, static_cast<uint32_t>(second.nodes.size()));
+
+    // Two instances of one geometry point at the same range rather than at two copies of it.
+    TEST_CHECK_EQUAL(flat.instances[2].node_offset, flat.instances[0].node_offset);
+    TEST_CHECK_EQUAL(flat.instances[2].triangle_offset, flat.instances[0].triangle_offset);
+
+    TEST_CHECK_EQUAL(flat.instances[3].node_count, 0u);
+
+    // The rows are the matrix, read the way the shader reads it. A transposed row here is the exact
+    // failure the row form exists to make impossible, so it is worth one comparison.
+    const MathLib::Mat4& to_instance{scene.instances[1].to_instance};
+    TEST_CHECK(std::fabs(flat.instances[1].to_instance_row0.w - to_instance(3u, 0u)) < 1e-6f);
+    TEST_CHECK(std::fabs(flat.instances[1].to_instance_row0.w + 10.0f) < 1e-4f);
+}
+
+TEST_CASE(flat_form_traversal_agrees_with_the_scene_it_came_from)
+{
+    /*
+        The one that matters, and the closest a CPU test can come to running the shader: two
+        geometries, four placements, and every range but the first at a non-zero offset. Walking the
+        flat form must find exactly what walking the Scene finds.
+
+        An offset dropped anywhere in this arithmetic reads one geometry's nodes as if they were
+        another's, which produces a plausible picture rather than a crash — the failure this test
+        exists to catch before a GPU ever renders it.
+    */
+    Rng rng{4242u};
+    const BvhLib::Bvh first{BvhLib::build(randomCloud(1200u, 31u))};
+    const BvhLib::Bvh second{BvhLib::build(randomCloud(1200u, 57u))};
+
+    BvhLib::Scene scene{};
+    scene.geometries.push_back(first);
+    scene.geometries.push_back(second);
+    scene.instances.push_back(BvhLib::makeInstance(first, 0u, MathLib::Mat4::identity()));
+    scene.instances.push_back(BvhLib::makeInstance(second, 1u,
+        MathLib::Mat4::translate(MathLib::Vec3{25.0f, 0.0f, 0.0f}) * MathLib::Mat4::rotate(MathLib::Vec3{0.0f, 1.0f, 0.0f}, 0.7f)));
+    scene.instances.push_back(BvhLib::makeInstance(first, 0u,
+        MathLib::Mat4::translate(MathLib::Vec3{-25.0f, 12.0f, 8.0f}) * MathLib::Mat4::rotate(MathLib::Vec3{1.0f, 0.0f, 0.0f}, -1.1f)));
+    scene.instances.push_back(BvhLib::makeInstance(second, 1u, MathLib::Mat4::translate(MathLib::Vec3{0.0f, -18.0f, 0.0f})));
+
+    const BvhLib::FlatScene flat{BvhLib::flatten(scene)};
+
+    uint32_t agreements{0u};
+    uint32_t hits{0u};
+    constexpr uint32_t RAY_COUNT{3000u};
+
+    for (uint32_t index{0u}; index < RAY_COUNT; ++index) {
+        // Aimed at the placements rather than fired at random, for the reason the test above it
+        // records: a sweep that misses everything agrees perfectly and proves nothing.
+        const MathLib::Vec3 origin{rng.vector(-70.0f, 70.0f)};
+        const MathLib::Vec3 target{rng.vector(-28.0f, 28.0f)};
+        const MathLib::Vec3 direction{(target - origin).normalised()};
+
+        const BvhLib::Hit expected{BvhLib::intersectScene(scene, origin, direction, 400.0f)};
+        const BvhLib::Hit actual{flatTraceScene(flat, origin, direction, 400.0f)};
+
+        if (expected.valid == actual.valid) {
+            const bool same_place{(!expected.valid) || ((std::fabs(expected.distance - actual.distance) < 1e-4f) && (expected.instance == actual.instance))};
+            if (same_place) {
+                ++agreements;
+            }
+        }
+        if (expected.valid) {
+            ++hits;
+        }
+    }
+
+    TEST_CHECK_EQUAL(agreements, RAY_COUNT);
     TEST_CHECK(hits > (RAY_COUNT / 20u));
 }
 

@@ -1,7 +1,8 @@
 # TODO
 
-The live source of truth for TronGrid Lite work. New work is added as etapes;
-criteria are ticked when satisfied; the Journal records what actually happened.
+The live source of truth for TronGrid Lite work. New work is added as etapes and criteria are ticked
+when satisfied; a finished etape collapses to one line, because what it *decided* belongs in
+`CHANGELOG.md` and what it *built* belongs in the code with the reasoning attached.
 
 ## Roadmap (phases)
 
@@ -17,7 +18,7 @@ criteria are ticked when satisfied; the Journal records what actually happened.
 
 ## Completed etapes
 
-Nine etapes, all boxes ticked. They are collapsed to one line each because a finished checklist is
+Ten etapes, all boxes ticked. They are collapsed to one line each because a finished checklist is
 not a plan — what each one *decided* lives in `CHANGELOG.md`, and what each one
 *built* lives in the code with the reasoning attached to it. Keeping the checklists as well meant
 maintaining a third copy that drifts.
@@ -33,9 +34,10 @@ maintaining a third copy that drifts.
 | 7 | Phase 5: acoustic rays | Sound sources, the gather on host and device, ears in the ABI |
 | 8 | Move rendering onto its own thread | Render thread, `Window::wakeEvents`, on-demand drawing |
 | 9 | Phase 6 prerequisite: sub-allocate device memory | `MemoryArena`; sub-allocation warnings 16 to 2 |
+| 10 | Phase 6 prerequisite: a two-level hierarchy | `Scene`, `Instance`, `flatten`; `traceScene` in the shared module; both senses on it |
 
-Two decisions from those etapes are load-bearing enough that they live in the code rather than here,
-and are worth knowing before touching either area:
+Four decisions from those etapes are load-bearing enough that they live in the code rather than here,
+and are worth knowing before touching the areas they govern:
 
 - **An arena block is mapped once, by the arena.** Vulkan forbids mapping one `VkDeviceMemory` twice,
   so buffers sharing a host-visible block cannot each map it. `MemoryArena::bind` returns the address
@@ -43,53 +45,13 @@ and are worth knowing before touching either area:
 - **Staging buffers are deliberately not sub-allocated.** Each exists for one copy and is destroyed
   before `uploadStorageBuffer` returns; the validation layer's advice is simply wrong for a one-shot
   transfer scratch. That is why two warnings remain and should stay.
-
-## Etape 10 — Phase 6 prerequisite: a two-level hierarchy
-
-**This etape used to say "parallelise the hierarchy build". It was measured and replaced, because the
-measurement argued it out of existence.**
-
-The Grid's hierarchy is built once and never touched, which is right for geometry that cannot move.
-Creatures can. Putting bodies in the same hierarchy means rebuilding it every tick — **31 ms with
-twenty creatures**, most of it spent rebuilding the Grid's own 24,952 triangles, which did not move.
-A top level over one box per object costs **0.0031 ms**. The full measurements and the reasoning are
-in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) § One hierarchy today, two when creatures move.
-
-Parallelising the old build across sixteen cores might have reached 3 ms — a real gain, a thousand
-times worse than not rebuilding at all, and achieved by occupying the whole machine to recompute
-something unchanged. **A good solution to a problem that should not exist.**
-
-- [x] Give the Grid a top-level structure over instances, with one bottom-level structure per body
-- [x] Transform the ray into an instance's local frame in the traversal, rather than transforming geometry
-- [x] Keep the single-level path working while nothing moves, since it is what every pass uses today
-- [ ] Mirror the two-level traversal in `grid_bvh.slang`, so both senses inherit it
-- [ ] Bind instances and per-geometry hierarchies as buffers, and dispatch against them
-
-**Host side done.** `BvhLib::Scene`, `BvhLib::Instance`, `makeInstance` and `intersectScene` are the
-specification, in the same relationship to the shader that `intersect` has with the single-level path
-— which is what made `--verify-acoustics` possible and is expected to do the same here.
-
-Four tests, two of them proved by mutation: pointing the transform the wrong way is caught by three,
-and normalising the transformed direction is caught by two. That second one is the invariant the
-design rests on and it is easy to "tidy" away — **the transformed direction must not be normalised**,
-because leaving it alone is what makes the ray parameter identical in both frames, so a distance found
-in instance space is already a world distance.
-
-The top level is a **linear sweep over instance boxes**, not a hierarchy over them. Twenty-odd boxes
-against a few instructions each is not worth a tree, and the crossover is somewhere in the hundreds.
-That is a decision to revisit with a measurement rather than a guess when creature counts are real.
-
-Three things to hold on to when this is built:
-
-- **A rigid body's hierarchy is built once, when the body is rezzed, and never again.** Only its
-  transform changes. That is the entire source of the ten-thousand-fold difference, so anything that
-  quietly reintroduces a per-tick rebuild has given the whole thing away.
-- **The cost moves to the shader**, as an inverse transform per instance tested and an outer
-  traversal around the inner one. Rays that only meet the Grid pay one extra level of descent, and
-  they are the majority — so measure the traversal before and after, not just the build.
-- **`grid_bvh.slang` is shared by both senses.** A second level lands in that module, which means the
-  acoustic pass inherits it for free and `--verify-acoustics` becomes a check on the new traversal as
-  well as the old.
+- **A ray transformed into instance space is not normalised**, in `BvhLib::intersectScene` and in
+  `grid_bvh.slang` alike. Leaving it alone makes the ray parameter identical in both frames, so a
+  distance found in instance space is already a world distance. It looks untidy, it is load-bearing,
+  and tidying it breaks two tests on purpose.
+- **The Grid is an instance at the identity, not a special case.** The path a creature body will take
+  is the path the only body in the world takes today, so it is exercised by every frame rather than by
+  a test written for one instance and a comment promising the rest.
 
 ## Etape 11 — Import creature bodies as glTF
 
@@ -125,9 +87,9 @@ Decisions worth pinning now, while they are cheap:
    bodies are rigid segments connected by the Grid's own physics rather than skinned meshes, none of
    it is needed — and rigid segments are the likelier answer for a world whose whole aesthetic is
    flat-shaded facets.
-2. **What it does to the hierarchy — now answered.** Two-level, and the measurements are in
-   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) § One hierarchy today, two when creatures move. This
-   is no longer a question for Etape 11 to resolve; it is Etape 10's subject.
+2. **What it does to the hierarchy — answered and built.** Two-level, on the host and in the shader,
+   with the measurements in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) § One hierarchy today, two
+   when creatures move. A body arrives as a geometry and a transform, and nothing rebuilds.
 
    It does leave the first question sharper than it was. **Rigid segments make the two-level structure
    nearly free, because a rigid body's hierarchy is built once; skinning makes it merely much

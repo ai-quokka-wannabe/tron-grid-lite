@@ -25,11 +25,11 @@ class Device; // forward declaration
 /*!
     The Grid's geometry, resident on the device.
 
-    Two storage buffers — the hierarchy and the triangles it indexes — and nothing else. There is
-    deliberately no material table here and no image: a material is a property of a *sense*, not of
-    the Grid, and the two senses disagree about what a surface is. Light wants a colour, an index of
-    refraction and a transmission; sound wants an absorption coefficient and a source strength.
-    Neither belongs in the other's table, and neither belongs here.
+    Three storage buffers — the hierarchies, the triangles they index, and the placements of them —
+    and nothing else. There is deliberately no material table here and no image: a material is a
+    property of a *sense*, not of the Grid, and the two senses disagree about what a surface is. Light
+    wants a colour, an index of refraction and a transmission; sound wants an absorption coefficient
+    and a source strength. Neither belongs in the other's table, and neither belongs here.
 
     This exists because the hierarchy has two readers. It used to live inside `Tracer` as three
     private members, which was correct while the renderer was the only thing that traced anything;
@@ -40,11 +40,15 @@ class Device; // forward declaration
     `grid_bvh.slang` keeps it on the device side.
 
     Immutable once built, and **it stays that way even when creatures move**. Phase 6 adds bodies, but
-    they do not join this hierarchy: they get their own, under a small top level that holds one box
-    per instance, so the Grid's own structure is never rebuilt and a rigid body's is built once when
-    it is rezzed. Rebuilding everything each tick would cost 31 ms with twenty creatures against
-    0.0031 ms for the top level alone — see `docs/ARCHITECTURE.md` § One hierarchy today, two when
-    creatures move, and Etape 10 in TODO.md.
+    they do not join this hierarchy: they get their own, under the top level that already exists here
+    and today holds a single box — the Grid's, at the identity. The Grid's own structure is therefore
+    never rebuilt, and a rigid body's is built once when it is rezzed. Rebuilding everything each tick
+    would cost 31 ms with twenty creatures against 0.0031 ms for the top level alone — see
+    `docs/ARCHITECTURE.md` § One hierarchy today, two when creatures move.
+
+    That the one instance sits at the identity is what makes the arrangement cheap to trust: the
+    two-level traversal must produce the very same picture the single-level one did, to the bit, and
+    it does.
 */
 class World {
 public:
@@ -77,6 +81,23 @@ public:
     }
 
     /*!
+        Returns the instance buffer, 144 bytes per placement.
+
+        The top level. Today it holds exactly one entry — the Grid, at the identity — and a creature
+        body will be another. See `BvhLib::InstanceRecord`.
+    */
+    [[nodiscard]] vk::Buffer instances() const
+    {
+        return *m_instances.buffer;
+    }
+
+    //! Returns the number of placements in the top level. Never zero: an empty Grid is still placed.
+    [[nodiscard]] uint32_t instanceCount() const
+    {
+        return m_instance_count;
+    }
+
+    /*!
         Returns the number of nodes in the hierarchy.
 
         Zero means an empty Grid. Every shader that traverses this must check it and miss, because
@@ -95,12 +116,14 @@ public:
     }
 
 private:
-    uint32_t m_node_count{0u}; //!< Nodes in the hierarchy; zero means an empty Grid.
-    uint32_t m_triangle_count{0u}; //!< Triangles the hierarchy indexes.
+    uint32_t m_node_count{0u}; //!< Nodes across every geometry; zero means an empty Grid.
+    uint32_t m_triangle_count{0u}; //!< Triangles the hierarchies index.
+    uint32_t m_instance_count{0u}; //!< Placements in the top level.
 
-    //! One block behind both buffers, rather than one allocation each. Declared first so it outlives them.
+    //! One block behind all three buffers, rather than one allocation each. Declared first so it outlives them.
     MemoryArena m_arena;
 
-    VulkanHelpers::DeviceBuffer m_nodes; //!< Hierarchy nodes, 32 bytes each.
-    VulkanHelpers::DeviceBuffer m_triangles; //!< Triangles in leaf order, 48 bytes each.
+    VulkanHelpers::DeviceBuffer m_nodes; //!< Hierarchy nodes, 32 bytes each, every geometry concatenated.
+    VulkanHelpers::DeviceBuffer m_triangles; //!< Triangles in leaf order, 48 bytes each, in the same order.
+    VulkanHelpers::DeviceBuffer m_instances; //!< Placements, 144 bytes each.
 };

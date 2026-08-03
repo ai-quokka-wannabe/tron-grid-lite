@@ -256,4 +256,82 @@ namespace BvhLib
     */
     [[nodiscard]] Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance);
 
+    /*!
+        One instance in the form the shader reads: 144 bytes, std430, ready to upload.
+
+        `Scene` is the shape the host wants — a vector of hierarchies and a vector of placements that
+        index them. A shader cannot have a vector of vectors, so the geometries are concatenated into
+        one node buffer and one triangle buffer and each instance carries the offsets of its own
+        range. `flatten` does that; this is what comes out.
+
+        **The transforms are stored as three rows rather than as a matrix, deliberately.** A matrix in
+        a buffer means agreeing with the shader compiler about row-major against column-major, and
+        that agreement is exactly the kind of duplicated fact with nothing holding the two copies
+        together that this repository has been bitten by before. Three `float4` rows of an affine
+        transform have precisely one interpretation, the shader multiplies them out by hand, and the
+        bottom row of an affine matrix is always (0, 0, 0, 1) so nothing is lost by not storing it.
+
+        | Offset | Size | Member              | std430 equivalent |
+        |-------:|-----:|---------------------|-------------------|
+        |      0 |   48 | `to_instance_row*`  | `float4` x 3      |
+        |     48 |   48 | `to_world_row*`     | `float4` x 3      |
+        |     96 |   12 | `bounds_min`        | `float3`          |
+        |    108 |    4 | `node_offset`       | `uint`            |
+        |    112 |   12 | `bounds_max`        | `float3`          |
+        |    124 |    4 | `triangle_offset`   | `uint`            |
+        |    128 |    4 | `node_count`        | `uint`            |
+        |    132 |   12 | padding             | `uint` x 3        |
+    */
+    struct InstanceRecord {
+        MathLib::Vec4 to_instance_row0{}; //!< First row of the world-to-instance transform.
+        MathLib::Vec4 to_instance_row1{};
+        MathLib::Vec4 to_instance_row2{};
+        MathLib::Vec4 to_world_row0{}; //!< First row of the instance-to-world transform, for normals.
+        MathLib::Vec4 to_world_row1{};
+        MathLib::Vec4 to_world_row2{};
+
+        MathLib::Vec3 bounds_min{}; //!< World-space bounds, for the top level's rejection test.
+        uint32_t node_offset{0u}; //!< Where this instance's geometry begins in the shared node buffer.
+        MathLib::Vec3 bounds_max{};
+        uint32_t triangle_offset{0u}; //!< Where this instance's geometry begins in the shared triangle buffer.
+
+        uint32_t node_count{0u}; //!< Nodes in this instance's geometry. Zero means the shader skips it.
+        uint32_t padding0{0u}; //!< Unused; present so the layout matches std430 exactly.
+        uint32_t padding1{0u};
+        uint32_t padding2{0u};
+    };
+
+    /*!
+        A scene in the form three storage buffers want.
+
+        One node buffer, one triangle buffer, one instance buffer — nothing else, and no indirection
+        beyond the offsets each record carries.
+    */
+    struct FlatScene {
+        std::vector<Node> nodes; //!< Every geometry's nodes, concatenated in geometry order.
+        std::vector<Triangle> triangles; //!< Every geometry's triangles, concatenated in the same order.
+        std::vector<InstanceRecord> instances; //!< One record per instance, in the scene's own order.
+    };
+
+    /*!
+        Concatenates a scene's geometries and resolves each instance to offsets into the result.
+
+        Instance order is preserved exactly, so a `Hit::instance` from the shader means the same
+        placement it means on the host.
+
+        **A triangle index from the flat form is global**, into `FlatScene::triangles`, where a
+        `Hit::triangle` from `intersectScene` is local to the instance's own geometry. That is not an
+        inconsistency to iron out: the host has the per-geometry array to index and the shader does
+        not, so each returns an index into the array it actually has. The shader adds the offset as it
+        goes, which costs nothing and saves every caller from having to.
+
+        An instance naming a geometry that does not exist is emitted with a node count of zero, which
+        is the flat spelling of the skip `intersectScene` performs — an empty geometry is silent
+        rather than an error, matching how an empty `Bvh` behaves everywhere else here.
+
+        \param scene Geometries and the instances placing them.
+        \return The three arrays, ready for a `std::memcpy` into mapped buffers.
+    */
+    [[nodiscard]] FlatScene flatten(const Scene& scene);
+
 } // namespace BvhLib

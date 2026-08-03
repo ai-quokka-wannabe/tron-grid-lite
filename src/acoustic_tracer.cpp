@@ -40,7 +40,7 @@ namespace
         MathLib::Vec4 air_absorption_db_per_km;
         uint32_t direction_count;
         uint32_t max_order;
-        uint32_t node_count;
+        uint32_t instance_count;
         uint32_t material_count;
         float range_metres;
     };
@@ -121,7 +121,7 @@ AcousticTracer::AcousticTracer(const Device& device, const World& world, const s
     m_logger->logInfo("Acoustic pass allocated: " + std::to_string(max_ears) + " ears, " + std::to_string(Acoustics::BAND_COUNT) + " bands by "
         + std::to_string(Acoustics::BIN_COUNT) + " bins, " + std::to_string(histogram_bytes) + " bytes of histogram.");
 
-    std::array<vk::DescriptorSetLayoutBinding, 5> bindings{};
+    std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
     for (uint32_t index{0u}; index < bindings.size(); ++index) {
         bindings[index] = vk::DescriptorSetLayoutBinding{
             .binding = index, .descriptorType = vk::DescriptorType::eStorageBuffer, .descriptorCount = 1u, .stageFlags = vk::ShaderStageFlagBits::eCompute};
@@ -143,13 +143,14 @@ AcousticTracer::AcousticTracer(const Device& device, const World& world, const s
 
     // One set, written once: unlike the renderer's output images, none of these buffers is
     // per-frame, so there is nothing here that a resize or a frame index could invalidate.
-    const std::array<vk::DescriptorBufferInfo, 5> buffer_infos{vk::DescriptorBufferInfo{.buffer = m_world->nodes(), .offset = 0u, .range = vk::WholeSize},
+    const std::array<vk::DescriptorBufferInfo, 6> buffer_infos{vk::DescriptorBufferInfo{.buffer = m_world->nodes(), .offset = 0u, .range = vk::WholeSize},
         vk::DescriptorBufferInfo{.buffer = m_world->triangles(), .offset = 0u, .range = vk::WholeSize},
         vk::DescriptorBufferInfo{.buffer = *m_source_strengths.buffer, .offset = 0u, .range = vk::WholeSize},
         vk::DescriptorBufferInfo{.buffer = *m_ears, .offset = 0u, .range = vk::WholeSize},
-        vk::DescriptorBufferInfo{.buffer = *m_histogram, .offset = 0u, .range = vk::WholeSize}};
+        vk::DescriptorBufferInfo{.buffer = *m_histogram, .offset = 0u, .range = vk::WholeSize},
+        vk::DescriptorBufferInfo{.buffer = m_world->instances(), .offset = 0u, .range = vk::WholeSize}};
 
-    std::array<vk::WriteDescriptorSet, 5> writes{};
+    std::array<vk::WriteDescriptorSet, 6> writes{};
     for (uint32_t index{0u}; index < writes.size(); ++index) {
         writes[index] = vk::WriteDescriptorSet{.dstSet = *m_descriptor_sets[0],
             .dstBinding = index,
@@ -221,7 +222,7 @@ void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, uint3
             config.air_absorption_db_per_km[3]},
         .direction_count = config.direction_count,
         .max_order = config.max_order,
-        .node_count = m_world->nodeCount(),
+        .instance_count = m_world->instanceCount(),
         .material_count = m_material_count,
         .range_metres = config.range_metres};
 

@@ -30,6 +30,7 @@
 //     binding 1 : StructuredBuffer<Node>     nodes       — 32 bytes each, element 0 is the root.
 //     binding 2 : StructuredBuffer<Triangle> triangles   — 48 bytes each, in leaf order.
 //     binding 3 : StructuredBuffer<Material> materials   — 32 bytes each, indexed per triangle.
+//     binding 4 : StructuredBuffer<Instance> instances   — 144 bytes each, the top level.
 //
 // Push constants (80 bytes):
 //     offset  0, size 16 : camera_position   — xyz world space, w unused.
@@ -38,7 +39,7 @@
 //     offset 48, size 16 : pixel_delta_v     — xyz direction change per pixel step in y.
 //     offset 64, size  8 : resolution        — output image size in pixels.
 //     offset 72, size  4 : max_bounces       — total ray segments per pixel, at least 1.
-//     offset 76, size  4 : node_count        — zero means an empty Grid; the kernel writes black.
+//     offset 76, size  4 : instance_count    — placements in the top level; zero means every ray misses.
 //
 //     The tracer writes linear radiance and nothing else: exposure, tone mapping and sRGB encoding
 //     all belong to postprocess.slang, which sees the bloom chain as well.
@@ -68,7 +69,7 @@ struct TracePushConstants
     float4 pixel_delta_v;
     uint2 resolution;
     uint max_bounces;
-    uint node_count;
+    uint instance_count;
 };
 
 [[vk::push_constant]]
@@ -86,6 +87,9 @@ StructuredBuffer<Triangle> triangles;
 
 [[vk::binding(3, 0)]]
 StructuredBuffer<Material> materials;
+
+[[vk::binding(4, 0)]]
+StructuredBuffer<Instance> instances;
 
 /*!
     Schlick's approximation to the Fresnel term.
@@ -201,7 +205,7 @@ float3 radiance(float3 primary_origin, float3 primary_direction)
             current = stack[stack_size];
         }
 
-        const Hit hit = trace(nodes, triangles, push.node_count, current.origin, current.direction, 10000.0);
+        const Hit hit = traceScene(instances, push.instance_count, nodes, triangles, current.origin, current.direction, 10000.0);
 
         if (!hit.valid)
         {
@@ -213,9 +217,26 @@ float3 radiance(float3 primary_origin, float3 primary_direction)
         const Triangle triangle = triangles[hit.triangle];
         const Material material = materials[triangle.material];
 
-        // Flat shading throughout: the geometry is emitted per face, so the geometric normal is
-        // the only normal there is, and the faceted look is the intended one.
-        const float3 face_normal = normalize(cross(triangle.edge1, triangle.edge2));
+        /*
+            Flat shading throughout: the geometry is emitted per face, so the geometric normal is the
+            only normal there is, and the faceted look is the intended one.
+
+            The edges are in the instance's own frame, so the normal has to come back out to world
+            space before anything reflects about it. The rotation part of `to_world` does that for a
+            rigid placement, which is what a creature body is: for a rotation the inverse-transpose is
+            the rotation itself, so this is exact rather than approximate.
+
+            **Under a non-uniform scale it would not be**, and the correct transform there is the
+            inverse-transpose, which this record does not carry. Nothing places a scaled instance
+            today. The moment something does, this is the line that is wrong, and `BvhLib::Hit` says
+            the same thing on the host side.
+
+            The Grid sits at the identity, where every one of these products is exact, which is why
+            the recorded render hash is unchanged by the two-level path.
+        */
+        const Instance instance = instances[hit.instance];
+        const float3 local_normal = cross(triangle.edge1, triangle.edge2);
+        const float3 face_normal = normalize(transformDirection(instance.to_world_row0, instance.to_world_row1, instance.to_world_row2, local_normal));
 
         // Which side the ray arrives from decides both the normal to reflect about and whether
         // the refracted ray is entering the material or leaving it.
