@@ -24,7 +24,7 @@ namespace
 
 } // namespace
 
-World::World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& logger) :
+World::World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& logger, const MathLib::Mat4& to_world) :
     m_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, BUFFER_BLOCK_BYTES)
 {
     /*
@@ -40,7 +40,7 @@ World::World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& l
     */
     BvhLib::Scene scene{};
     scene.geometries.push_back(bvh);
-    scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, MathLib::Mat4::identity()));
+    scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, to_world));
 
     const BvhLib::FlatScene flat{BvhLib::flatten(scene)};
 

@@ -72,11 +72,24 @@ public struct Triangle
 /*!
     One placement of a geometry, exactly as `BvhLib::InstanceRecord` lays it out: 144 bytes, std430.
 
-    The transforms arrive as three rows rather than as a `float4x4` on purpose. A matrix in a buffer
-    means agreeing with the compiler about row-major against column-major, and this repository has
-    been bitten before by a fact duplicated across a boundary with nothing holding the copies
-    together. Three rows have one interpretation, `transformPoint` multiplies them out by hand, and
-    the bottom row of an affine transform is always (0, 0, 0, 1) so nothing is lost by omitting it.
+    The transforms arrive as three rows rather than as a `float4x4`, and the reason is narrower than
+    it first looks — **a `float4x4` was tried, and it works.** Declaring the record with two of them
+    and reading them with `mul(matrix, vector)` agrees with `MathLib::Mat4`'s column-major storage
+    exactly, giving numbers identical to these to every digit `--verify-scene` prints, at the identity
+    and at an angle alike. So this is not a workaround for a broken toolchain.
+
+    What it avoids is a dependency on a compiler *option*. Slang's matrix layout is a flag, the
+    agreement above holds for its default, and the mistake it would produce is a transpose — which
+    for a rotation is the inverse, so the geometry would still look like geometry while being wrong.
+    Three rows have exactly one interpretation and cannot express that mistake.
+
+    That would be a thin argument if a check caught the flip. One does — `--verify-scene` — but it
+    needs a GPU, so it never runs in CI and fires only when somebody remembers it on a machine with a
+    device attached. Given a choice between a layout that cannot go wrong and a layout whose check is
+    manual, this repository takes the first, the same way it prefers a `static_assert` to a comment.
+
+    `transformPoint` multiplies the rows out by hand, and the bottom row of an affine transform is
+    always (0, 0, 0, 1), so omitting it loses nothing and saves 32 bytes an instance.
 */
 public struct Instance
 {
