@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--verify-scene`, which is the first thing that ever makes the device trace a transform.**
+  Everything before it held the shader to the host at the identity, where a matrix and its transpose
+  are the same sixteen numbers, so a layout mistake, a `to_world` used where `to_instance` was meant,
+  and a correct implementation are indistinguishable. It is the existing acoustic comparison run with
+  the Grid placed at an off-axis rotation and an unround translation, and it agrees as tightly there
+  as at the identity: 0.000017% and 0.000170% on the totals.
+
+  Getting there needed `Acoustics::gather` to accept a `BvhLib::Scene`, and the single-hierarchy
+  overload is now written in terms of it — a lone hierarchy is a scene of one instance at the
+  identity, exactly as it is on the device. One gather rather than two to keep in step.
+
+  **A rotated world cannot be checked against an unrotated copy of itself**, which is what this tried
+  first. The direction fan is built in world space, so rotating the world re-aims every ray and a
+  finite set of them samples different paths; the few per cent it disagreed by was the sampling
+  moving, not the transform being wrong. Two implementations sampling the *same* fan against the
+  *same* placement is the comparison that means something.
+
+- **`--benchmark`, which reports what each GPU pass costs** from the device's own timestamps, with no
+  file writing and no readback, after ten discarded warm-up frames. The interactive loop has always
+  profiled itself but draws on demand, so it cannot be pointed at a fixed amount of work; timing
+  `--record` instead buries the pass under PPM writing, with a run-to-run spread of ten per cent
+  against this instrument's two.
+
+  With it, the second level's cost is finally a number rather than a shrug: **3.342 ms against
+  3.356 ms** for the trace pass at 1280×720, best of three, the two overlapping. It costs nothing
+  measurable at one instance, which is what one extra slab test and two affine transforms per segment
+  ought to cost against a descent through 24,952 triangles. The whole frame is 3.7 ms, so 270 frames
+  a second on the reference GPU.
+
 - **Both senses now trace a two-level hierarchy**, on the GPU as well as the host. `grid_bvh.slang`
   gained `traceScene` and `Instance`, `BvhLib::flatten` turns a `Scene` into the three storage buffers
   a shader can actually index, and the Grid is uploaded as **one instance at the identity** rather
@@ -110,6 +139,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the discrete device. Both exist for cross-vendor testing rather than for configuration.
 
 ### Changed
+
+- **The three-row transform layout is now a decision rather than an avoidance.** A `float4x4` was
+  tried and it *works*: Slang reads one from a std430 buffer in agreement with `MathLib::Mat4`'s
+  column-major storage, giving numbers identical to the row form at the identity and at an angle. The
+  rows stay because matrix layout in Slang is a compiler *option* and the mistake it would produce is
+  a transpose — which for a rotation is the inverse, so the geometry would still look like geometry
+  while being wrong. `--verify-scene` would catch that, but it needs a GPU and therefore never runs in
+  CI. Between a layout that cannot go wrong and a layout whose check is manual, this repository takes
+  the first.
+
+- **`Acoustics::gather` takes a scene**, and the single-hierarchy overload is written in terms of it
+  rather than beside it. One gather to keep correct, and the placement Phase 6 needs already present.
 
 - **The hierarchy question that gated Phase 6 is decided: two levels, not a faster builder.** Putting
   creature bodies in the Grid's single hierarchy means rebuilding it every tick — measured at

@@ -74,6 +74,25 @@ IEEE-754 pins neither fused-multiply-add contraction nor the transcendentals. Th
 measured rather than assumed; see [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md)
 § Determinism and Replay.
 
+## Checking it
+
+Three modes run headless and answer a question rather than drawing a picture. Each needs a GPU, so
+none of them runs in CI.
+
+| Command | Question |
+|---------|----------|
+| `--verify-acoustics` | Do the acoustic shader and the host gather agree? |
+| `--verify-scene` | Do they still agree with the Grid placed at an angle, where transform arithmetic can actually be wrong? |
+| `--benchmark` | What does each GPU pass cost? |
+
+```text
+Trace 3.342041 ms | post 0.294431 ms | frame 3.636273 ms.
+That is 275.006836 frames per second at 1280x720, GPU only.
+```
+
+`--benchmark` reports the device's own timestamps after discarding ten warm-up frames, and walks the
+same fixed camera path `--record` does so that two runs compare. It writes nothing.
+
 ## Platforms
 
 | Platform | Windowing | Status |

@@ -85,9 +85,21 @@ namespace Acoustics
 
     ImpulseResponse gather(const BvhLib::Bvh& bvh, const std::vector<float>& source_strengths, const MathLib::Vec3& ear, const GatherConfig& config)
     {
+        // One geometry at the identity, which is what the Grid is on the device as well. Expressing
+        // the simple case as the general one rather than beside it means there is a single gather to
+        // keep correct, and the placement that Phase 6 needs costs nothing to have already.
+        BvhLib::Scene scene{};
+        scene.geometries.push_back(bvh);
+        scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, MathLib::Mat4::identity()));
+
+        return gather(scene, source_strengths, ear, config);
+    }
+
+    ImpulseResponse gather(const BvhLib::Scene& scene, const std::vector<float>& source_strengths, const MathLib::Vec3& ear, const GatherConfig& config)
+    {
         ImpulseResponse response{};
 
-        if (bvh.nodes.empty() || source_strengths.empty() || (config.direction_count == 0u)) {
+        if (scene.instances.empty() || source_strengths.empty() || (config.direction_count == 0u)) {
             return response;
         }
 
@@ -110,14 +122,15 @@ namespace Acoustics
                     break;
                 }
 
-                const BvhLib::Hit hit{BvhLib::intersect(bvh, origin, direction, remaining)};
+                const BvhLib::Hit hit{BvhLib::intersectScene(scene, origin, direction, remaining)};
                 if (!hit.valid) {
                     break; // Escaped. The Grid is an open plane, so most rays end here.
                 }
 
                 path += hit.distance;
 
-                const BvhLib::Triangle& triangle{bvh.triangles[hit.triangle]};
+                const BvhLib::Instance& instance{scene.instances[hit.instance]};
+                const BvhLib::Triangle& triangle{scene.geometries[instance.geometry].triangles[hit.triangle]};
                 /*
                     A material index past the end of the table is a caller error, but reading past a
                     vector's end is undefined behaviour and would be found by a crash somewhere else
@@ -155,7 +168,12 @@ namespace Acoustics
                     terms applied at the deposit. See the note in the header for why that is safe on
                     an open plane and where it would stop being safe.
                 */
-                const MathLib::Vec3 face_normal{triangle.edge1.cross(triangle.edge2).normalised()};
+                // Out to world space before reflecting, because the edges are in the instance's own
+                // frame and the ray is not. Exact for a rigid placement; under a non-uniform scale
+                // the inverse-transpose would be needed instead. `acoustics.slang` does the same
+                // thing with the same three rows, and this is the line it is held to.
+                const MathLib::Vec4 rotated{instance.to_world * MathLib::Vec4::fromVec3(triangle.edge1.cross(triangle.edge2), 0.0f)};
+                const MathLib::Vec3 face_normal{MathLib::Vec3{rotated.x, rotated.y, rotated.z}.normalised()};
 
                 // Reflect about the face the ray actually arrived at, whichever side that is: a
                 // creature standing in a terrace hollow hears its walls from the inside.

@@ -337,15 +337,33 @@ Two properties make that affordable:
 - **The Grid is one instance among a handful.** The top level holds the Grid's box plus one per body,
   so it is a structure over twenty-odd objects, not over fifty thousand triangles.
 
-**Measured, once it was built, and the honest answer is that it does not show.** Forty frames at
-1280×720, best of three, runs interleaved between the two binaries: 14.86 s single-level against
-14.82 s two-level. Run-to-run spread is about 10% and the first run of any binary is the slowest, so
-this measurement rules out a meaningful regression and cannot resolve a small one.
+**Measured with `--benchmark`, which reports the GPU's own timestamps per pass.** Sixty frames at
+1280×720 on the GTX 1650 Ti after ten warm-up frames, best of three runs, the two paths differing only
+in whether `trace.slang` calls `traceScene` or the single-level `trace`:
 
-Interleaving mattered. Run back-to-back rather than alternated, the two-level binary looked **7%
-faster** in three consecutive runs — an entirely believable result, and an artefact of warm-up. A
-per-pass figure needs the GPU profiler's Trace timing from an interactive session, which the recording
-path does not produce.
+| Trace pass | Best of three | Spread |
+|------------|--------------:|-------:|
+| One level | 3.356 ms | 1.8% |
+| Two levels | 3.342 ms | 2.4% |
+
+**The second level costs nothing measurable at one instance** — the two overlap, and the 0.4%
+separating them points the wrong way to be real. That is what the mechanism predicts: one extra slab
+test and two affine transforms per ray segment, against a descent through a tree of depth 17 over
+24,952 triangles. Under one per cent is where it should land, and under one per cent is where the
+instrument stops being able to see it.
+
+The whole frame is 3.7 ms, so 270 frames a second at 1280×720 on the reference GPU, tracing only.
+
+Two notes on how to measure this, both learned by getting it wrong first:
+
+- **Do not measure through `--record`.** Most of its wall clock is writing PPM files, which buries the
+  pass under a run-to-run spread of ten per cent. That measurement showed a difference of a tenth of a
+  per cent and could not have detected one ten times larger.
+- **Interleave runs, and distrust a result with no mechanism whichever way it points.** Run
+  back-to-back rather than alternated, the two-level binary appeared **7% faster** three times in a
+  row. It was warm-up. Nothing about adding a level of indirection makes tracing faster, and that
+  alone should have been enough to hold the result — but it is worth noticing that the same
+  measurement 7% in the other direction would have looked exactly like the honest cost of the feature.
 
 The picture itself is unchanged to the byte on both GPUs, which is the stronger statement: the same
 rays reach the same triangles, so nothing above was traded for the flexibility.

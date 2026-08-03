@@ -53,14 +53,19 @@ class Device; // forward declaration
 class World {
 public:
     /*!
-        Uploads a hierarchy to device-local memory.
+        Uploads a hierarchy to device-local memory as a single instance.
 
         \param device Logical device.
         \param bvh Hierarchy to upload. May be empty, in which case every ray misses and both
                `nodeCount` and `triangleCount` report zero.
         \param logger Logger for the upload summary.
+        \param to_world Where to place it. The identity for the Grid, which is what every ordinary
+               run uses. **A non-identity value exists so that the device can be made to trace one**,
+               because otherwise nothing here ever exercises a transform on the GPU and the whole
+               two-level traversal is verified only in the one configuration where it cannot be
+               wrong — see `--verify-scene`.
     */
-    World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& logger);
+    World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& logger, const MathLib::Mat4& to_world = MathLib::Mat4::identity());
 
     // Non-copyable, non-movable: it owns Vulkan objects that passes hold references to.
     World(const World&) = delete;

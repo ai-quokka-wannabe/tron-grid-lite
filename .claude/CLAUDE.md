@@ -123,6 +123,22 @@ if the *cross-vendor* disagreement moves, something has become genuinely less de
 A digest changes legitimately whenever the picture is meant to change. Update the table in the same
 commit, and say in the message what moved and why.
 
+## The three checks worth running
+
+None of these can run in CI, because all three need a GPU. They fire only when somebody remembers
+them on a machine with a device attached, which is the reason they are listed here rather than left
+to be discovered.
+
+| Command | Answers |
+|---------|---------|
+| `--verify-acoustics` | Does `acoustics.slang` compute what `Acoustics::gather` computes? |
+| `--verify-scene` | The same question with the Grid placed **at an angle**, which is the only way any transform arithmetic gets exercised on the device. At the identity a matrix and its transpose are the same sixteen numbers. |
+| `--benchmark` | What each GPU pass costs, from the device's own timestamps. Run-to-run spread about 2%, against 10% for timing `--record` with a wall clock. |
+
+`--benchmark` writes nothing and reads nothing back, discards ten warm-up frames, and walks the same
+fixed camera path as `--record` so that two runs are comparable. **Never measure a pass by timing
+`--record`** — most of that wall clock is PPM files.
+
 ## Hard-won rules
 
 Each of these cost real time at least once. They are here rather than in a journal because a lesson
@@ -139,6 +155,14 @@ written as a story is read once, and written as a rule it is read every session.
   figure in this repository was once wrong for this reason.
 - **A test that has never failed has not been tested.** Break the thing it guards, watch it go red,
   put it back. Two tests in this repository passed while asserting something a bug could not violate.
+- **Check that the comparison had something to compare.** Two implementations agreeing on *nothing
+  arriving* agree perfectly. `--verify-scene` reported host and device matching to the last digit on
+  its first run, because the listener had been left behind when the world moved; only the "did
+  anything arrive at all" floor noticed. Every comparison here carries such a floor, and each one was
+  added after it caught something.
+- **Distrust a measurement with no mechanism, whichever way it points.** A 7% speedup from adding a
+  level of indirection was warm-up. The same measurement 7% the other way would have looked exactly
+  like the honest cost of the feature, and would have been believed.
 - **Verify on both GPUs before claiming correctness** — see Target Hardware. Driver-specific
   behaviour is invisible on one.
 
@@ -173,6 +197,11 @@ Three questions, each of which has caught something more than once:
   search pattern was mangled identically to the replacement and the substitution matched itself.
   Write source through the editing tools. If a backslash must go through Python, build it as
   `bytes([92])` and never as an escape. CI now fails on any carriage return in a tracked text file.
+- **A multi-line search-and-replace over a source file matches nothing.** Working copies here are
+  CRLF, so a pattern written with `\n` line endings is simply absent. The danger is not the failure,
+  it is that a *series* of replacements half-applies: the single-line ones succeed while the
+  multi-line ones silently do not, and the script reports success. That is how a descriptor array got
+  resized without gaining its new entries, which cost a device lost. Again: use the editing tools.
 
 **Code scanning**
 

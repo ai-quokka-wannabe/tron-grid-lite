@@ -531,6 +531,118 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
 }
 
 /*!
+    Renders frames as fast as the device will take them and reports what each pass cost.
+
+    **This is the only way to get a per-pass figure out of this renderer without a human at the
+    keyboard.** The interactive loop has always profiled itself, but it draws on demand and stops when
+    nothing changes, so it cannot be pointed at a fixed amount of work; and `--record` spends most of
+    its wall clock writing PPM files, which buries the pass being measured. Attempting to measure the
+    two-level traversal through the recording path gave a difference of a tenth of a per cent with a
+    run-to-run spread of ten, and, run back to back rather than interleaved, briefly appeared to show
+    a seven per cent speedup that was nothing but warm-up.
+
+    So this mode writes nothing and reads nothing back. It walks the same cinematic path for the same
+    reason the recording does — a fixed camera path makes two runs comparable — and reports the GPU's
+    own timestamps rather than a wall clock, which removes the submission overhead and the host
+    entirely.
+
+    The first frames are discarded. Shader compilation, memory residency and the clock ramping up all
+    land on them, and including them is what made the recording measurement lie.
+
+    \param device Logical device.
+    \param tracer The renderer.
+    \param post_process The tone-mapping and bloom stage.
+    \param logger Logger for the report.
+    \param width Render width.
+    \param height Render height.
+    \param frame_count Frames to time, after the warm-up.
+    \return EXIT_SUCCESS.
+*/
+int benchmark(const Device& device, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, uint32_t width, uint32_t height, uint32_t frame_count)
+{
+    const uint32_t max_extent{device.physicalDevice().getProperties().limits.maxImageDimension2D};
+    if ((width == 0u) || (height == 0u) || (width > max_extent) || (height > max_extent)) {
+        throw std::runtime_error{"Benchmark size must be between 1x1 and " + std::to_string(max_extent) + "x" + std::to_string(max_extent) + "."};
+    }
+
+    const vk::Extent2D extent{width, height};
+    tracer.resize(extent);
+    post_process.resize(extent, tracer.outputViews());
+
+    // One slot, because this loop waits for each frame before recording the next. The profiler's
+    // ping-pong exists for frames in flight, and there are none here.
+    GpuProfiler profiler{device, 1u, logger};
+
+    const vk::raii::CommandPool command_pool{
+        device.get(), vk::CommandPoolCreateInfo{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()}};
+    vk::raii::CommandBuffers command_buffers{
+        device.get(), vk::CommandBufferAllocateInfo{.commandPool = *command_pool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1u}};
+    const vk::raii::CommandBuffer& command_buffer{command_buffers.front()};
+
+    const vk::raii::Fence fence{device.get(), vk::FenceCreateInfo{}};
+
+    const CinematicPath path;
+    Camera camera{};
+
+    // Enough to get past compilation and the clock ramp, and few enough not to dominate a short run.
+    constexpr uint32_t WARM_UP_FRAMES{10u};
+    const uint32_t total_frames{frame_count + WARM_UP_FRAMES};
+
+    logger.logInfo("Benchmarking " + std::to_string(frame_count) + " frames at " + std::to_string(width) + "x" + std::to_string(height) + ", after "
+        + std::to_string(WARM_UP_FRAMES) + " warm-up frames.");
+
+    for (uint32_t frame{0u}; frame < total_frames; ++frame) {
+        path.apply(camera, static_cast<float>(frame) / static_cast<float>(total_frames));
+
+        command_buffer.reset();
+        command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
+
+        profiler.resetFrame(command_buffer, 0u);
+        profiler.begin(command_buffer, 0u, GpuPass::Frame);
+
+        profiler.begin(command_buffer, 0u, GpuPass::Trace);
+        tracer.record(command_buffer, 0u, camera, MAX_BOUNCES);
+        profiler.end(command_buffer, 0u, GpuPass::Trace);
+
+        profiler.begin(command_buffer, 0u, GpuPass::Post);
+        post_process.record(command_buffer, 0u, BLOOM_THRESHOLD, BLOOM_STRENGTH, VIGNETTE_STRENGTH, EXPOSURE);
+        profiler.end(command_buffer, 0u, GpuPass::Post);
+
+        profiler.end(command_buffer, 0u, GpuPass::Frame);
+        command_buffer.end();
+
+        device.get().resetFences({*fence});
+        device.graphicsQueue().submit({vk::SubmitInfo{.commandBufferCount = 1u, .pCommandBuffers = &*command_buffer}}, *fence);
+        while (device.get().waitForFences({*fence}, vk::True, UINT64_MAX) == vk::Result::eTimeout) {
+            // Retry — a timeout here is not an error.
+        }
+
+        // Only after the fence, which is what makes the readback free of any wait of its own. The
+        // warm-up frames are submitted and then deliberately not collected, so they contribute
+        // nothing to the moving average rather than being averaged away slowly.
+        if (frame >= WARM_UP_FRAMES) {
+            profiler.collect(0u);
+        }
+    }
+
+    device.get().waitIdle();
+
+    const float trace_ms{profiler.averageMs(GpuPass::Trace)};
+    const float post_ms{profiler.averageMs(GpuPass::Post)};
+    const float frame_ms{profiler.averageMs(GpuPass::Frame)};
+
+    logger.logInfo("Trace " + std::to_string(static_cast<double>(trace_ms)) + " ms | post " + std::to_string(static_cast<double>(post_ms)) + " ms | frame "
+        + std::to_string(static_cast<double>(frame_ms)) + " ms.");
+
+    if (frame_ms > 0.0f) {
+        logger.logInfo("That is " + std::to_string(static_cast<double>(1000.0f / frame_ms)) + " frames per second at " + std::to_string(width) + "x"
+            + std::to_string(height) + ", GPU only.");
+    }
+
+    return EXIT_SUCCESS;
+}
+
+/*!
     Runs the acoustic gather on both the CPU and the GPU and reports how far apart they are.
 
     The acceptance criterion `docs/ACOUSTICS.md` asks for, and the one that actually matters: the
@@ -553,21 +665,21 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
     \param shader_directory Directory holding `acoustics.spv`.
     \return EXIT_SUCCESS if the two agree within tolerance.
 */
-int verifyAcoustics(const Device& device, const World& world, const BvhLib::Bvh& bvh, const std::vector<MathLib::Vec3>& ears, LoggingLib::Logger& logger,
-    const std::filesystem::path& shader_directory)
+//! One device-side gather, and how long the submission took.
+struct DeviceGather {
+    std::vector<Acoustics::ImpulseResponse> responses; //!< One per ear, in the order given.
+    float milliseconds{0.0f}; //!< Submit to fence, including submission overhead.
+};
+
+/*!
+    Runs the acoustic pass once against a world and returns what every ear heard.
+
+    Split out of `verifyAcoustics` so that the world it traces is a parameter rather than a fixture,
+    which is what lets one check run at the identity and at an angle.
+*/
+[[nodiscard]] DeviceGather runDeviceGather(const Device& device, const World& world, const std::vector<float>& source_strengths, const std::vector<MathLib::Vec3>& ears,
+    const Acoustics::GatherConfig& config, const std::filesystem::path& shader_directory, LoggingLib::Logger& logger)
 {
-    const std::vector<float> source_strengths{Acoustics::makeAcousticSourceStrengths()};
-
-    Acoustics::GatherConfig config{};
-
-    // Deliberately not flat: a spectrum applied to the wrong band, or applied once rather than per
-    // band, would look perfectly correct against four equal numbers.
-    config.hum_spectrum = {{1.0f, 0.8f, 0.5f, 0.2f}};
-
-    // Likewise deliberately not zero. This is the one term that depends on both the band and the
-    // accumulated path, so it is where a per-band mistake and a path-length mistake would both show.
-    config.air_absorption_db_per_km = {{5.0f, 9.0f, 22.9f, 76.6f}};
-
     AcousticTracer acoustic_tracer{device, world, source_strengths, static_cast<uint32_t>(ears.size()), (shader_directory / "acoustics.spv").string(), logger};
     acoustic_tracer.setEars(ears);
 
@@ -581,7 +693,7 @@ int verifyAcoustics(const Device& device, const World& world, const BvhLib::Bvh&
     acoustic_tracer.record(command_buffer, static_cast<uint32_t>(ears.size()), config);
     command_buffer.end();
 
-    const std::chrono::steady_clock::time_point gpu_start{std::chrono::steady_clock::now()};
+    const std::chrono::steady_clock::time_point start{std::chrono::steady_clock::now()};
 
     const vk::raii::Fence fence{device.get(), vk::FenceCreateInfo{}};
     device.graphicsQueue().submit({vk::SubmitInfo{.commandBufferCount = 1u, .pCommandBuffers = &*command_buffer}}, *fence);
@@ -589,16 +701,78 @@ int verifyAcoustics(const Device& device, const World& world, const BvhLib::Bvh&
         // Retry — a timeout here is not an error.
     }
 
-    const float gpu_milliseconds{std::chrono::duration<float, std::milli>{std::chrono::steady_clock::now() - gpu_start}.count()};
+    DeviceGather gather{};
+    gather.milliseconds = std::chrono::duration<float, std::milli>{std::chrono::steady_clock::now() - start}.count();
+
+    gather.responses.reserve(ears.size());
+    for (uint32_t ear{0u}; ear < static_cast<uint32_t>(ears.size()); ++ear) {
+        gather.responses.push_back(acoustic_tracer.read(ear));
+    }
+    return gather;
+}
+
+//! The gather settings both verification modes use. Deliberately awkward numbers; see the comments.
+[[nodiscard]] Acoustics::GatherConfig makeVerificationConfig()
+{
+    Acoustics::GatherConfig config{};
+
+    // Deliberately not flat: a spectrum applied to the wrong band, or applied once rather than per
+    // band, would look perfectly correct against four equal numbers.
+    config.hum_spectrum = {{1.0f, 0.8f, 0.5f, 0.2f}};
+
+    // Likewise deliberately not zero. This is the one term that depends on both the band and the
+    // accumulated path, so it is where a per-band mistake and a path-length mistake would both show.
+    config.air_absorption_db_per_km = {{5.0f, 9.0f, 22.9f, 76.6f}};
+
+    return config;
+}
+
+int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vector<MathLib::Vec3>& ears, LoggingLib::Logger& logger,
+    const std::filesystem::path& shader_directory, const MathLib::Mat4& placement)
+{
+    const std::vector<float> source_strengths{Acoustics::makeAcousticSourceStrengths()};
+
+    const Acoustics::GatherConfig config{makeVerificationConfig()};
+
+    // Both sides are given the same placement, which is the whole point when it is not the identity:
+    // the host builds the scene it traces and the device is handed the same one.
+    BvhLib::Scene scene{};
+    scene.geometries.push_back(bvh);
+    scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, placement));
+
+    const World world{device, bvh, logger, placement};
+
+    /*
+        The ears are given in the geometry's frame and moved with it, so that a listener chosen to
+        stand among the terraces still stands among them wherever the Grid has been put. Left where
+        they were, they end up in empty space: the first run of this check at an angle reported that
+        host and device agreed to the last digit, on nothing at all, and only the "did anything
+        arrive" floor below noticed.
+
+        This is not an invariance argument and must not be mistaken for one. Both sides here use the
+        same ears and the same world-space direction fan, so the comparison is two implementations of
+        one arrangement. **Comparing a placed world against an unplaced one would not work**, because
+        the fan is generated in world space: rotating the world re-aims all of the rays, and a finite
+        set of them then samples a genuinely different set of paths. That was tried first, and the
+        few per cent it disagreed by was the sampling moving, not the transform being wrong.
+    */
+    std::vector<MathLib::Vec3> placed_ears;
+    placed_ears.reserve(ears.size());
+    for (const MathLib::Vec3& ear : ears) {
+        const MathLib::Vec4 moved{placement * MathLib::Vec4::fromVec3(ear, 1.0f)};
+        placed_ears.push_back(MathLib::Vec3{moved.x, moved.y, moved.z});
+    }
+
+    const DeviceGather gather{runDeviceGather(device, world, source_strengths, placed_ears, config, shader_directory, logger)};
 
     bool agreed{true};
 
     for (uint32_t ear{0u}; ear < static_cast<uint32_t>(ears.size()); ++ear) {
         const std::chrono::steady_clock::time_point cpu_start{std::chrono::steady_clock::now()};
-        const Acoustics::ImpulseResponse reference{Acoustics::gather(bvh, source_strengths, ears[ear], config)};
+        const Acoustics::ImpulseResponse reference{Acoustics::gather(scene, source_strengths, placed_ears[ear], config)};
         const float cpu_milliseconds{std::chrono::duration<float, std::milli>{std::chrono::steady_clock::now() - cpu_start}.count()};
 
-        const Acoustics::ImpulseResponse measured{acoustic_tracer.read(ear)};
+        const Acoustics::ImpulseResponse& measured{gather.responses[ear]};
 
         const float reference_total{reference.total()};
         const float measured_total{measured.total()};
@@ -664,7 +838,7 @@ int verifyAcoustics(const Device& device, const World& world, const BvhLib::Bvh&
         }
     }
 
-    logger.logInfo("Device gather for " + std::to_string(ears.size()) + " ears, submit to fence: " + std::to_string(static_cast<double>(gpu_milliseconds))
+    logger.logInfo("Device gather for " + std::to_string(ears.size()) + " ears, submit to fence: " + std::to_string(static_cast<double>(gather.milliseconds))
         + " ms, including submission overhead.");
 
     if (agreed) {
@@ -1063,6 +1237,8 @@ int main(int argc, char** argv)
             machine that has one.
         */
         bool verify_acoustics{false};
+        bool verify_scene{false};
+        bool benchmarking{false};
 
         /*
             Which GPU to run on, overriding the score.
@@ -1109,6 +1285,10 @@ int main(int argc, char** argv)
                 recording = true;
             } else if (argument == "--verify-acoustics") {
                 verify_acoustics = true;
+            } else if (argument == "--verify-scene") {
+                verify_scene = true;
+            } else if (argument == "--benchmark") {
+                benchmarking = true;
             } else if (argument == "--gpu") {
                 preferred_gpu = value(preferred_gpu);
             } else if (argument == "--list-gpus") {
@@ -1196,7 +1376,7 @@ int main(int argc, char** argv)
         PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};
         post_process.resize(swapchain.extent(), tracer.outputViews());
 
-        if (verify_acoustics) {
+        if (verify_acoustics || verify_scene) {
             /*
                 Two ears a head apart, standing where the terraces are rather than out on the flat,
                 so that the comparison exercises reflections and not only the direct arrival. Two
@@ -1206,7 +1386,28 @@ int main(int argc, char** argv)
             const float ground{gridMeshHeight(6.0f, -12.0f, floor_config)};
             const std::vector<MathLib::Vec3> ears{MathLib::Vec3{6.0f, ground + 1.7f, -12.0f}, MathLib::Vec3{6.2f, ground + 1.7f, -12.0f}};
 
-            return verifyAcoustics(device, world, bvh, ears, logger, shader_directory);
+            /*
+                The same check at two placements, which is the only difference between the two flags.
+
+                At the identity it asks whether the shader traces what the host traces. At an angle it
+                asks the same question of arithmetic that the identity cannot reach: a matrix and its
+                transpose are the same sixteen numbers there, so a layout mistake, a `to_world` used
+                where `to_instance` was meant, and a correct implementation are indistinguishable
+                until something is placed at an angle — which is the first thing Phase 6 will do.
+
+                The transform is deliberately awkward. A quarter turn about a single axis merely
+                permutes coordinates and lets several wrong matrices through; an off-axis rotation by
+                an unremarkable angle, composed with a translation of no round number, does not.
+            */
+            const MathLib::Mat4 placement{verify_scene
+                    ? MathLib::Mat4::translate(MathLib::Vec3{13.5f, -4.25f, 7.75f}) * MathLib::Mat4::rotate(MathLib::Vec3{0.37f, 0.84f, -0.4f}.normalised(), 1.234f)
+                    : MathLib::Mat4::identity()};
+
+            return verifyAcoustics(device, bvh, ears, logger, shader_directory, placement);
+        }
+
+        if (benchmarking) {
+            return benchmark(device, tracer, post_process, logger, record_width, record_height, record_frames);
         }
 
         if (recording) {

@@ -321,4 +321,25 @@ namespace Acoustics
     */
     [[nodiscard]] ImpulseResponse gather(const BvhLib::Bvh& bvh, const std::vector<float>& source_strengths, const MathLib::Vec3& ear, const GatherConfig& config);
 
+    /*!
+        The same gather over a scene of placed geometries.
+
+        The general form, and the one the other overload is written in terms of — a lone hierarchy is
+        a scene of one instance at the identity, which is exactly what it is on the device too. There
+        is therefore one gather here rather than two that must be kept in step.
+
+        This is what holds `acoustics.slang` to a specification when something is placed at an angle.
+        A gather cannot be checked against a rotated copy of itself: the direction set is built in
+        **world** space, so rotating the world re-aims all of the rays at different geometry, and a
+        finite fan then samples a genuinely different set of paths. Two implementations sampling the
+        *same* fan against the *same* placement is the comparison that means something.
+
+        \param scene Geometries and the instances placing them.
+        \param source_strengths Acoustic source strength per material slot.
+        \param ear World-space position of the ear, in metres.
+        \param config Spectrum, air absorption, ray budget and caps.
+        \return Energy per band per time bin.
+    */
+    [[nodiscard]] ImpulseResponse gather(const BvhLib::Scene& scene, const std::vector<float>& source_strengths, const MathLib::Vec3& ear, const GatherConfig& config);
+
 } // namespace Acoustics
