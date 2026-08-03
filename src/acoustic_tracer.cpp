@@ -68,6 +68,17 @@ namespace
     static_assert(Acoustics::SPEED_OF_SOUND == 343.0f, "acoustics.slang declares SPEED_OF_SOUND as 343.0.");
     static_assert(Acoustics::SURFACE_EPSILON == 1e-3f, "acoustics.slang declares SURFACE_EPSILON as 1e-3.");
 
+    /*
+        The one that was missing, and the one that mattered most.
+
+        Every acoustic ray's heading comes from this number. The two sides agreeing to the last bit is
+        what dropped the host-device disagreement by a factor of three hundred and let the acceptance
+        threshold be tightened from one per cent to a tenth of one — so of all the constants duplicated
+        across this boundary, it is the one whose drift the verification is most sensitive to, and it
+        was the only one with nothing holding the copies together.
+    */
+    static_assert(Acoustics::GOLDEN_TURN_FRACTION == 0.38196601125010515f, "acoustics.slang declares GOLDEN_TURN_FRACTION as 0.38196601125010515.");
+
     //! Creates a storage buffer and binds it into an arena, returning its mapped address if any.
     void* createArenaBuffer(const Device& device, MemoryArena& arena, vk::DeviceSize bytes, vk::raii::Buffer& buffer)
     {
