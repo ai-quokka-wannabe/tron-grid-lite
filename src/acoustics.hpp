@@ -123,6 +123,23 @@ namespace Acoustics
     inline constexpr float SURFACE_EPSILON{1e-3f};
 
     /*!
+        The golden angle as a fraction of a full turn: (3 - sqrt(5)) / 2.
+
+        A literal rather than a computation, and `acoustics.slang` carries the same one. Deriving it
+        from `sqrt(5)` on each side invites the two libraries to disagree in the last bit, which would
+        put every ray on a slightly different heading.
+
+        **It lives in the header so that it can be asserted against the shader's copy.** It used to be
+        a file-local constant in `acoustics.cpp`, which put it out of reach of the `static_assert`s in
+        `acoustic_tracer.cpp` that hold `BIN_SECONDS`, `SPEED_OF_SOUND` and `SURFACE_EPSILON` to their
+        Slang twins — so the one duplicated constant the whole direction set depends on was the one
+        with nothing holding the copies together. That is the exact pattern CLAUDE.md names as the
+        source of nearly every serious defect here, and it was sitting under the tightest verification
+        threshold in the repository.
+    */
+    inline constexpr float GOLDEN_TURN_FRACTION{0.38196601125010515f};
+
+    /*!
         Every surface on the Grid is a perfect acoustic mirror.
 
         No absorption, no transmission, no scattering and no frequency dependence: a surface returns

@@ -44,7 +44,7 @@ enum class GpuPass : uint32_t {
     Sensors, //!< Creature sensor renders — many tiny images per frame (Phase 6).
     Post, //!< Post-processing compute: tonemap and bloom (Phase 4).
     Present, //!< Blit or copy into the acquired swapchain image, plus any layout transitions.
-    Count //!< Sentinel — the number of distinct passes profiled per frame.
+    Count //!< Sentinel — the number of distinct passes profiled per frame. Adding one? `PASS_NAMES` in profiler.cpp will say so.
 };
 
 /*!

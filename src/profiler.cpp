@@ -34,8 +34,19 @@ namespace
     //! Frame budget used to express headroom in the summary line. 16.67 ms is the 60 fps target.
     constexpr float FRAME_BUDGET_MS{1000.0f / 60.0f};
 
-    //! Pass-name strings for the summary line, indexed by GpuPass value. Kept short so the whole line fits one terminal row.
-    constexpr std::array<const char*, static_cast<size_t>(GpuPass::Count)> PASS_NAMES{"frame", "trace", "sensors", "post", "present"};
+    /*!
+        Pass-name strings for the summary line, indexed by GpuPass value. Kept short so the whole line
+        fits one terminal row.
+
+        **The size is deduced and then asserted, rather than declared from `GpuPass::Count`.** Written
+        the other way round — `std::array<const char*, Count>` with five initialisers — adding a sixth
+        enumerator is not an error at all: the array silently grows and the new slot is value
+        initialised to `nullptr`, which reaches `std::string{nullptr}` in the summary line and is
+        undefined behaviour rather than a wrong name. Deducing the size from the list and pinning it to
+        the enum turns that into a compile error, which is what the enumerator's author wants to see.
+    */
+    constexpr std::array PASS_NAMES{"frame", "trace", "sensors", "post", "present"};
+    static_assert(PASS_NAMES.size() == static_cast<size_t>(GpuPass::Count), "Every GpuPass enumerator needs a name in PASS_NAMES.");
 
     //! Formats a duration with two decimal places; std::to_string would emit six and make the line unreadable.
     [[nodiscard]] std::string formatMs(float milliseconds)

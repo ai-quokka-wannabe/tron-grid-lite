@@ -132,7 +132,16 @@ Two details are worth stating, because both are easy to get wrong and neither is
   handling, so it keeps feeding the queue during a modal drag — precisely when `pumpEvents` cannot run. The hook was
   written for this and sat unused until now.
 
-Phase 5's acoustic solve, which runs at roughly a tenth of the visual rate, is the third user waiting behind these.
+**A third user was predicted here and never arrived, which is worth keeping rather than deleting.** The
+prediction was that Phase 5's acoustic solve would want a queue of its own. Phase 5 shipped without one:
+`Acoustics::gather` is a synchronous pure function whose answer the caller needs in hand before it can do
+anything else, so there is nothing for a queue to decouple. What makes it cheap is that it can be
+*skipped* — a pure function of unchanged inputs — not that it can be deferred.
+
+The general lesson is the one this repository keeps relearning: a queue is for crossing a thread
+boundary, and a boundary is not created by a subsystem being slow. It is created by something being
+unable to wait, which so far is true of exactly one thing here — the platform's event callback during a
+modal drag.
 
 Direct calls remain the right answer for same-tick, same-system data access, and RAII members remain the right answer
 for parent-child ownership such as device to swapchain.

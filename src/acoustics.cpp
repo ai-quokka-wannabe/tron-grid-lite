@@ -23,15 +23,6 @@ namespace Acoustics
     namespace
     {
 
-        /*!
-            The golden angle as a fraction of a full turn: (3 - sqrt(5)) / 2.
-
-            A literal rather than a computation, and `acoustics.slang` carries the same one. Deriving
-            it from `sqrt(5)` on each side invites the two libraries to disagree in the last bit,
-            which would put every ray on a slightly different heading.
-        */
-        constexpr float GOLDEN_TURN_FRACTION{0.38196601125010515f};
-
         //! One full turn, in radians.
         constexpr float TWO_PI{6.28318530717958648f};
 

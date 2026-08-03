@@ -100,8 +100,16 @@ measured. See [PROGRAM_INTERFACE.md](../docs/PROGRAM_INTERFACE.md) § Determinis
 
 ## The reference render
 
-The check that has caught more refactoring mistakes here than every test put together: record a fixed
-clip and hash it. A change that is meant to preserve behaviour must not move a single byte.
+The check that has **licensed** more structural rewrites here than any other: record a fixed clip and
+hash it. A change that is meant to preserve behaviour must not move a single byte.
+
+"Licensed" rather than "caught", deliberately. Eleven commits cite byte-identity and every one of them
+is a rewrite *confirmed safe* — the traversal module extraction, the geometry hoist into `World`, the
+memory arena, both halves of the two-level hierarchy. **Not one records a catch.** That may only mean
+catches get fixed before they reach a commit message, but by this file's own standard a check is worth
+what it has demonstrably done, and what this one has demonstrably done is let the innermost loop of
+every ray be replaced on evidence rather than on argument. That is worth a great deal here and is not
+the same product as finding bugs.
 
 ```bash
 build/windows-msvc/src/Release/TronGridLite.exe --record --frames 12 --width 640 --height 360 --output <dir>
