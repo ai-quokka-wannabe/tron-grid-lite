@@ -25,31 +25,40 @@
 #include <vector>
 
 /*!
-    Required device extensions.
+    Device extensions required in order to present.
 
-    Only the swapchain is needed. Dynamic rendering and synchronisation2 are Vulkan 1.3 core
-    features and are requested through vk::PhysicalDeviceVulkan13Features rather than as
-    extensions. Ray traversal runs in ordinary compute shaders, so none of the hardware
-    ray-tracing extensions are requested.
+    **The swapchain extension is required only when there is a surface**, which is why this is not one
+    unconditional list. A headless run never creates a swapchain, so demanding the extension would
+    refuse a compute-only card for lacking an ability it was never going to use.
+
+    Dynamic rendering and synchronisation2 are Vulkan 1.3 core features and are requested through
+    vk::PhysicalDeviceVulkan13Features rather than as extensions. Ray traversal runs in ordinary
+    compute shaders, so none of the hardware ray-tracing extensions are requested.
 */
-static constexpr std::array REQUIRED_DEVICE_EXTENSIONS{
+static constexpr std::array PRESENTATION_DEVICE_EXTENSIONS{
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
 
 //! Holds graphics and present queue family indices discovered during device selection.
 struct QueueFamilyIndices {
     uint32_t graphics{UINT32_MAX}; //!< Graphics queue family index.
-    uint32_t present{UINT32_MAX}; //!< Present queue family index.
+    uint32_t present{UINT32_MAX}; //!< Present queue family index; stays unset for a headless device.
     bool graphics_has_compute{false}; //!< Whether the chosen graphics family also supports compute.
 
-    //! Returns true if both graphics and present queue families have been found.
-    [[nodiscard]] bool isComplete() const
+    /*!
+        Returns true if every queue family this device needs has been found.
+
+        \param needs_present False for a headless device, which never presents and therefore needs no
+               present family. Passing true when there is no surface would ask a device to prove it can
+               present to nothing.
+    */
+    [[nodiscard]] bool isComplete(bool needs_present) const
     {
-        return (graphics != UINT32_MAX) && (present != UINT32_MAX);
+        return (graphics != UINT32_MAX) && ((present != UINT32_MAX) || !needs_present);
     }
 };
 
-//! Finds graphics and present queue family indices for the given device and surface.
+//! Finds graphics and present queue family indices. A null surface skips the present search entirely.
 [[nodiscard]] static QueueFamilyIndices findQueueFamilies(const vk::raii::PhysicalDevice& device, VkSurfaceKHR surface)
 {
     QueueFamilyIndices indices;
@@ -73,27 +82,34 @@ struct QueueFamilyIndices {
             }
         }
 
-        // Present support.
-        vk::Bool32 present_support{device.getSurfaceSupportKHR(i, surface)};
-        if (present_support) {
-            indices.present = i;
-        }
+        // Present support. Asking a driver whether it can present to a null surface is not a question
+        // with an answer, so a headless search does not ask it.
+        if (surface != VK_NULL_HANDLE) {
+            vk::Bool32 present_support{device.getSurfaceSupportKHR(i, surface)};
+            if (present_support) {
+                indices.present = i;
+            }
 
-        // Prefer a single family that supports both (better performance).
-        if ((indices.graphics == indices.present) && indices.isComplete()) {
-            break;
+            // Prefer a single family that supports both (better performance).
+            if ((indices.graphics == indices.present) && indices.isComplete(true)) {
+                break;
+            }
         }
     }
 
     return indices;
 }
 
-//! Checks whether the device supports all required extensions.
-[[nodiscard]] static bool hasRequiredExtensions(const vk::raii::PhysicalDevice& device)
+//! Checks whether the device supports the extensions required for the way it is about to be used.
+[[nodiscard]] static bool hasRequiredExtensions(const vk::raii::PhysicalDevice& device, bool needs_presentation)
 {
+    if (!needs_presentation) {
+        return true; // Nothing outside Vulkan 1.3 core is needed to compute.
+    }
+
     std::vector<vk::ExtensionProperties> available{device.enumerateDeviceExtensionProperties()};
 
-    for (const char* required : REQUIRED_DEVICE_EXTENSIONS) {
+    for (const char* required : PRESENTATION_DEVICE_EXTENSIONS) {
         bool found{std::ranges::any_of(available, [required](const vk::ExtensionProperties& ext) {
             return std::string_view(ext.extensionName.data()) == required;
         })};
@@ -118,6 +134,8 @@ struct QueueFamilyIndices {
 //! Scores a physical device for suitability; returns -1 if unsuitable.
 [[nodiscard]] static int rateDevice(const vk::raii::PhysicalDevice& device, VkSurfaceKHR surface)
 {
+    const bool needs_presentation{surface != VK_NULL_HANDLE};
+
     vk::PhysicalDeviceProperties properties{device.getProperties()};
     QueueFamilyIndices indices{findQueueFamilies(device, surface)};
 
@@ -126,8 +144,8 @@ struct QueueFamilyIndices {
         return -1;
     }
 
-    // Must have graphics + present queues and the swapchain extension.
-    if ((!indices.isComplete()) || (!hasRequiredExtensions(device))) {
+    // Must have the queue families this use needs, and the swapchain extension if it will present.
+    if ((!indices.isComplete(needs_presentation)) || (!hasRequiredExtensions(device, needs_presentation))) {
         return -1;
     }
 
@@ -160,8 +178,9 @@ struct QueueFamilyIndices {
         score += 1000;
     }
 
-    // Bonus for a single queue family (graphics + present on the same family).
-    if (indices.graphics == indices.present) {
+    // Bonus for a single queue family (graphics + present on the same family). Headless there is no
+    // present family, so no device earns it — which keeps the ordering between devices unchanged.
+    if (needs_presentation && (indices.graphics == indices.present)) {
         score += 100;
     }
 
@@ -207,17 +226,19 @@ struct QueueFamilyIndices {
         return "reports Vulkan " + formatVersion(properties.apiVersion) + ", needs 1.3";
     }
 
+    const bool needs_presentation{surface != VK_NULL_HANDLE};
+
     const QueueFamilyIndices indices{findQueueFamilies(device, surface)};
     if (indices.graphics == UINT32_MAX) {
         return "no graphics queue family";
     }
-    if (indices.present == UINT32_MAX) {
+    if (needs_presentation && (indices.present == UINT32_MAX)) {
         return "cannot present to this surface";
     }
     if (!indices.graphics_has_compute) {
         return "graphics queue family cannot dispatch compute, and this renderer is only compute";
     }
-    if (!hasRequiredExtensions(device)) {
+    if (!hasRequiredExtensions(device, needs_presentation)) {
         return "missing VK_KHR_swapchain";
     }
     if (!hasRequiredVulkan13Features(device)) {
@@ -283,7 +304,8 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     }
 
     if (best_score < 0) {
-        m_logger.logFatal("No suitable GPU found (need Vulkan 1.3 with dynamic rendering and synchronisation2, graphics + present queues, and VK_KHR_swapchain).");
+        m_logger.logFatal(std::string{"No suitable GPU found (need Vulkan 1.3 with dynamic rendering and synchronisation2, and a graphics family that dispatches compute"}
+            + ((surface != VK_NULL_HANDLE) ? ", plus a present queue and VK_KHR_swapchain)." : ")."));
         std::abort();
     }
 
@@ -337,8 +359,12 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     constexpr float QUEUE_PRIORITY{1.0f};
     std::vector<vk::DeviceQueueCreateInfo> queue_create_infos;
 
-    // Deduplicate queue family indices.
-    std::set<uint32_t> unique_families{m_graphics_family_index, m_present_family_index};
+    // Deduplicate queue family indices. Headless there is no present family, and UINT32_MAX must not
+    // reach vkCreateDevice as one — the set would otherwise carry the sentinel straight through.
+    std::set<uint32_t> unique_families{m_graphics_family_index};
+    if (m_present_family_index != UINT32_MAX) {
+        unique_families.insert(m_present_family_index);
+    }
     for (uint32_t family : unique_families) {
         vk::DeviceQueueCreateInfo queue_info{};
         queue_info.queueFamilyIndex = family;
@@ -355,10 +381,16 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     vk::PhysicalDeviceFeatures2 features2{};
     features2.setPNext(&vulkan13_features);
 
+    // Enabled only when this device will actually present. Enabling an extension that is not needed
+    // is not free of consequence: on a device that does not expose it, vkCreateDevice fails outright.
+    const std::vector<const char*> enabled_extensions{(surface != VK_NULL_HANDLE)
+            ? std::vector<const char*>{PRESENTATION_DEVICE_EXTENSIONS.begin(), PRESENTATION_DEVICE_EXTENSIONS.end()}
+            : std::vector<const char*>{}};
+
     vk::DeviceCreateInfo device_info{};
     device_info.setPNext(&features2);
     device_info.setQueueCreateInfos(queue_create_infos);
-    device_info.setPEnabledExtensionNames(REQUIRED_DEVICE_EXTENSIONS);
+    device_info.setPEnabledExtensionNames(enabled_extensions);
 
     m_device = vk::raii::Device(m_physical_device, device_info);
 
@@ -366,7 +398,10 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     volkLoadDevice(*m_device);
     VULKAN_HPP_DEFAULT_DISPATCHER.init(*m_device);
 
-    // Step 6: Retrieve queue handles.
+    // Step 6: Retrieve queue handles. There is no present queue on a headless device, and asking for
+    // family UINT32_MAX would be a use of an unretrieved handle rather than an empty one.
     m_graphics_queue = m_device.getQueue(m_graphics_family_index, 0);
-    m_present_queue = m_device.getQueue(m_present_family_index, 0);
+    if (m_present_family_index != UINT32_MAX) {
+        m_present_queue = m_device.getQueue(m_present_family_index, 0);
+    }
 }

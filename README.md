@@ -74,10 +74,24 @@ IEEE-754 pins neither fused-multiply-add contraction nor the transcendentals. Th
 measured rather than assumed; see [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md)
 § Determinism and Replay.
 
+## Running it
+
+**TronGrid Lite is a command-line program that can open a window, not a window that can be scripted.**
+Creatures perceive the Grid through a senses buffer; they have no window and no swapchain, so a run
+that hosts them needs no display, no surface and no present queue — and is not refused on a machine
+that has none.
+
+`--window` opens a debug view so the User can check that things are in their place: that the geometry
+is where it should be, that the neon reads as neon. **It shows the Grid, not a simulation** — no
+Program is loaded in that mode, and the picture is rendered for a human rather than for a creature.
+
+A Program that wants to show its own internals opens its own window. The Grid knows nothing about how
+a Program works inside and provides it no display.
+
 ## Checking it
 
-Three modes run headless and answer a question rather than drawing a picture. Each needs a GPU, so
-none of them runs in CI.
+Three modes answer a question rather than drawing a picture. Each needs a GPU but none needs a display,
+so all three run over SSH or on a machine with no monitor attached.
 
 | Command | Question |
 |---------|----------|
