@@ -275,8 +275,13 @@ only when the Grid changes — and is shared by every sensor and by the debug vi
 ### One hierarchy today, two when creatures move
 
 **Decision: the Grid keeps one hierarchy until bodies exist, and gains a second level rather than a
-faster builder when they do.** This is written down before Phase 6 because it decides the shape of
+faster builder when they do.** This was written down before Phase 6 because it decides the shape of
 two etapes, and because the obvious optimisation is the wrong one.
+
+**Built.** The second level exists on both sides — `BvhLib::Scene` and `intersectScene` on the host,
+`traceScene` in `grid_bvh.slang` — and the Grid is an instance at the identity rather than a special
+case, so the path a body will take is the path every frame already takes. The measurements below are
+what argued for it and are kept because they are what a future change must argue against.
 
 The Grid's hierarchy is built once at start-up and never touched again, which is correct for geometry
 that cannot move. A creature can. The naive extension — put the bodies in the same hierarchy and
@@ -331,6 +336,19 @@ Two properties make that affordable:
   hand is the same exercise this repository already performs for the single-level case.
 - **The Grid is one instance among a handful.** The top level holds the Grid's box plus one per body,
   so it is a structure over twenty-odd objects, not over fifty thousand triangles.
+
+**Measured, once it was built, and the honest answer is that it does not show.** Forty frames at
+1280×720, best of three, runs interleaved between the two binaries: 14.86 s single-level against
+14.82 s two-level. Run-to-run spread is about 10% and the first run of any binary is the slowest, so
+this measurement rules out a meaningful regression and cannot resolve a small one.
+
+Interleaving mattered. Run back-to-back rather than alternated, the two-level binary looked **7%
+faster** in three consecutive runs — an entirely believable result, and an artefact of warm-up. A
+per-pass figure needs the GPU profiler's Trace timing from an interactive session, which the recording
+path does not produce.
+
+The picture itself is unchanged to the byte on both GPUs, which is the stronger statement: the same
+rays reach the same triangles, so nothing above was traded for the flexibility.
 
 #### The case that is not free, and what it implies
 

@@ -65,7 +65,7 @@ namespace
         uint32_t resolution_x{0u};
         uint32_t resolution_y{0u};
         uint32_t max_bounces{0u};
-        uint32_t node_count{0u};
+        uint32_t instance_count{0u};
     };
 
     static_assert(sizeof(TracePushConstants) == 80u, "Push constants must match the Slang struct layout exactly.");
@@ -113,7 +113,7 @@ Tracer::Tracer(const Device& device, const World& world, const std::vector<Mater
     m_logger->logInfo("Optical materials uploaded: " + std::to_string(materials.size()) + " entries, " + std::to_string(materials.size() * sizeof(Material))
         + " bytes of device-local storage.");
 
-    const std::array<vk::DescriptorSetLayoutBinding, 4> bindings{
+    const std::array<vk::DescriptorSetLayoutBinding, 5> bindings{
         vk::DescriptorSetLayoutBinding{
             .binding = 0u, .descriptorType = vk::DescriptorType::eStorageImage, .descriptorCount = 1u, .stageFlags = vk::ShaderStageFlagBits::eCompute},
         vk::DescriptorSetLayoutBinding{
@@ -121,13 +121,15 @@ Tracer::Tracer(const Device& device, const World& world, const std::vector<Mater
         vk::DescriptorSetLayoutBinding{
             .binding = 2u, .descriptorType = vk::DescriptorType::eStorageBuffer, .descriptorCount = 1u, .stageFlags = vk::ShaderStageFlagBits::eCompute},
         vk::DescriptorSetLayoutBinding{
-            .binding = 3u, .descriptorType = vk::DescriptorType::eStorageBuffer, .descriptorCount = 1u, .stageFlags = vk::ShaderStageFlagBits::eCompute}};
+            .binding = 3u, .descriptorType = vk::DescriptorType::eStorageBuffer, .descriptorCount = 1u, .stageFlags = vk::ShaderStageFlagBits::eCompute},
+        vk::DescriptorSetLayoutBinding{
+            .binding = 4u, .descriptorType = vk::DescriptorType::eStorageBuffer, .descriptorCount = 1u, .stageFlags = vk::ShaderStageFlagBits::eCompute}};
 
     m_set_layout = vk::raii::DescriptorSetLayout{
         m_device->get(), vk::DescriptorSetLayoutCreateInfo{.bindingCount = static_cast<uint32_t>(bindings.size()), .pBindings = bindings.data()}};
 
     const std::array<vk::DescriptorPoolSize, 2> pool_sizes{vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageImage, .descriptorCount = m_frames_in_flight},
-        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 3u * m_frames_in_flight}};
+        vk::DescriptorPoolSize{.type = vk::DescriptorType::eStorageBuffer, .descriptorCount = 4u * m_frames_in_flight}};
 
     // eFreeDescriptorSet is required rather than optional: vk::raii::DescriptorSets frees its sets
     // when destroyed, and vkFreeDescriptorSets against a pool created without this flag is a
@@ -198,8 +200,9 @@ void Tracer::writeDescriptorSets()
         const vk::DescriptorBufferInfo nodes_info{.buffer = m_world->nodes(), .offset = 0u, .range = vk::WholeSize};
         const vk::DescriptorBufferInfo triangles_info{.buffer = m_world->triangles(), .offset = 0u, .range = vk::WholeSize};
         const vk::DescriptorBufferInfo materials_info{.buffer = *m_materials.buffer, .offset = 0u, .range = vk::WholeSize};
+        const vk::DescriptorBufferInfo instances_info{.buffer = m_world->instances(), .offset = 0u, .range = vk::WholeSize};
 
-        const std::array<vk::WriteDescriptorSet, 4> writes{vk::WriteDescriptorSet{.dstSet = *m_descriptor_sets[frame],
+        const std::array<vk::WriteDescriptorSet, 5> writes{vk::WriteDescriptorSet{.dstSet = *m_descriptor_sets[frame],
                                                                .dstBinding = 0u,
                                                                .descriptorCount = 1u,
                                                                .descriptorType = vk::DescriptorType::eStorageImage,
@@ -218,7 +221,12 @@ void Tracer::writeDescriptorSets()
                 .dstBinding = 3u,
                 .descriptorCount = 1u,
                 .descriptorType = vk::DescriptorType::eStorageBuffer,
-                .pBufferInfo = &materials_info}};
+                .pBufferInfo = &materials_info},
+            vk::WriteDescriptorSet{.dstSet = *m_descriptor_sets[frame],
+                .dstBinding = 4u,
+                .descriptorCount = 1u,
+                .descriptorType = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo = &instances_info}};
 
         m_device->get().updateDescriptorSets(writes, {});
     }
@@ -294,7 +302,7 @@ void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t fram
         .resolution_x = m_extent.width,
         .resolution_y = m_extent.height,
         .max_bounces = max_bounces,
-        .node_count = m_world->nodeCount()};
+        .instance_count = m_world->instanceCount()};
 
     command_buffer.pushConstants<TracePushConstants>(*m_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0u, {push});
 

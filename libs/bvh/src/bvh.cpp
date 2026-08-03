@@ -27,6 +27,14 @@ namespace BvhLib
     static_assert(offsetof(Triangle, edge1) == 16u, "Triangle::edge1 must sit at offset 16.");
     static_assert(offsetof(Triangle, edge2) == 32u, "Triangle::edge2 must sit at offset 32.");
 
+    static_assert(sizeof(InstanceRecord) == 144u, "InstanceRecord must be exactly 144 bytes to match its std430 declaration.");
+    static_assert(offsetof(InstanceRecord, to_world_row0) == 48u, "InstanceRecord::to_world_row0 must sit at offset 48.");
+    static_assert(offsetof(InstanceRecord, bounds_min) == 96u, "InstanceRecord::bounds_min must sit at offset 96.");
+    static_assert(offsetof(InstanceRecord, node_offset) == 108u, "InstanceRecord::node_offset must sit at offset 108.");
+    static_assert(offsetof(InstanceRecord, bounds_max) == 112u, "InstanceRecord::bounds_max must sit at offset 112.");
+    static_assert(offsetof(InstanceRecord, triangle_offset) == 124u, "InstanceRecord::triangle_offset must sit at offset 124.");
+    static_assert(offsetof(InstanceRecord, node_count) == 128u, "InstanceRecord::node_count must sit at offset 128.");
+
     static_assert(sizeof(Node) == 32u, "Node must be exactly 32 bytes to match its std430 declaration.");
     static_assert(offsetof(Node, left_or_first) == 12u, "Node::left_or_first must sit at offset 12.");
     static_assert(offsetof(Node, bounds_max) == 16u, "Node::bounds_max must sit at offset 16.");
@@ -602,6 +610,60 @@ namespace BvhLib
         }
 
         return nearest;
+    }
+
+    FlatScene flatten(const Scene& scene)
+    {
+        FlatScene flat{};
+
+        // Where each geometry landed in the concatenated arrays. Computed once and looked up per
+        // instance, because several instances commonly share one geometry — that sharing is the
+        // entire reason the two-level structure exists.
+        std::vector<uint32_t> node_offsets;
+        std::vector<uint32_t> triangle_offsets;
+        node_offsets.reserve(scene.geometries.size());
+        triangle_offsets.reserve(scene.geometries.size());
+
+        for (const Bvh& geometry : scene.geometries) {
+            node_offsets.push_back(static_cast<uint32_t>(flat.nodes.size()));
+            triangle_offsets.push_back(static_cast<uint32_t>(flat.triangles.size()));
+
+            flat.nodes.insert(flat.nodes.end(), geometry.nodes.begin(), geometry.nodes.end());
+            flat.triangles.insert(flat.triangles.end(), geometry.triangles.begin(), geometry.triangles.end());
+        }
+
+        // A row of a column-major matrix: element (col, row) lives at m[col * 4 + row], so row r is
+        // every fourth float starting at r.
+        const auto row = [](const MathLib::Mat4& matrix, uint32_t index) {
+            return MathLib::Vec4{matrix(0u, index), matrix(1u, index), matrix(2u, index), matrix(3u, index)};
+        };
+
+        flat.instances.reserve(scene.instances.size());
+        for (const Instance& instance : scene.instances) {
+            InstanceRecord record{};
+
+            record.to_instance_row0 = row(instance.to_instance, 0u);
+            record.to_instance_row1 = row(instance.to_instance, 1u);
+            record.to_instance_row2 = row(instance.to_instance, 2u);
+            record.to_world_row0 = row(instance.to_world, 0u);
+            record.to_world_row1 = row(instance.to_world, 1u);
+            record.to_world_row2 = row(instance.to_world, 2u);
+
+            record.bounds_min = instance.bounds_min;
+            record.bounds_max = instance.bounds_max;
+
+            if (instance.geometry < scene.geometries.size()) {
+                record.node_offset = node_offsets[instance.geometry];
+                record.triangle_offset = triangle_offsets[instance.geometry];
+                record.node_count = static_cast<uint32_t>(scene.geometries[instance.geometry].nodes.size());
+            }
+            // Otherwise the count stays zero, which is how the shader spells the skip that
+            // intersectScene performs for an instance naming a geometry that is not there.
+
+            flat.instances.push_back(record);
+        }
+
+        return flat;
     }
 
 } // namespace BvhLib

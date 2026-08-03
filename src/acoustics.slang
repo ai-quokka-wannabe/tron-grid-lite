@@ -41,13 +41,14 @@
 //     binding 2 : StructuredBuffer<float>     source_strengths — one per material slot.
 //     binding 3 : StructuredBuffer<float4>    ears             — xyz world position, w unused.
 //     binding 4 : RWStructuredBuffer<uint>    histogram        — ear_count * BAND_COUNT * BIN_COUNT.
+//     binding 5 : StructuredBuffer<Instance>  instances        — 144 bytes each, the top level.
 //
 // Push constants (52 bytes):
 //     offset  0, size 16 : hum_spectrum       — source strength per band, at full amplitude.
 //     offset 16, size 16 : air_absorption     — dB per kilometre per band.
 //     offset 32, size  4 : direction_count    — rays cast from each ear.
 //     offset 36, size  4 : max_order          — reflections a ray may make. Zero is direct only.
-//     offset 40, size  4 : node_count         — zero means an empty Grid and every ray misses.
+//     offset 40, size  4 : instance_count     — placements in the top level; zero means every ray misses.
 //     offset 44, size  4 : material_count     — length of source_strengths, for the bounds guard.
 //     offset 48, size  4 : range_metres       — total accumulated path cap.
 
@@ -117,7 +118,7 @@ struct AcousticPushConstants
     float4 air_absorption_db_per_km;
     uint direction_count;
     uint max_order;
-    uint node_count;
+    uint instance_count;
     uint material_count;
     float range_metres;
 };
@@ -139,6 +140,9 @@ StructuredBuffer<float4> ears;
 
 [[vk::binding(4, 0)]]
 RWStructuredBuffer<uint> histogram;
+
+[[vk::binding(5, 0)]]
+StructuredBuffer<Instance> instances;
 
 /*!
     One ear's histogram, in shared memory.
@@ -215,7 +219,7 @@ void acousticMain(uint3 group_id: SV_GroupID, uint3 local_id: SV_GroupThreadID)
                 break;
             }
 
-            const Hit hit = trace(nodes, triangles, push.node_count, origin, direction, remaining);
+            const Hit hit = traceScene(instances, push.instance_count, nodes, triangles, origin, direction, remaining);
             if (!hit.valid)
             {
                 break; // Escaped. The Grid is an open plane, so most rays end here.
@@ -267,7 +271,13 @@ void acousticMain(uint3 group_id: SV_GroupID, uint3 local_id: SV_GroupThreadID)
                 the response is the range cap above, this loop's order cap, and the spreading and air
                 terms applied at the deposit.
             */
-            const float3 face_normal = normalize(cross(triangle.edge1, triangle.edge2));
+            // Out to world space first: the edges are in the instance's own frame, and the ray this
+            // reflects is a world-space ray. Exact for a rigid placement, which is what a body is,
+            // and wrong for a non-uniformly scaled one — the same caveat trace.slang carries, for the
+            // same reason, and nothing places a scaled instance today.
+            const Instance instance = instances[hit.instance];
+            const float3 local_normal = cross(triangle.edge1, triangle.edge2);
+            const float3 face_normal = normalize(transformDirection(instance.to_world_row0, instance.to_world_row1, instance.to_world_row2, local_normal));
 
             // Reflect about the face the ray actually arrived at, whichever side that is: a creature
             // standing in a terrace hollow hears its walls from the inside.

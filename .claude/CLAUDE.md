@@ -98,6 +98,31 @@ bit-identity is not a goal because it is not reachable — IEEE-754 pins the fou
 `sqrt`, but not fused-multiply-add contraction and not the transcendentals. The target is small and
 measured. See [PROGRAM_INTERFACE.md](../docs/PROGRAM_INTERFACE.md) § Determinism and Replay.
 
+## The reference render
+
+The check that has caught more refactoring mistakes here than every test put together: record a fixed
+clip and hash it. A change that is meant to preserve behaviour must not move a single byte.
+
+```bash
+build/windows-msvc/src/Release/TronGridLite.exe --record --frames 12 --width 640 --height 360 --output <dir>
+# sha256 of frame_00000.ppm .. frame_00011.ppm concatenated in name order
+```
+
+| Device | Digest |
+|--------|--------|
+| NVIDIA GeForce GTX 1650 Ti | `68B384D91F70FFEF79AD16E30FA355F92B1937DB7BE3DA2713E6F84663E0501E` |
+| AMD Radeon(TM) Graphics | `E5CB839D9906AAD1629FA34E73103DB8D45DD57D83FF1656833CD41761B3A87C` |
+
+**Two digests rather than one, and that is the honest answer rather than a defeat.** Determinism is
+per device. The two GPUs disagree on about 16% of bytes with a worst difference of 224 of 255 — which
+sounds alarming and is not: this is a world of mirrors, so a ray passing one side of an edge instead
+of the other lands on a neon tube instead of on black, and one contracted multiply-add decides which.
+The figure is worth keeping precisely because it is stable: measure it before and after a change, and
+if the *cross-vendor* disagreement moves, something has become genuinely less deterministic.
+
+A digest changes legitimately whenever the picture is meant to change. Update the table in the same
+commit, and say in the message what moved and why.
+
 ## Hard-won rules
 
 Each of these cost real time at least once. They are here rather than in a journal because a lesson

@@ -9,11 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Both senses now trace a two-level hierarchy**, on the GPU as well as the host. `grid_bvh.slang`
+  gained `traceScene` and `Instance`, `BvhLib::flatten` turns a `Scene` into the three storage buffers
+  a shader can actually index, and the Grid is uploaded as **one instance at the identity** rather
+  than as a special case. `trace` survives as a call to the same stack walk at offset zero, so there
+  is one traversal in that module and no way for two to drift.
+
+  Making the Grid an ordinary instance is the point. The path a creature body will take is the path
+  every frame already takes, so it is exercised by everything this renderer draws rather than by a
+  test written for one instance and a comment promising the rest — and at the identity it must
+  produce the very same picture, which is a check worth having.
+
+  It does. The recorded render is **byte-identical on both GPUs**, `--verify-acoustics` passes on
+  both, and end-to-end recording time is unchanged within noise. That the new path is nevertheless
+  live was proved by breaking it: placing the Grid a thousand metres up turns the picture wholly black
+  and fails acoustic verification at 100%.
+
+  Two details that are easy to get wrong and were therefore written down where they can be seen.
+  **Transforms travel as three rows, not as a `float4x4`** — a matrix in a buffer means agreeing with
+  the shader compiler about row-major against column-major, which is exactly the duplicated fact with
+  nothing holding the copies together that this repository keeps being bitten by. And **a triangle
+  index from the shader is global** where the host's is local to a geometry, because the host has a
+  per-geometry array to index and the shader does not.
+
+  The normal is the one thing a transform still costs: the edges are in the instance's frame, so both
+  shaders bring the face normal out through the rotation part of `to_world`. Exact for a rigid
+  placement, wrong for a non-uniformly scaled one, and nothing places a scaled instance today.
+
 - **The two-level hierarchy exists on the host** (`BvhLib::Scene`, `Instance`, `makeInstance`,
   `intersectScene`). Geometries are built once and shared; instances place them; nothing rebuilds when
-  something moves. This is the specification the shader will mirror, in the same relationship
-  `intersect` has with the single-level shader path — the arrangement that made `--verify-acoustics`
-  possible.
+  something moves. This is the specification the shader mirrors, in the same relationship `intersect`
+  has with the single-level shader path — the arrangement that made `--verify-acoustics` possible.
 
   **The ray is transformed into instance space without being normalised**, and that is the invariant
   the whole design rests on: leaving the transformed direction alone makes the ray parameter identical
