@@ -129,13 +129,13 @@ namespace Acoustics
         from `sqrt(5)` on each side invites the two libraries to disagree in the last bit, which would
         put every ray on a slightly different heading.
 
-        **It lives in the header so that it can be asserted against the shader's copy.** It used to be
-        a file-local constant in `acoustics.cpp`, which put it out of reach of the `static_assert`s in
+        **It lives in the header so that it can be asserted against the shader's copy.** A file-local
+        constant in `acoustics.cpp` would be out of reach of the `static_assert`s in
         `acoustic_tracer.cpp` that hold `BIN_SECONDS`, `SPEED_OF_SOUND` and `SURFACE_EPSILON` to their
-        Slang twins — so the one duplicated constant the whole direction set depends on was the one
-        with nothing holding the copies together. That is the exact pattern CLAUDE.md names as the
-        source of nearly every serious defect here, and it was sitting under the tightest verification
-        threshold in the repository.
+        Slang twins, leaving the one duplicated constant every ray direction depends on as the one
+        with nothing holding the copies together — under the tightest verification threshold in the
+        repository. That is the exact pattern CLAUDE.md names as the source of nearly every serious
+        defect here.
     */
     inline constexpr float GOLDEN_TURN_FRACTION{0.38196601125010515f};
 
@@ -154,13 +154,13 @@ namespace Acoustics
         correct closed form for what the Grid actually contains, which is flat hard specular
         surfaces and nothing else.
 
-        **Absorption was modelled first and then removed, on its own numbers.** At the authored
-        `alpha = 0.02` of a polished hard surface, ten bounces cost 0.88 dB — and on an open plane
-        rays escape after one or two, so the realistic figure is nearer 0.2 dB. Against spherical
-        spreading's 26 dB across the range cap it was already the smallest term in the model by an
-        order of magnitude, and Treble's documentation puts the measurement uncertainty on such a
-        coefficient at about ±0.2, which is larger than the effect it produced. A term whose error
-        bar exceeds its value is decoration rather than physics.
+        **Absorption is left out on its own numbers, not for simplicity.** At the `alpha = 0.02` of a
+        polished hard surface, ten bounces cost 0.88 dB — and on an open plane rays escape after one
+        or two, so the realistic figure is nearer 0.2 dB. Against spherical spreading's 26 dB across
+        the range cap that is the smallest term in the model by an order of magnitude, and Treble's
+        documentation puts the measurement uncertainty on such a coefficient at about ±0.2, which is
+        larger than the effect it would produce. A term whose error bar exceeds its value is
+        decoration rather than physics.
 
         **Transmission was never modelled, and its absence is a decision rather than an oversight.**
         Sound does pass through a glass slab in reality. Representing that honestly would need a

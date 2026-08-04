@@ -13,7 +13,8 @@
 */
 
 /*
-    Phase 4 — the compute ray tracer and its post-processing.
+    The renderer's entry point: the compute ray tracer, its post-processing, and the command-line
+    modes that drive them.
 
     Builds the Grid on the host, hands it to the GPU as a bounding volume hierarchy in storage
     buffers, and traces it in a compute shader. There is no rasteriser and no ray-tracing hardware:
@@ -192,14 +193,14 @@ namespace
     /*!
         Returns the directory holding this executable.
 
-        The compiled shaders sit beside the binary, and they used to be opened by bare relative
-        name — which resolves against the *working* directory, not the executable's. That works
-        only when the program happens to be launched from its own output directory, and silently
-        fails everywhere else: every IDE debug configuration, every shortcut, and every user who
-        unpacks a release and runs it from anywhere but inside the folder.
+        The compiled shaders sit beside the binary, and a bare relative name resolves against the
+        *working* directory rather than the executable's. That works only when the program happens
+        to be launched from its own output directory, and silently fails everywhere else: every IDE
+        debug configuration, every shortcut, and every user who unpacks a release and runs it from
+        anywhere but inside the folder.
 
-        Falls back to the working directory if the platform call fails, which restores exactly the
-        old behaviour rather than making a bad situation worse.
+        Falls back to the working directory if the platform call fails, which is the same guess a
+        bare relative name makes — no worse than not asking at all.
     */
     [[nodiscard]] std::filesystem::path executableDirectory()
     {
@@ -264,8 +265,8 @@ namespace
         // the path length through the medium, which is a later refinement.
         materials[MATERIAL_GLASS] = makeGlass(MathLib::Vec3{0.80f, 0.92f, 0.95f}, 1.52f);
 
-        // The case the old three-type material model could not express at all: a tube that emits
-        // and transmits at the same time, which is what a neon tube with a glass envelope is.
+        // Emission and transmission in the same surface, which is what a neon tube with a glass
+        // envelope is — and the case a material model with fixed surface types cannot express.
         materials[MATERIAL_GLOWING_GLASS] = makeGlowingGlass(MathLib::Vec3{0.90f, 0.70f, 0.95f}, MathLib::Vec3{1.60f, 0.30f, 2.20f}, 1.46f, 0.85f);
         return materials;
     }
@@ -281,8 +282,8 @@ namespace
     /*!
         Plants a box on the floor: returns the centre that puts its base on the ground beneath it.
 
-        Everything standing in the Grid goes through this. The floor is no longer a plane, so a
-        fixed height would leave objects buried in a terrace or hovering over a hollow, and the
+        Everything standing in the Grid goes through this. The floor is terraced rather than flat,
+        so a fixed height would leave objects buried in a terrace or hovering over a hollow, and the
         error is worst exactly where the relief is most interesting.
     */
     [[nodiscard]] MathLib::Vec3 plantOnFloor(float world_x, float world_z, const MathLib::Vec3& half_extents, const GridFloorConfig& floor_config)
@@ -674,8 +675,8 @@ struct DeviceGather {
 /*!
     Runs the acoustic pass once against a world and returns what every ear heard.
 
-    Split out of `verifyAcoustics` so that the world it traces is a parameter rather than a fixture,
-    which is what lets one check run at the identity and at an angle.
+    The world it traces is a parameter rather than a fixture, which is what lets one check run at the
+    identity and at an angle.
 */
 [[nodiscard]] DeviceGather runDeviceGather(const Device& device, const World& world, const std::vector<float>& source_strengths, const std::vector<MathLib::Vec3>& ears,
     const Acoustics::GatherConfig& config, const std::filesystem::path& shader_directory, LoggingLib::Logger& logger)
@@ -820,10 +821,9 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
             quantises every deposit to 1/262,144 and the host does not, and tens of thousands of
             deposits leave a few thousandths of a per cent behind.
 
-            The threshold is set from the measurement rather than from taste. It was one per cent
-            until the direction sets were made to agree bit for bit, at which point the real figure
-            dropped by a factor of three hundred and the old threshold would have hidden the next bug
-            as thoroughly as it hid that one.
+            The threshold is set from the measurement rather than from taste, and deliberately close
+            to it. A threshold sitting orders of magnitude above the divergence actually observed
+            would pass anything the arithmetic could plausibly get wrong, which is no check at all.
         */
         if (relative_total > 0.001f) {
             logger.logError("  Totals disagree by more than one per cent, which is more than float divergence explains.");
@@ -1367,16 +1367,16 @@ int main(int argc, char** argv)
             swapchain = std::make_unique<Swapchain>(device, *surface, window->width(), window->height(), logger);
         }
 
-        // The Grid: a flat mirror floor with neon tubes along its grid lines.
+        // The Grid: a mirror floor under a low terraced relief, with neon tubes along its grid lines.
         const GridFloorConfig floor_config{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
 
         /*
             Thin tubes, sitting almost on the floor.
 
-            The rasteriser of Phase 1 needed them wide and lifted, because a strip narrower than a
-            pixel breaks into dashes and a coplanar strip fights the depth buffer. The tracer has
-            neither problem: it samples geometry analytically and has no depth buffer at all, so
-            the tubes can be the slender lines the aesthetic actually wants.
+            A rasteriser would need them wide and lifted, because a strip narrower than a pixel
+            breaks into dashes and a coplanar strip fights the depth buffer. The tracer has neither
+            problem: it samples geometry analytically and has no depth buffer at all, so the tubes
+            can be the slender lines the aesthetic actually wants.
         */
         // The lift clears the steepest terrace gradient across the tube's half width; at 0.01 m
         // the outer edge of a strip dipped below the floor on riser cells.

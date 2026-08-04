@@ -28,16 +28,16 @@ class Device; // forward declaration
 /*!
     Hands out slices of a few large device allocations instead of one allocation per resource.
 
-    Before this existed, Vulkan's validation layer said the same thing sixteen times on every run,
-    once per image and once per small buffer: *"trying to bind to a memory block which is fully
-    consumed by the image… smaller images like this should be sub-allocated from larger memory
-    blocks"*. That was never a memory problem — `maxMemoryAllocationCount` is typically 4,096 and the
-    renderer sat at well under one per cent of the cap.
+    One allocation per resource makes Vulkan's validation layer say the same thing once per image and
+    once per small buffer — sixteen times on every run of this renderer: *"trying to bind to a memory
+    block which is fully consumed by the image… smaller images like this should be sub-allocated from
+    larger memory blocks"*. That is not a memory problem — `maxMemoryAllocationCount` is typically
+    4,096 and the renderer sits at well under one per cent of the cap.
 
-    **It was a signal-to-noise problem, and that is why this exists now.** Sixteen known-benign
-    warnings on every run are sixteen places for a real one to hide, and validation output that is
-    routinely ignored is validation that has stopped working. Two remain, both transient staging
-    buffers inside `VulkanHelpers::uploadStorageBuffer`, where the advice is simply wrong.
+    **It is a signal-to-noise problem, which is what this solves.** Sixteen known-benign warnings on
+    every run are sixteen places for a real one to hide, and validation output that is routinely
+    ignored is validation that has stopped working. Two remain, both transient staging buffers inside
+    `VulkanHelpers::uploadStorageBuffer`, where the advice is simply wrong.
 
     The memory argument arrives later, in Phase 6, when creature sensors multiply the count: many
     creatures, two eyes each, each eye a small render target far below the threshold.

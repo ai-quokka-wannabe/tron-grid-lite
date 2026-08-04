@@ -231,8 +231,8 @@ float3 radiance(float3 primary_origin, float3 primary_direction)
             today. The moment something does, this is the line that is wrong, and `BvhLib::Hit` says
             the same thing on the host side.
 
-            The Grid sits at the identity, where every one of these products is exact, which is why
-            the recorded render hash is unchanged by the two-level path.
+            The Grid sits at the identity, where every one of these products is exact — so the
+            picture is bit-for-bit what a single-level traversal would produce.
         */
         const Instance instance = instances[hit.instance];
         const float3 local_normal = cross(triangle.edge1, triangle.edge2);

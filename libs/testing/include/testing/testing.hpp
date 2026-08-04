@@ -58,7 +58,7 @@ namespace TestingLib
     //! - Project / user types that provide an ADL-discoverable to_string overload —
     //!   e.g. `std::string to_string(const MyType&)` in MyType's namespace lets
     //!   TEST_CHECK_EQUAL print informative diagnostics for failed comparisons of
-    //!   project types instead of the previous "<?>" placeholder.
+    //!   project types instead of the "<?>" fallback.
     //! - Fallback: "<?>".
     //!
     //! The ADL lookup uses a `using std::to_string` declaration so it picks up both

@@ -31,13 +31,13 @@ class Device; // forward declaration
     wants a colour, an index of refraction and a transmission; sound wants an absorption coefficient
     and a source strength. Neither belongs in the other's table, and neither belongs here.
 
-    This exists because the hierarchy has two readers. It used to live inside `Tracer` as three
-    private members, which was correct while the renderer was the only thing that traced anything;
-    the acoustic pass walks the very same hierarchy, and making sound reach through vision to find
-    the Grid would have been exactly backwards. `libs/bvh/include/bvh/bvh.hpp` has claimed from the
-    start that "the same hierarchy is intended to serve acoustic rays later, which is why nothing
-    here is specific to light" — this class is where that claim is kept on the host side, as
-    `grid_bvh.slang` keeps it on the device side.
+    This exists because the hierarchy has two readers. Holding it inside `Tracer` as three private
+    members would be right only if the renderer were the only thing that traced anything; the
+    acoustic pass walks the very same hierarchy, and making sound reach through vision to find the
+    Grid would be exactly backwards. `libs/bvh/include/bvh/bvh.hpp` states that "the same hierarchy
+    is intended to serve acoustic rays later, which is why nothing here is specific to light" — this
+    class is where that claim is kept on the host side, as `grid_bvh.slang` keeps it on the device
+    side.
 
     Immutable once built, and **it stays that way even when creatures move**. Phase 6 adds bodies, but
     they do not join this hierarchy: they get their own, under the top level that already exists here
@@ -46,9 +46,9 @@ class Device; // forward declaration
     would cost 31 ms with twenty creatures against 0.0031 ms for the top level alone — see
     `docs/ARCHITECTURE.md` § One hierarchy today, two when creatures move.
 
-    That the one instance sits at the identity is what makes the arrangement cheap to trust: the
-    two-level traversal must produce the very same picture the single-level one did, to the bit, and
-    it does.
+    That the one instance sits at the identity is what makes the arrangement cheap to trust: an
+    identity transform must leave the picture bit-for-bit what traversing the geometry directly
+    yields, so any arithmetic the top level gets wrong shows up as a changed reference digest.
 */
 class World {
 public:

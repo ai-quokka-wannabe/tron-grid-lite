@@ -70,11 +70,10 @@ struct QueueFamilyIndices {
             const bool has_compute{static_cast<bool>(families[i].queueFlags & vk::QueueFlagBits::eCompute)};
 
             /*
-                A later graphics family never displaces an earlier one that also does compute. This
-                loop used to overwrite unconditionally, so a device whose first family was
-                graphics-plus-compute and whose second was graphics-without-compute would end up
-                selecting the one that cannot dispatch — and this renderer is nothing but compute
-                dispatches.
+                A later graphics family never displaces an earlier one that also does compute.
+                Overwriting unconditionally would let a device whose first family is
+                graphics-plus-compute and whose second is graphics-without-compute end up selecting
+                the one that cannot dispatch — and this renderer is nothing but compute dispatches.
             */
             if ((indices.graphics == UINT32_MAX) || has_compute || !indices.graphics_has_compute) {
                 indices.graphics = i;
@@ -158,12 +157,11 @@ struct QueueFamilyIndices {
         Must be able to dispatch compute on the graphics family, because this renderer is nothing
         but compute dispatches.
 
-        This used to be a *bonus* of ten points rather than a requirement, which was a real
-        selection bug and not a cosmetic one. A discrete GPU whose graphics family lacks compute
-        scores 10,000 for being discrete and beats a perfectly capable integrated device on 1,110 —
-        so it gets selected, and the constructor below then aborts with the fatal message about
-        compute while a GPU that would have worked sits unused. Rejecting here means the scoring
-        loop simply passes over it.
+        A rejection rather than a ten-point bonus, and the difference is not cosmetic. Scored as a
+        bonus, a discrete GPU whose graphics family lacks compute still takes 10,000 for being
+        discrete and beats a perfectly capable integrated device on 1,110 — so it gets selected, and
+        the constructor below then aborts with the fatal message about compute while a GPU that would
+        have worked sits unused. Rejecting here means the scoring loop simply passes over it.
     */
     if (!indices.graphics_has_compute) {
         return -1;
@@ -345,11 +343,11 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     m_present_family_index = indices.present;
     if (!indices.graphics_has_compute) {
         /*
-            Fatal, not a warning. The warning this replaces said in its own words that the traversal
-            passes could not be dispatched — and then execution carried on to record a compute
-            dispatch into a pool created on this very family, which is
-            VUID-vkCmdDispatch-commandBuffer-cmdpool. The outcome is a garbled or hung GPU rather
-            than a clean refusal, and the log line that predicted it scrolls away unread.
+            Fatal, not a warning. A warning here would announce that the traversal passes cannot be
+            dispatched, and then execution would carry on to record a compute dispatch into a pool
+            created on this very family, which is VUID-vkCmdDispatch-commandBuffer-cmdpool. The
+            outcome is a garbled or hung GPU rather than a clean refusal, and the log line that
+            predicted it scrolls away unread.
         */
         m_logger.logFatal("Graphics queue family does not support compute; this renderer is nothing but compute dispatches.");
         std::abort();

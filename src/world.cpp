@@ -35,8 +35,8 @@ World::World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& l
         a comment promising the rest.
 
         It also makes the two-level traversal free to verify. One instance at the identity must
-        produce the same picture as the single-level traversal did, to the bit — see the reference
-        render digests in `.claude/CLAUDE.md`, which are unchanged by the move to two levels.
+        produce, to the bit, the picture that traversing the geometry directly produces — see the
+        reference render digests in `.claude/CLAUDE.md`.
     */
     BvhLib::Scene scene{};
     scene.geometries.push_back(bvh);

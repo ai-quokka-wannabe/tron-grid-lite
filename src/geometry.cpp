@@ -320,10 +320,10 @@ NeonGrid generateGridFloorNeon(const GridFloorConfig& floor_config, const NeonTu
     const float half_size{(static_cast<float>(floor_config.cells) * floor_config.cell_size) * 0.5f};
 
     /*
-        The tubes must sit on the floor, not float above where it used to be, so this samples the
-        same surface function the floor mesh does. The two agree exactly because they pass
-        coordinates computed by the same expression from the same integer grid, not because the
-        heights are copied from one to the other.
+        The tubes must sit on the relief, not float above the flat plane it is displaced from, so
+        this samples the same surface function the floor mesh does. The two agree exactly because
+        they pass coordinates computed by the same expression from the same integer grid, not
+        because the heights are copied from one to the other.
     */
     const auto gridVertex = [&](uint32_t gx, uint32_t gz) -> MathLib::Vec3 {
         const float world_x{(static_cast<float>(gx) * floor_config.cell_size) - half_size};

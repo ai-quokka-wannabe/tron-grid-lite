@@ -221,11 +221,10 @@ namespace WindowLib
         }
         m_cursor_captured = captured;
         if (captured) {
-            // Create an invisible cursor. The previous code created a 1×1 depth-1 pixmap
-            // without initialising it; per the X11 spec, freshly-created pixmap contents
-            // are undefined, so on some servers the "invisible" cursor would render as a
-            // visible single pixel. Explicitly zero the pixmap with a GC fill so the
-            // cursor is guaranteed transparent.
+            // Create an invisible cursor. Per the X11 spec the contents of a freshly-created
+            // pixmap are undefined, so a 1×1 depth-1 pixmap left uninitialised renders on some
+            // servers as a visible single pixel rather than as nothing. Explicitly zero it with a
+            // GC fill so the cursor is guaranteed transparent.
             xcb_pixmap_t pixmap{xcb_generate_id(m_connection)};
             xcb_create_pixmap(m_connection, 1, pixmap, m_window, 1, 1);
 
@@ -259,9 +258,9 @@ namespace WindowLib
             /*
                 A null reply is a failure, not an unknown. xcb_grab_pointer_reply returns null when
                 the request produced an X error or the connection broke — precisely the cases where
-                the grab definitely did not happen. Treating null as success left the pointer
-                ungrabbed while the window believed it had captured it: the cursor stayed visible,
-                the pointer wandered out of the window, and the camera kept turning.
+                the grab definitely did not happen. Treating null as success leaves the pointer
+                ungrabbed while the window believes it has captured it: the cursor stays visible,
+                the pointer wanders out of the window, and the camera keeps turning.
             */
             bool grab_ok{false};
             if (grab_reply != nullptr) {
