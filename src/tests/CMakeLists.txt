@@ -12,3 +12,11 @@ add_test(NAME geometry_tests COMMAND geometry_tests)
 add_executable(acoustics_tests acoustics_tests.cpp ../acoustics.cpp)
 target_link_libraries(acoustics_tests PRIVATE math bvh testing)
 add_test(NAME acoustics_tests COMMAND acoustics_tests)
+
+# The SPIR-V reader is header-only and mentions no Vulkan type, so this target links testing alone —
+# no math, no bvh, and above all no Vulkan SDK. That is the point of it rather than an economy: every
+# test in the file exercises a failure, and failures are the code no other check in this repository
+# can reach. The reference render walks the success path; nothing walks the others.
+add_executable(spirv_tests spirv_tests.cpp)
+target_link_libraries(spirv_tests PRIVATE testing)
+add_test(NAME spirv_tests COMMAND spirv_tests)

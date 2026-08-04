@@ -13,6 +13,7 @@
 */
 
 #include "tracer.hpp"
+#include "spirv.hpp"
 #include "device.hpp"
 #include "vulkan_helpers.hpp"
 #include <math/vector.hpp>
@@ -26,7 +27,6 @@ namespace
 {
 
     using VulkanHelpers::findMemoryType;
-    using VulkanHelpers::readSpirv;
 
     //! Workgroup size, matching the [numthreads(8, 8, 1)] in trace.slang.
     constexpr uint32_t WORKGROUP_SIZE{8u};
@@ -148,7 +148,7 @@ Tracer::Tracer(const Device& device, const World& world, const std::vector<Mater
     m_pipeline_layout = vk::raii::PipelineLayout{m_device->get(),
         vk::PipelineLayoutCreateInfo{.setLayoutCount = 1u, .pSetLayouts = &*m_set_layout, .pushConstantRangeCount = 1u, .pPushConstantRanges = &push_range}};
 
-    const std::vector<uint32_t> code{readSpirv(shader_path)};
+    const std::vector<uint32_t> code{SpirvLib::read(shader_path)};
     const vk::raii::ShaderModule module{m_device->get(), vk::ShaderModuleCreateInfo{.codeSize = code.size() * sizeof(uint32_t), .pCode = code.data()}};
 
     m_pipeline = vk::raii::Pipeline{m_device->get(), nullptr,

@@ -13,6 +13,7 @@
 */
 
 #include "acoustic_tracer.hpp"
+#include "spirv.hpp"
 #include "device.hpp"
 #include <algorithm>
 #include <array>
@@ -24,7 +25,6 @@ namespace
 {
 
     using VulkanHelpers::findMemoryType;
-    using VulkanHelpers::readSpirv;
 
     //! Fixed-point scale. Must equal FIXED_POINT_SCALE in acoustics.slang.
     constexpr float FIXED_POINT_SCALE{262144.0f};
@@ -175,7 +175,7 @@ AcousticTracer::AcousticTracer(const Device& device, const World& world, const s
     m_pipeline_layout = vk::raii::PipelineLayout{m_device->get(),
         vk::PipelineLayoutCreateInfo{.setLayoutCount = 1u, .pSetLayouts = &*m_set_layout, .pushConstantRangeCount = 1u, .pPushConstantRanges = &push_range}};
 
-    const std::vector<uint32_t> code{readSpirv(shader_path)};
+    const std::vector<uint32_t> code{SpirvLib::read(shader_path)};
     const vk::raii::ShaderModule module{m_device->get(), vk::ShaderModuleCreateInfo{.codeSize = code.size() * sizeof(uint32_t), .pCode = code.data()}};
 
     m_pipeline = vk::raii::Pipeline{m_device->get(), nullptr,
