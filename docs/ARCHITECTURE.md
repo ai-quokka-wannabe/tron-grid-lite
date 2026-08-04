@@ -109,6 +109,42 @@ Rules:
 - **Static libraries only**, except `math` and `signals`, which are header-only `INTERFACE` targets.
 - **`testing` is the foundation brick** — every other library's tests link against it. No third-party test framework.
 
+**The admission criterion is a test, and it excludes the renderer permanently.** An entry must be
+general-purpose, extractable into its own repository, and testable through its own `tests/` directory
+linking against `testing`. Anything holding `Device`, `Swapchain`, `Tracer` or `PostProcess` fails
+both halves, and amending the criterion to let it in would leave `libs/` meaning only "code we
+compiled separately" — which would hand `libs/gltf` a tier with no admission test at the moment it
+arrives.
+
+**If `src/` is ever split, the cut is at the Vulkan boundary and nowhere else.** The GPU-free unit
+tests link only `math`, `bvh` and `testing`, and need neither the Vulkan SDK nor XCB; linking them
+against a target that also contains `volk.cpp`, `device.cpp` and `tracer.cpp` would put Vulkan and
+XCB include directories and preprocessor definitions onto the compile line of the only GPU-free tests
+in the repository. That rules out a single whole-of-`src` target as firmly as the criterion above
+rules out `libs/render`.
+
+The split, when a trigger fires, is two plain lowercase targets **in `src/`** — `render` and `sim` —
+with no `Lib` namespace suffix, the absence of the suffix being the deliberate signal that these are
+not extractable. Three preconditions are hard rather than stylistic:
+`VULKAN_HPP_NO_STRUCT_CONSTRUCTORS`, `VK_NO_PROTOTYPES` and `VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1`
+must become `PUBLIC` on the Vulkan target — leaving them `PRIVATE` is the ODR hazard
+`src/CMakeLists.txt` already names — the source directory must become `PUBLIC` on both, and the Slang
+rules must stay on the executable, because `main.cpp` resolves `.spv` paths against the executable's
+own directory.
+
+Three names are disqualified rather than merely unattractive. **`grid`** is spent twice over:
+`world.cpp` is the Grid's geometry and would land in the other target, and `geometry.hpp` already
+spends the word on the floor mesh. **`TronGridEngineLib`** asserts a lineage this project is only
+permitted to describe as "reuses code from", in every `#include` and every qualified name, and it is
+the one naming mistake here that is genuinely hard to walk back. **`TronGridLiteEngineLib`** fails
+three ways: no `libs/` entry carries the project name, "engine" is already spent one layer up where
+this document uses it to mean the renderer as a whole, and twenty-one characters stands against a
+convention of three to seven.
+
+The open include-subdirectory question above should be settled in the same commit as any split — the
+published subdirectory matches the target name, with `signal/` and `log/` grandfathered — because
+`libs/gltf` inherits whatever precedent is standing when it lands.
+
 ### Signal-Based Communication
 
 `SignalsLib::Signal<T>` is a mutex-protected typed queue. It exists to carry messages **across a thread boundary**,
@@ -142,6 +178,59 @@ The general lesson is the one this repository keeps relearning: a queue is for c
 boundary, and a boundary is not created by a subsystem being slow. It is created by something being
 unable to wait, which so far is true of exactly one thing here — the platform's event callback during a
 modal drag.
+
+**The rule, stated as a rule rather than as a habit: a `Signal<T>` may carry only payloads whose
+consumer's output dies with the process** — pixels the User sees, a line on stdout, a validation
+verdict. Nothing whose output is read by the next tick may travel through one. Inside the tick every
+edge is a direct synchronous call.
+
+The test is not "does the consumer accumulate?" — the render thread sums mouse deltas across however
+many messages landed in one drain, and is safe anyway because nothing downstream ever reads its
+camera back. The test is whether the consumer's output is read by the next tick.
+
+**The corollary is the half that gets forgotten: the number of times a consumer runs must never be an
+input to what it computes.** That forbids gating the simulation tick on `cv.wait(!queue.empty())`,
+and equally forbids running a tick once per render pass.
+
+FIFO is guaranteed **per producer**. With concurrent producers the interleaving is a function of
+thread timing, so no value whose computation depends on drain order may travel through a Signal. That
+sentence belongs in the header beside the lifetime paragraph, because it is the only thing standing
+between a future careless `emit` and the replay guarantee.
+
+A short list of things `Signal` will not grow, each because no user exists:
+
+- **No blocking `waitAndConsume`,** despite two present-tense users each pairing a Signal with an
+  external mutex and condition variable and documenting the identical lost-wakeup hazard. Neither
+  could adopt it: `Logger::flush` waits for the queue to *drain*, and a primitive that blocks until a
+  message arrives and then consumes it is the opposite of what a drain needs; and the render loop's
+  predicate becomes compound the moment a roster exists. The wrapper collapse is illusory.
+- **No bounded capacity, no close state, no move-emit.** Shutdown already has two working answers: an
+  in-band `Stop` on the forward path, and a `jthread` stop token for the logger.
+- **No `SnapshotReady{generation, slot}`.** A slot index through an unbounded unacknowledged queue is
+  a use-after-overwrite: dropping is forbidden, blocking the producer is forbidden, so the producer
+  laps the ring while the reader is stalled in `waitForFences` or a swapchain rebuild. If snapshots
+  ever cross a thread they cross by value or by an owned buffer, never by index.
+- **No second waiter on the render channel's condition variable.** `notify_one` is correct only
+  because exactly one thread ever waits on it, and that is written down in the code for the same
+  reason it is written down here.
+- **Nothing that does not cross a thread gets a Signal** — profiler results included. `WindowLib`
+  keeps a plain `std::queue`; do not upgrade it.
+
+Two invariants on the render side are currently enforced by file layout rather than by a type, and
+anything that gathers these objects into one owner must re-establish them deliberately. **The render
+thread must be unable to name the Window** — asking it anything races the thread that owns it, and
+today the only thing preventing that is that `runRenderLoop` does not take one. **Shutdown ordering
+becomes member-declaration order** the moment the channel, the window and the logger are siblings, so
+the reason must be written beside the member list rather than left in the guard that currently states
+it. And the deterministic entry points construct no channel and start no thread; keeping that visible
+in an entry point's signature is worth more than a comment saying it.
+
+The Grid's own boundary is the same rule seen from the other side. The senses-to-Program-to-actions
+path is a direct call and can never be a Signal: the plugin boundary is C99 and `Signal<T>` is a C++
+template holding a `std::mutex`. GPU-to-host readback completion is signalled by a Vulkan fence,
+which is what the recording path already does and what Phase 6 will copy. And creature actions never
+flow back into physics through a queue — each call writes its own `TglActions` slot in an array
+indexed by creature id, the Grid joins, and actions apply in roster order.
 
 Direct calls remain the right answer for same-tick, same-system data access, and RAII members remain the right answer
 for parent-child ownership such as device to swapchain.
@@ -205,6 +294,26 @@ enables it alongside `synchronization2`, but nothing calls `vkCmdBeginRendering`
 
 `WindowLib::Window` wraps Win32 on Windows and XCB on Linux, with no abstraction beyond what the two backends actually
 share. Surface creation uses `VK_USE_PLATFORM_WIN32_KHR` or `VK_USE_PLATFORM_XCB_KHR`.
+
+### Two mechanisms this backend is missing
+
+Both are named here because each replaces a convention with something a caller cannot bypass, which
+is the standard this repository holds itself to elsewhere.
+
+**A type that owns `Tracer` and `PostProcess` together.** `PostProcess` stores non-owning image views
+that `Tracer` owns and reallocates, holds no pointer back to `Tracer`, and cannot be notified. A
+`Tracer::resize` without its matching `PostProcess::resize` leaves stale views in live descriptor
+sets, and nothing in the program can detect it. The pairing is hand-written at four separate sites,
+one of them behind a condition, and a free helper taking both by reference would only be a second
+convention, because a caller can still reach `tracer.resize()` alone. A type that owns both and makes
+the dangerous accessor unreachable is a mechanism.
+
+**A submitter owning one command pool, N buffers and N fences.** Four sites hand-write the same
+pool-plus-buffer-plus-fence-plus-timeout-loop sequence. One trap makes this worth stating rather
+than leaving to a future reader to discover: **the pool creation flag is not uniform across those
+sites** — two use `eTransient` and two use `eResetCommandBuffer` — so any helper unifying them must
+take the flag as a parameter. Collapsing them to one flag would silently change a driver hint at two
+sites, and a driver-hint change is invisible to a rendered-image digest.
 
 ---
 
@@ -645,7 +754,17 @@ Each omission below is a design decision, and each one is what keeps the rendere
 | Roughness, microfacets, full PBR | Perfect mirrors and emissive geometry are the aesthetic; anything more would blur it |
 | Volumetric fog, terrain, skybox | The Grid is infinite black; a missed ray costs nothing |
 | Third-party physics or audio libraries | The BVH already answers both, and in-house keeps the dependency list short |
-| Rendergraph, component system, resource handles | Not enough passes or entity variety to justify the abstraction. Revisit only with a concrete second use case |
+| Rendergraph, event bus, service locator, resource handles | Not enough passes or entity variety to justify the abstraction. Revisit only with a concrete second use case |
+| Component / entity layout | Same reason, and it has already been tried here: `components.hpp` carried a `Transform`/`Bounds`/`Geometry`/`MaterialIndex` layout that nothing ever instantiated, which is why it is not there now. Re-proposing it is re-treading ground already paid for once |
+| An `Engine` class owning subsystems | Every candidate has exactly one consumer. The Khronos "Building a Simple Engine" chapter is the useful case study precisely because its prose and its shipped reference implementation disagree: the prose teaches component systems, service locators, an event bus with priorities and a topologically-sorted pass manager; the shipped `Engine` is a concrete non-virtual class holding eight named `unique_ptr`s, wired by straight-line construction order, with input arriving through four `std::function` callbacks and no rendergraph at all. Its own conclusion page then says each layer should solve a problem actually encountered rather than an anticipated one, and that "each abstraction adds cognitive overhead and potential failure points" |
+| A `libs/physics` extraction | One consumer. `src/tests/CMakeLists.txt` already says this in as many words, and the reason usually offered for the extraction — so that the check can run in CI — is simply false: the GPU-free ctest targets already run in CI without it |
+
+One pattern from the same chapter is worth taking rather than refusing, because it is an anti-pattern
+this repository currently has: **state indexed by the frame in flight belongs in one array of a
+`FrameData` struct, not in several parallel vectors each indexed by the same counter.**
+`runRenderLoop` keeps command buffers, image-available semaphores and in-flight fences as three
+separate vectors walked by one index. Parallel vectors are the shape that lets one of them fall out
+of step, and nothing catches it.
 
 ---
 

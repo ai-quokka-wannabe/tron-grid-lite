@@ -84,6 +84,18 @@ shims — a Program either speaks the current ABI or it does not load.
 Everything else the Program needs is reached through the returned vtable, so a Program exports one
 symbol and the Grid does exactly one symbol lookup.
 
+Two obligations the returned pointer carries, both of which this document owes and the borrow rule
+below does not cover:
+
+- **The vtable has static storage duration and must remain valid until `library_shutdown` returns.**
+  Every other pointer in this interface is borrowed for the call only; this one is not, and a
+  Program returning the address of a temporary is conforming by the text of § Rules and dangling in
+  fact for the whole run.
+- **All five members must be non-NULL.** The Grid checks each one at load, refuses the library and
+  names the missing member. That is the highest defensive value per line available anywhere in this
+  boundary, for the plain reason that § Writing a Program instructs authors to hand-write the
+  vtable, and a partially transcribed struct is exactly what hand-writing produces.
+
 ### Lifecycle
 
 ```text
@@ -93,12 +105,14 @@ symbol and the Grid does exactly one symbol lookup.
 4. vtable->library_init(&library_info)               once per loaded library
 5. For each creature body assigned to this library:
        vtable->program_rez(&creature_desc)           -> opaque Program handle
-6. Per tick, for each live creature:
-       a. The Grid advances physics for the tick.
-       b. The Grid renders each of that creature's eyes into its own tiny render target.
-       c. The Grid reads the targets back and fills TglSenses, along with the body senses.
-       d. vtable->program_tick(handle, &senses, &actions)
-       e. The Grid clamps and applies TglActions to the body.
+6. Per tick:
+       a. The Grid advances physics once, for every body on the roster.
+       b. The Grid renders each creature's eyes into their own tiny render targets.
+       c. The Grid gathers each creature's ears against the same hierarchy.
+       d. The Grid reads the eye targets back and fills TglSenses, with the body senses.
+       e. For each live creature:
+              vtable->program_tick(handle, &senses, &actions)
+       f. The Grid clamps every TglActions and stages it as the next tick's intent.
 7. On creature death or Grid shutdown:
        vtable->program_derez(handle)
 8. vtable->library_shutdown()                        once per loaded library
@@ -109,6 +123,14 @@ Steps 4 and 8 are called exactly once per library, regardless of how many creatu
 drives. Steps 5 and 7 pair up strictly: every handle returned by `program_rez` receives exactly one
 `program_derez`. A `program_rez` that returned `NULL` produced no handle and therefore never
 receives a `program_derez` — the Grid skips that body and there is nothing to release.
+
+**Only step 6e is inside the per-creature loop, and the two steps that sit outside it carry the
+whole of the ordering argument.** Physics advances once for every body, because advancing it per
+creature cannot express two creatures touching each other at all, and it makes roster iteration
+order physically observable in the world. Clamping and staging happen after every Program has been
+called, for the mirror reason: applying inside the loop would let the first creature's action move
+the world before the last creature's call, which makes "an action takes effect on the next tick"
+true for one creature and false for the rest.
 
 ---
 
@@ -125,9 +147,11 @@ receives a `program_derez` — the Grid skips that body and there is nothing to 
 - **No memory ownership transfer.** Every pointer in a struct passed to a Program is owned by the
   Grid and is valid only for the duration of that call. The Program must copy anything it wishes to
   keep. Symmetrically, the Grid never frees anything a Program allocated.
-- **One version number, checked once, and it does not move.** `TGL_PROGRAM_ABI_VERSION` catches a
-  stale library; it does not express compatibility. There are no per-struct size fields and no
-  compatibility shims — see [Versioning](#versioning).
+- **One version number, checked once, and it moves whenever the header does.**
+  `TGL_PROGRAM_ABI_VERSION` catches a stale library; it does not express compatibility. A constant
+  that never moves catches nothing, because the stale library carries the identical constant — see
+  [Versioning](#versioning), which holds the mechanism that keeps the number honest. There are no
+  per-struct size fields and no compatibility shims.
 - **Fixed-width types only.** `uint32_t`, `int32_t`, `float`, `uint64_t`. No `int`, no `long`, no
   `size_t`, no `bool`, no enums with unspecified underlying type, no bitfields.
 - **Standard layout, natural padding.** Every struct here is a plain C standard-layout type of
@@ -139,7 +163,7 @@ receives a `program_derez` — the Grid skips that body and there is nothing to 
 ### Vtable
 
 ```c
-#define TGL_PROGRAM_ABI_VERSION 1u  /*!< Stays at 1 until 0.1.0. See Versioning. */
+#define TGL_PROGRAM_ABI_VERSION 1u  /*!< Bumps on any change a built Program could notice. */
 
 /*! Opaque per-creature Program state. The Grid never dereferences this. */
 typedef struct TglProgram TglProgram;
@@ -180,9 +204,8 @@ The two library-scope members keep plain names on purpose. They are `LoadLibrary
 `FreeLibrary`/`dlclose`: facts about Windows and Linux rather than events on the Grid. Tron words
 name events on the Grid; plain words name events in the operating system.
 
-The rename that produced these names — `TglBrain` and `creature_create` and their siblings — changed
-the exported symbol, both type names and three of the five members. No number records it, because
-nothing external was built against the old ones. See [Versioning](#versioning).
+A change to any name, type or member in this vtable is a change an already-built Program could
+notice, so it moves `TGL_PROGRAM_ABI_VERSION`. See [Versioning](#versioning).
 
 ### Library and creature descriptors
 
@@ -191,7 +214,7 @@ nothing external was built against the old ones. See [Versioning](#versioning).
 typedef struct TglLibraryInfo
 {
     uint32_t abi_version;    /*!< ABI version the Grid is running. */
-    uint32_t tick_rate_hz;   /*!< Nominal ticks per second. */
+    uint32_t tick_rate_hz;   /*!< Ticks per second. The same constant as nominal_dt_seconds, the other way up. */
 } TglLibraryInfo;
 
 /*! How one eye's samples are arranged. */
@@ -238,15 +261,49 @@ typedef struct TglCreatureDesc
     const TglEyeDesc* eyes;
     uint32_t eye_count;
 
-    /*! Nominal seconds per tick. The actual value is repeated each tick in TglSenses. */
+    /*! This body's ears, in the order their views arrive each tick. May be zero. Borrowed for the
+        duration of the call; copy anything worth keeping. TglEarDesc is declared under Hearing
+        below, and the header declares it ahead of this struct. */
+    const TglEarDesc* ears;
+    uint32_t ear_count;
+
+    /*! Seconds per tick. A constant the Grid supplies, never a measurement — there is no actual
+        value distinct from this one. TglSenses repeats it every tick so a tick handler needs
+        nothing else. */
     float nominal_dt_seconds;
 } TglCreatureDesc;
 ```
+
+**`dt_seconds` is a constant the Grid supplies, and the Grid does not measure it.** There is no
+actual value distinct from the nominal one, and the wording above is deliberately not "nominal, with
+the actual value repeated each tick". A Grid that timed a tick with a `steady_clock` and handed the
+result to every Program would be the single largest replay hazard in the project, and it would
+arrive dressed as a convenience.
+
+That number lives in four places spanning a C ABI — `tick_rate_hz`, `nominal_dt_seconds`,
+`TglSenses::dt_seconds`, and the Grid-side constant the physics step integrates against — which is
+the duplicated-fact shape this repository loses most of its time to. It is held together by a
+`static_assert` against this header's literal, because a comment saying "must equal" is not a
+mechanism.
 
 Note the direction of control: the **Grid** decides how many eyes a body has, how many samples each
 one takes, in which directions and in how many channels, and hands the lot to the Program. A Program
 does not request an eye. Sensor geometry is a property of the creature's body, not of its cognition,
 and bodies are the Grid's business.
+
+**No sensor preset in [PERCEPTION.md](PERCEPTION.md) is a rectangle, and that is worth knowing
+before reaching for one.** `elegans` is two body-referenced samples, the three insect presets are
+direction lists by construction, the rodent field is a uniform buffer wrapped around two thirds of a
+sphere rather than a frustum, and the macropod is a streak with an embedded area centralis plus a
+coarser periphery — a graded specification that document calls more honest than one number.
+`TGL_EYE_LAYOUT_RASTER` survives because a debug eye and a first Program are both easier to read as
+a picture, not because anything in the sensor model asked for it.
+
+It is the wrong shape for a foveated eye specifically, and not merely a coarse one. A perspective
+raster spends a constant *tangent* step per column, so the solid angle one sample covers shrinks
+towards the edges: the periphery is sampled finest and the centre coarsest, which is the exact
+inverse of every foveated eye in that document. A sample list has no such gradient to fight, which
+is why rule 4 there prescribes one.
 
 ---
 
@@ -281,7 +338,8 @@ typedef struct TglSenses
     /*! Monotonic tick counter. */
     uint64_t tick;
 
-    /*! Duration of this tick in seconds. */
+    /*! Seconds per tick — the same constant TglCreatureDesc::nominal_dt_seconds carries, repeated
+        here so a tick handler needs nothing else. Never a measured elapsed time. */
     float dt_seconds;
 
     /* -- Vision ------------------------------------------------------------------- */
@@ -325,6 +383,14 @@ typedef struct TglSenses
         organ is likewise a very low-resolution radiance sensor, and it is enough to tell warm
         from cold long before it is enough to see. */
     float irradiance;
+
+    /* -- Hearing ------------------------------------------------------------------ */
+
+    /*! One view per ear, in the same order as TglCreatureDesc::ears. NULL when ear_count is 0.
+        TglEarView is declared under Hearing below, and the header declares it ahead of this
+        struct. */
+    const TglEarView* ears;
+    uint32_t ear_count;
 } TglSenses;
 ```
 
@@ -361,6 +427,12 @@ Points worth stating plainly, because they are the whole design:
   frequency band at each delay. Working out that two arrivals four milliseconds apart mean a surface
   seventy centimetres away is the Program's job, exactly as it is the Program's job to decide that a
   bright cyan band is a wall.
+- **One tick is a discontinuous function of state, and deliberately so.** Contacts are unilateral:
+  the active constraint set changes between substeps, so an arbitrarily small change in a body's
+  position can change which surfaces it is touching and therefore what it senses. This is the world
+  being honest — a foot is either on the ground or it is not — but it means anything on the Program
+  side that differentiates through the simulator sees cliffs rather than slopes. Better learned here
+  than rediscovered in another repository.
 
 ### Hearing
 
@@ -387,8 +459,16 @@ typedef struct TglEarDesc
     const float* band_edges_hz;
     uint32_t band_count;
 
-    uint32_t bin_count;       /*!< Time bins delivered per tick. */
-    float bin_seconds;        /*!< Width of one bin. */
+    /*! Time bins delivered per tick, and the width of one bin in seconds. Their product is the
+        response's whole span, and that span is a hard edge rather than a soft one: an arrival
+        later than bin_count * bin_seconds is dropped rather than folded into the last bin, so the
+        last bin is an ordinary bin and never a catch-all. The span is sized against the Grid's own
+        acoustic horizon rather than against a listener's patience — Acoustics::RANGE_METRES of
+        total path is 58 ms at 343 m/s, inside the 64 ms that Acoustics::BIN_COUNT bins of
+        Acoustics::BIN_SECONDS cover — so nothing the gather can produce falls off the end. An ear
+        asking for a shorter span is asking to be deaf to its own late arrivals. */
+    uint32_t bin_count;
+    float bin_seconds;
 
     /*! Atmospheric absorption per band, decibels per kilometre, band_count values.
         Borrowed for the call only. Authored beside the band edges because both follow from the
@@ -408,7 +488,11 @@ typedef struct TglEarView
         arrival times within a band means stepping through bins, and this layout makes that
         one contiguous run per band; the transpose would make every step a stride.
 
-        Relative to the emitting source's energy; there is no absolute reference level.
+        Relative to a primary neon tube, which is the unit of the acoustic scale and the only
+        reference level on the Grid; there is no absolute one, so no dB SPL figure is derivable
+        from these numbers. Not relative to "the emitting source", because a bin holds the sum of
+        everything that arrived within it, and a sum over 16,640 tubes and any number of calling
+        creatures has no single source to be relative to.
         A bin no sound has reached yet reads zero, which is the physical answer and not a
         sentinel: there is no "not yet filled" state to flag. */
     const float* energy;
@@ -418,10 +502,10 @@ typedef struct TglEarView
 } TglEarView;
 ```
 
-`TglCreatureDesc` gains `const TglEarDesc* ears; uint32_t ear_count;`, and `TglSenses` gains
-`const TglEarView* ears; uint32_t ear_count;` under the `/* -- Hearing -- */` banner, keeping the
-modality grouping this document commits to. An `ear_count` of zero is a legitimate body, and is the
-correct specification for all three insect presets.
+An `ear_count` of zero is a legitimate body, and is the correct specification for all three insect
+presets: an ear costs a gather, and a body with nothing worth hearing should not pay for one. The
+ear members sit under their own `/* -- Hearing -- */` banner in `TglSenses` rather than beside the
+eyes, because the modality grouping is what a reader transcribing the struct navigates by.
 
 The direction of control is the same as for eyes: **the Grid decides how many ears a body has, where
 they sit, and what bands they resolve.** A Program does not request an ear.
@@ -506,6 +590,18 @@ physics step as intent, not as a teleport. A Program asking for one hundred metr
 whatever its body can actually manage. Non-finite values (`NaN`, infinities) are treated as zero
 and logged.
 
+The limits themselves are a property of the body, fixed when the Program is rezzed, and they are not
+negotiable by anything a Program returns. This document promises clamping in every action field and
+once more in the lifecycle; the numbers it clamps against are the body's, and until a body exists
+they are the emptiest promise in the interface.
+
+**The acceptance test for the whole physics subsystem is written into the senses rather than into a
+benchmark: `body_forward_speed` must disagree with `desired_forward_speed` whenever the body is
+pushed rather than driven.** If a creature dragged against a pillar reads its own command back, both
+proprioceptive channels are carrying zero bits of information, and no amount of stacking or
+throughput proves otherwise. Everything else about the physics — how many contacts, how many
+substeps, how fast — is negotiable; this is not.
+
 There are no fields for "interact with object X", "pick up" or "attack", and adding them would defeat
 the purpose. If a creature is to do something to the Grid, it must do it by moving a body through
 space — or, now, by making a noise in it.
@@ -525,16 +621,28 @@ separate breaking changes would have been a change that did nothing on its own.
 
 ## Threading and Ownership
 
-- `program_tick` is called from the **tick thread**. Which OS thread that is may change between
-  ticks; it will not change during one.
+- `program_tick` is called from the **tick thread** — the thread that owns the tick, which is not
+  necessarily the thread any one call runs on; see the parallel licence below. Which OS thread that
+  is may change between ticks; it will not change during one.
 - The Grid may tick **different creatures in parallel**. A Program library must therefore treat
   `program_tick` as reentrant across distinct handles: per-creature state is fine, shared mutable
   library state must be synchronised by the Program, and any global mutable state is a bug waiting
   to happen.
+
+  This is an **obligation on the Program author, not a promise the Grid must exercise** — a
+  single-threaded Grid satisfies it by never using it. What the Grid does promise, either way, is
+  the merge: **each call writes its own `TglActions` slot, the Grid joins, and actions are applied
+  in fixed roster order.** No result depends on completion order. The licence covers this call and
+  nothing else; the physics step advances bodies serially in roster order, because bodies push each
+  other.
 - `library_init`, `program_rez`, `program_derez` and `library_shutdown` are called from a single
   thread with no other Program call in flight.
-- `program_tick` **must not block**. It runs inside the tick budget. A Program that needs
-  long-running work must do it on its own thread and let `program_tick` read the most recent result.
+- `program_tick` **must not block.** The reason is not a tick budget — there is no budget and
+  nothing here runs on a clock. It is that a blocking Program stalls the whole Grid permanently, and
+  the Grid cannot kill the thread without corrupting the process. A merely *slow* Program is a
+  non-problem: `dt_seconds` is supplied, nothing is dropped and no quality degrades. A Program that
+  needs long-running work must do it on its own thread and let `program_tick` read the most recent
+  result.
 - A Program may create its own threads, windows and files. The Grid neither knows nor cares. It
   provides no logging facility and no debug display to Programs; a Program that wants to visualise
   its own state opens its own window.
@@ -547,6 +655,36 @@ separate breaking changes would have been a change that did nothing on its own.
 Programs run **in process**. There is no sandbox and no crash isolation. If a Program segfaults, the
 Grid dies with it. This is a deliberate simplification for a project whose Programs are written by
 the same small group as the Grid; it may be revisited if that ever stops being true.
+
+### What the Grid will not do about a misbehaving Program
+
+The budget goes to **attribution — naming the culprit — and never to remedy.** Four things follow,
+and the last is the one every watchdog discussion drifts toward:
+
+- **Every `program_tick` may be timed and outliers logged, but the measurement must never be acted
+  upon.** The comment saying so belongs in the code, because that is the exact line a future change
+  will be tempted to cross.
+- **No timeout-substituted actions.** Feeding zeros, reusing last tick's actions, or skipping a slow
+  creature all make the simulation a function of the OS scheduler, unreproducibly. This is the one
+  design that must never be adopted.
+- **No watchdog may cancel or detach a hung tick.** `TerminateThread` leaves heap and
+  critical-section locks permanently held, and a detached tick still holds `TglSenses` pointers this
+  document declares valid only for the call, into buffers the Grid is about to reuse. Detect and
+  log; never remedy.
+- **`catch (...)` around a vtable call sees no access violation and no divide by zero** under the
+  compiler settings this project builds with, yet is easily believed to. The structured-exception
+  version that *does* see them yields a corrupted process which keeps simulating, producing
+  plausible wrong numbers instead of a crash — worse than the crash.
+
+What is worth doing instead is cheap. [STYLE.md](../STYLE.md) § Error Handling already forbids an
+exception crossing this boundary in either direction, and marking the host-side call sites
+`noexcept` is the enforcement: it catches nothing, but it turns an unwind arriving from a plugin
+from undefined behaviour into a terminate at a known instruction. Beside it, write a breadcrumb —
+library path, `creature_id`, tick — before each call, paired with a terminate handler that logs it.
+That is what turns "the Grid crashed" into a named culprit.
+
+Program authors should also be warned away from `DllMain` and non-trivial static initialisers: work
+there runs under the loader lock, and a deadlock there cannot be timed out at all.
 
 ### Hot reload
 
@@ -568,6 +706,42 @@ The interface is designed so that a run can be reproduced:
 Consequently, recording every `TglSenses` a Program saw and replaying the sequence into the same
 Program build must reproduce the same `TglActions` sequence. A Program that fails this is
 non-deterministic internally, which is allowed but should be a deliberate choice.
+
+### Determinism is worth nothing to a learning Program, and a great deal to whoever debugs the Grid
+
+This is worth stating flatly because the opposite is widely assumed. A Program gains nothing from
+bit-identical rendering: the reference digest is a SHA-256 over 8-bit images, so the guarantee is
+quantised to 1/255 before anyone reads it, and gradient noise, weight initialisation and batch order
+are not in the same universe as a sub-ulp radiance difference. Anyone selling determinism as a
+training benefit is wrong.
+
+What it does buy is measurement. In reinforcement learning the outcome signal is noisy enough that a
+real bug and an unlucky seed produce the same-sized effect — ten identical runs of one published
+algorithm, differing only by seed, split into two statistically distinguishable groups with
+non-overlapping learning curves — which is precisely why whoever writes the Grid needs the Grid
+removed from the suspect list. A reproducible environment is also what makes paired comparison
+possible at all, and paired comparison is what buys statistical power in the few-run regime a solo
+project necessarily occupies.
+
+The reverse concern, that a deterministic environment invites a Program to memorise a trajectory
+rather than perceive, is real and has a documented history — but nobody in the literature answered
+it by making the engine irreproducible. They kept a bit-exact core and added a **seeded, declared,
+parameterised** noise layer on top. That is the shape any variation here takes: randomise Grid
+content — layout, materials, light placement, acoustic geometry, spawn states — never the renderer's
+arithmetic. The honest framing is not "determinism versus randomisation" but **reproducible
+randomisation versus unusable randomisation**, because a noise realisation that cannot be re-created
+on demand forbids the best uses of randomisation and permits none of them exclusively.
+
+### The shape any randomness here takes
+
+Indexed, not streamed: a value is a pure function of `(seed, stream, index)` rather than the next
+draw from a shared generator. That form does not care who calls it, in what order, or on which
+thread, which makes it *more* reproducible than a global generator and parallel-safe for free. The
+pattern is already here three times without being named — the acoustic direction set is a closed
+form indexed by ray number, the lattice relief is an integer hash taking a seed, and each creature
+receives its seed at rez rather than from the clock. Two rules come with it, and both are cheaper to
+adopt than to retrofit: the seed goes into every replay header, and **any stochastic term reaching
+the visual path breaks the reference digest unless the recording mode pins the seed.**
 
 ### Determinism is per device, and this is measured rather than assumed
 
@@ -618,31 +792,70 @@ therefore a robustness check that costs nothing to perform, and it sits squarely
 [PERCEPTION.md](PERCEPTION.md) rule 6: blur, aliasing and noise are the creature's problem to cope
 with, not artefacts for the Grid to sand away.
 
+### Three layers, and physics closes the loop between them
+
+Most arguments about determinism are two people discussing different layers:
+
+| Layer | Owned by | What is wanted |
+|-------|----------|----------------|
+| (a) the engine's physics and rendering | the Grid | reproducible |
+| (b) the scenario and initial conditions | the Grid | randomised, but seeded |
+| (c) the Program's own policy | the Program | recorded, or nothing else matters |
+
+Bit-identical (a) is necessary for replay and worthless without (c). Engine determinism is therefore
+**necessary but not sufficient**: the moment a Program loads a neural network with autotuned
+kernels, the run diverges regardless of how perfect the Grid is.
+
+**Physics closes the first feedback loop from the device back into the world, and that is a larger
+change than it sounds.** Senses are rendered per device; actions derive from senses; actions move
+bodies. Two machines running the identical binary therefore diverge into materially different
+*worlds* within a few ticks, not merely different pictures — and the two reference GPUs already
+disagree on about sixteen per cent of colour channels. The only cross-device-reproducible case is a
+creature with zero eyes and zero ears, which the roster permits, and that is the outer boundary of
+what could ever be promised. **Record senses, never poses** holds harder for a world than it does
+for a picture.
+
 ---
 
 ## Versioning
 
 **There is none, and that is deliberate until 0.1.0.**
 
-`TGL_PROGRAM_ABI_VERSION` is `1u` and stays at `1u`. This interface changes whenever it needs to —
-structs gain fields, functions change signature, semantics get corrected — and none of that bumps
-the number, because nobody is owed backward compatibility by a project that has not reached its
-first release. Every Program that exists is built from this repository, at whatever commit the Grid
-is built from. When the ABI changes, both sides rebuild. That is the whole story.
+`TGL_PROGRAM_ABI_VERSION` is a build stamp rather than a compatibility statement. This interface
+changes whenever it needs to — structs gain fields, functions change signature, semantics get
+corrected — and none of that buys anyone backward compatibility, because nobody is owed it by a
+project that has not reached its first release. Every Program that exists is built from this
+repository, at whatever commit the Grid is built from. When the ABI changes, both sides rebuild and
+the number moves with them. That is the whole story.
 
 The constant is kept for the one job it can still do honestly: catching a **stale library**. A
 `.dll` or `.so` left over from an older build, loaded against a Grid whose struct layouts have moved
 underneath it, is memory corruption with no diagnostic. One integer compared at load time turns that
 into a refusal and a log line.
 
-- `tglGetProgramVTable` returns `NULL` if the requested version is not `1u`. The Grid refuses to
-  load that Program and says so. That single check is the entire mechanism.
+**That job requires the number to move, which is the whole reason it moves.** A constant frozen at
+`1u` cannot do it at all: the stale library was compiled against a header that also said `1u`, so it
+answers the request, returns a vtable, passes the check, and delivers precisely the corruption the
+paragraph above describes. A version that never changes is not a weak check but a check-shaped
+absence of one, which is worse, because it reads as reassurance. So it bumps on **any** change a
+built Program could notice: a struct that gains, loses or reorders a member, a signature, or a
+semantic something could have relied on.
+
+Discipline will not hold that, and this repository does not ask discipline to hold anything. The
+mechanism is a CI step that hashes the header with the version line removed and fails when the hash
+moves and the number does not — a duplicated fact with something holding the copies together, which
+is the answer given every time one is found here.
+
+- `tglGetProgramVTable` returns `NULL` unless the requested version equals the one the Program was
+  built against. The Grid refuses to load that Program and says so. That single check is the entire
+  mechanism.
 - The Grid's own release version is unrelated and moves independently.
 
 Real versioning arrives when there is something to version — a released Grid, and Programs written
-by somebody who cannot simply rebuild them. Until then a rising number would record ceremony rather
-than compatibility, and it has already drifted once: the roadmap asked for a bump that a rename had
-silently already spent.
+by somebody who cannot simply rebuild them. Until then a number expressing *compatibility* would
+record ceremony rather than compatibility, which is a different job from the stale-library stamp
+above and must not be confused with it: one says "these two builds agree", the other says only
+"these two builds are the same build".
 
 There is deliberately nothing else — no per-struct size fields, no reserved members held back for
 future growth, no negotiation. Those exist to let mismatched builds keep working, and while the

@@ -60,11 +60,8 @@ are worth knowing before touching the areas they govern:
 - **The reference render digests are the only genuine one-way door here.** Regenerating the two rows
   in `.claude/CLAUDE.md` needs physical access to both GPUs. Never move a digest speculatively, and
   batch anything that must move it into a single commit.
-- **What the digest cannot see.** It is a check on a picture produced by a single-threaded path, so a
-  lock inversion, a lost wakeup or a join waiting behind `acquireNextImage` all leave it green — and
-  ThreadSanitizer does not close that gap, because it proves the absence of *races* and says nothing
-  about order. Anything touching threading needs its own check, and a threading refactor is exactly
-  where a green digest is least informative and feels most reassuring.
+- **What the digest cannot see**, and the two other limits of it, live in
+  [.claude/CLAUDE.md](.claude/CLAUDE.md) § The reference render, beside the digests themselves.
 
 ## Etape 11 — Import creature bodies as glTF
 
