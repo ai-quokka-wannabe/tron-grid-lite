@@ -198,12 +198,16 @@ void AcousticTracer::setEars(const std::vector<MathLib::Vec3>& ears)
     }
 
     std::memcpy(m_ears_mapped, padded.data(), padded.size() * sizeof(MathLib::Vec4));
+
+    m_ear_count = static_cast<uint32_t>(ears.size());
 }
 
-void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t ear_count, const Acoustics::GatherConfig& config) const
+void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, const Acoustics::GatherConfig& config) const
 {
-    if ((ear_count == 0u) || (ear_count > m_max_ears)) {
-        throw std::runtime_error{"Acoustic dispatch asked for an ear count this pass was not built for."};
+    // No ears placed is a dispatch of nothing rather than an error: setEars has simply not been
+    // called yet, and a workgroup count of zero is not a legal dispatch.
+    if (m_ear_count == 0u) {
+        return;
     }
 
     /*
@@ -249,7 +253,7 @@ void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, uint3
         counted in ears, and each thread strides over the direction set by itself. A copy of the
         number on this side would be a second place for it to be wrong.
     */
-    command_buffer.dispatch(ear_count, 1u, 1u);
+    command_buffer.dispatch(m_ear_count, 1u, 1u);
 
     /*
         Make the histogram visible to the host.
@@ -278,8 +282,14 @@ void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, uint3
 
 Acoustics::ImpulseResponse AcousticTracer::read(uint32_t ear_index) const
 {
-    if (ear_index >= m_max_ears) {
-        throw std::runtime_error{"Acoustic readback asked for an ear this pass was not built for."};
+    /*
+        Against the ears actually placed rather than against the buffer's capacity, which is the
+        tighter of the two bounds and the one a caller can violate meaningfully: reading ear three of
+        two is asking for a response that was never gathered, and the histogram slot behind it holds
+        whatever the last dispatch that used it left there.
+    */
+    if (ear_index >= m_ear_count) {
+        throw std::runtime_error{"Acoustic readback asked for an ear that was never placed."};
     }
 
     Acoustics::ImpulseResponse response{};

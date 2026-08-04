@@ -691,7 +691,7 @@ struct DeviceGather {
     const vk::raii::CommandBuffer& command_buffer{command_buffers.front()};
 
     command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    acoustic_tracer.record(command_buffer, static_cast<uint32_t>(ears.size()), config);
+    acoustic_tracer.record(command_buffer, config);
     command_buffer.end();
 
     const std::chrono::steady_clock::time_point start{std::chrono::steady_clock::now()};
