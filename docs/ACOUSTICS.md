@@ -3,9 +3,11 @@
 What changes when the sense is sound rather than light, and the concrete shape of Phase 5 against
 the code that exists today.
 
-This document is a design proposal. Nothing in it has been implemented, and every performance figure
-below is a **budget** derived from the visual tracer's measured throughput or quoted from somebody
-else's published work. No acoustic pass has been profiled, because none exists.
+The gather exists on both sides — `Acoustics::gather` on the host, `acoustics.slang` on the device,
+held to each other by `--verify-acoustics` — and everything this document proposes beyond it is a
+design proposal. Every performance figure below is a **budget** derived from the visual tracer's
+measured throughput or quoted from somebody else's published work: `GpuPass` has no acoustic
+enumerator, so the profiler has never timed one.
 
 The evidence sits in [research/acoustics.md](research/acoustics.md): the geometrical-acoustics
 survey, the creature roster's published audiograms, and the full reference list. This file says what
@@ -183,10 +185,11 @@ it is the Grid's, and the repository's founding rule settles it without discussi
 A per-tick *scalar* is also too coarse in a second way. At 60 Hz a tick is 16.7 ms, which at 343 m/s
 is 5.7 m of path — enough to fold the direct arrival, every terrace bounce and the nearest pillar
 into a single number. The resolution that matters is spatial and is stated below: 1 ms is 17.2 cm of
-out-and-back range, and a tick is 2.9 m of it. The defensible shape is therefore a short echogram
-covering the current tick at 1 ms resolution — sixteen bins by four bands by two ears is 128 floats,
-512 bytes per creature per tick, a small fraction of one `insect-min` eye buffer at 1,000–1,500
-direction samples, and larger only than `elegans`, whose entire visual sense is two scalars.
+out-and-back range, and a tick is 2.9 m of it. The defensible shape is therefore a short echogram at
+1 ms resolution, spanning the Grid's own acoustic horizon rather than one tick — sixty-four bins by
+four bands by two ears is 512 floats, two kilobytes per creature per tick, a small fraction of one
+`insect-min` eye buffer at 1,000–1,500 direction samples, and larger only than `elegans`, whose
+entire visual sense is two scalars.
 
 ---
 
@@ -559,7 +562,8 @@ Four reasons it does not belong here:
    `(1 - s)(1 - alpha) + alpha + s(1 - alpha) = 1` splits a reflection into a specular part and a
    diffuse part, and the only implementation compatible with one-ray-per-bounce is the stochastic one
    — Russian roulette between `reflect(I, N)` and a cosine-weighted random direction. There is no RNG
-   anywhere in this repository, and PROGRAM_INTERFACE.md publishes bit-identical replay as a guarantee.
+   on any shipping path — the only one in the tree is a seeded xorshift generating test geometry under
+   `libs/bvh/tests` — and PROGRAM_INTERFACE.md publishes bit-identical replay as a guarantee.
    Introducing the project's first Monte Carlo estimator, and the temporal accumulation that would
    follow it, to model a phenomenon whose correct coefficient here is zero, is a bad trade.
 
@@ -665,6 +669,33 @@ material index answering both senses. Whether the two coefficient sets share a c
 implementation detail, and coupling them by index rather than by row is the honest reading. It is also,
 exactly, what the de-bloating pass concluded when it deleted these fields the first time.
 
+### What a sounding creature costs this table
+
+The gather already takes source strengths as a per-call argument and is linear in them, so **writing
+this tick's scrape value into a body's slot is itself the envelope multiplication described above** —
+no traversal change, no new pass, no new concept. What does have to change is small and worth naming
+before it is discovered:
+
+- **The device-side copy is device-local and its member comment says it never changes.** A creature
+  that scrapes changes it every tick. The cost is nothing — a roster of a few dozen bodies is a hundred
+  bytes or so, a push constant rather than an upload — but a buffer rewritten every tick wants a
+  different memory property, and the comment beside it wants to say so.
+- **`MATERIAL_SLOT_COUNT` stops being a constant**, becoming the six Grid materials plus `N`. Whether
+  `N` counts bodies or body kinds is a real trade rather than an oversight: one slot per body is what
+  stops twenty worms scraping in unison, and the roster is fixed at start-up so it costs nothing at
+  upload time, but it makes the count runtime-sized where the enumerator is a compile-time constant
+  today. Per kind keeps the constant and makes every worm of a kind one distributed source. Per body
+  is the recommendation; either way every host-side use of the slot count must learn the answer.
+- **Host and device must be fed from one place.** `--verify-acoustics` and `--verify-scene` compare the
+  two gathers on the same inputs; hand the two sides different strengths and they diverge silently,
+  with the failure looking exactly like an acoustics bug. That is the duplicated fact with nothing
+  holding the copies together, sitting directly under the most sensitive threshold in the repository.
+
+One consequence is correct and should not be suppressed: **creature bodies occlude and reflect sound**,
+because a body is an instance in the very scene the gather walks. What the Grid does not model is
+diffraction around a creature's own head; whether one worm shadows another is a different claim, and
+that one the gather answers for free.
+
 ---
 
 ## What a Creature Ear Needs
@@ -727,7 +758,8 @@ resolution that matters is spatial: 1 ms is 17.2 cm of out-and-back range, which
 number; 4 ms is 69 cm, which is not.
 
 The cost of the finer bin is four times the bins, and the bins are the cheapest thing in the design. A
-64-bin, four-band, two-ear histogram is 512 floats; the slice delivered per tick is 128 floats.
+64-bin, four-band, two-ear histogram is 512 floats, and all of it is delivered every tick: the span is
+sized by the 20 m range cap rather than by the tick, so there is no slice to take.
 
 ### Two ears, never a mono mix
 
@@ -790,6 +822,17 @@ Two other numbers from the same source bound the trace usefully. A bat emitting 
 is a system that works only over short distances". And signal duration imposes a *minimum* usable
 distance through self-masking, at 17 cm per millisecond of call — which is the same 17 cm that sets the
 histogram bin.
+
+One precision about the cache key that this section's schedule-per-source conclusion makes
+load-bearing. **The key must cover everything the gather reads, and that includes the source
+strengths.** Purity is claimed over the same Grid, source strengths, ear and config; a key made of
+geometry alone would silently discard a change in emission — which, once a creature's scrape writes its
+own slot every tick, is the change that matters most and the one that would vanish.
+
+And a global divisor — solving only when `(tick % D) == 0` — is rejected rather than deferred. It is a
+clock inside a design whose rule is driven by change and never by a clock; it is the single global rate
+this section rules out by name; and the exact key already delivers the skip, for free and without
+approximating anything. It buys nothing the key does not, and costs a committed rule.
 
 ### The ABI shape
 
@@ -1036,6 +1079,33 @@ They are a scene-and-creature decision belonging to whoever authors the pulse an
 same way band edges belong to the audiogram. What this section fixes is only the rule that no source
 is ever a constant, and the architecture that makes honouring it free.
 
+#### What this rule forbids on the creature side, which is more than it looks
+
+The rule that no source is ever constant reaches back into the physics and rules out most of the cheap
+ways to build a body. A chain that places each segment at a fixed offset behind the one in front —
+follow-the-leader, or a trail follower reading a recorded path — moves every segment at head speed on
+a straight run. The slip rate is then constant, the scrape is a steady source, and the rule is broken
+by construction. That is not a tuning problem; it is the design being wrong.
+
+What satisfies the rule is a body with mass in contact with the floor, dragged by friction rather than
+placed. Then the scrape is **dissipated frictional power** — normal force times friction coefficient
+times slip, summed over contacts and accumulated across substeps — which is not a proxy for scraping
+noise but physically what scraping noise *is*. Three properties fall out with nobody authoring them:
+
+- **Sustained**, because some part of the body is always down.
+- **Modulated**, because compliant links and a static-to-dynamic friction ratio produce stick-slip: a
+  trailing segment holds until tension crosses the static threshold, breaks free, accelerates because
+  dynamic friction is lower, overshoots, slackens the link and sticks again. The result fluctuates at
+  the stick-slip frequency and its harmonics — not a sine, not an authored envelope, not a parameter.
+- **Noisy**, because contacts are unilateral and switch per substep, and which segment breaks free
+  first depends on which link happened to load first.
+
+That is the modulation this section refuses to let anyone guess at in code, arrived at by not guessing.
+**The one place the design brushes against its own prohibition** is the link compliance: it is a
+mechanical constant with a physical unit and consequences beyond sound, which is why it reads as a
+material property rather than an envelope — but it does control how deep the modulation goes, and it is
+worth being honest that the line is thinner there than elsewhere.
+
 ## What Phase 5 Rejects
 
 Each of these is rejected with a reason stronger than cost.
@@ -1223,8 +1293,9 @@ until Phase 5b.
    every hit whose material has a non-zero `acoustic_source_strength`, deposit that strength times the
    hum spectrum into the bin the accumulated delay selects, exactly as `trace.slang` deposits radiance.
    **The directions come from a spherical Fibonacci set indexed by the ray id, never from an RNG.**
-   There is no random number generator anywhere in this repository, PROGRAM_INTERFACE.md publishes
-   bit-identical replay as a guarantee, and PERCEPTION.md rule 6 forbids adding smoothing for a Program's
+   There is no random number generator on any shipping path — the only one in the tree seeds test
+   geometry under `libs/bvh/tests` — PROGRAM_INTERFACE.md publishes bit-identical replay as a
+   guarantee, and PERCEPTION.md rule 6 forbids adding smoothing for a Program's
    benefit. A deterministic quasi-uniform set gives the same count and the same coverage,
    bit-identically, every run.
 4. **Reduce and deliver.** One workgroup owns one ear. The histogram lives in shared memory as `uint`s —
@@ -1418,6 +1489,14 @@ translate cleanly, this document says so rather than inventing a number.
 - **The ray-count saving attributable to millisecond binning.** PERCEPTION.md quotes "at least 40×" from
   Vorländer; that specific figure could not be verified against the cited edition. The qualitative claim
   — that millisecond-scale histogram binning substantially reduces the required ray count — stands.
+- **The size of the acoustic fan's blind spot.** A direction set derived from the ray index is fixed
+  for all time, so it misses a thin obstacle or a small aperture in exactly the same way on every solve
+  — a stationary structured bias rather than noise, and quasi-random error of that kind does not
+  average out over time the way decorrelated error does. Renderers normally decorrelate per frame to
+  avoid it. Here the trade is genuine and unresolved on both sides: jittering the fan per solve would
+  break the skip licence outright, since a new realisation means a new answer and nothing is ever
+  skippable, and no measurement of the blind spot exists to weigh against that. Both halves belong here
+  until somebody measures the miss rate against a known small target.
 
 ---
 

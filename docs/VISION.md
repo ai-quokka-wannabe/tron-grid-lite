@@ -49,6 +49,12 @@ The User sits outside that contract entirely. The debug window is an instrument 
 same Grid from a free camera at a comfortable resolution, so the User can watch what a creature is doing and judge
 whether the Grid is behaving. It is never an input to any creature.
 
+The predecessor drew this line one notch further out, and the difference is a decision rather than drift. Its
+documents forbade the engine any diagnostic display whatsoever while a creature was driving. Here the User may open a
+window, because what it shows is *the Grid* and never the Program: a window onto the stage is an instrument, a window
+onto the actor would be a leak. The rule about Programs is unchanged and is not negotiable — a Program that wants to
+visualise its own state opens its own window, and the Grid gives it nothing.
+
 ## The Aesthetic
 
 The Grid is Tron-inspired cyberspace: **neon lines against infinite black**.
@@ -99,9 +105,9 @@ can actually look at.
 
 ### Hearing
 
-Later in the roadmap, the same acceleration structure that answers visual rays answers **acoustic rays**. Sound on the
-Grid travels along the same geometry that light does — the same hierarchy, the same slab test, the same triangle
-intersection — but it does not behave the same way once it arrives, and the differences are the interesting part.
+The same acceleration structure that answers visual rays answers **acoustic rays**. Sound on the Grid travels along
+the same geometry that light does — the same hierarchy, the same slab test, the same triangle intersection — but it
+does not behave the same way once it arrives, and the differences are the interesting part.
 
 Light is instantaneous for a renderer; sound is not, so an acoustic ray carries its accumulated path length and the
 answer is a function of time rather than a value. Every surface is a **perfect acoustic mirror**: no absorption, no
@@ -145,12 +151,17 @@ needed writing, debugging, and explaining, and none of them are needed for neon 
 1. **Simple over clever.** The whole renderer should fit in one head.
 2. **Programs first, Users never.** The Grid exists to be perceived by creatures. User-facing output is a debugging
    convenience and is allowed to be crude.
-3. **Deterministic rendering.** Same Grid state in, same image out. Essential for training, testing, and reproducing
-   creature behaviour.
+3. **Deterministic rendering.** Same Grid state in, same image out, on the same device and the same build. This is
+   essential for *testing* and for *reproducing* a creature's behaviour, and it is worth being precise that it is not
+   a training benefit: the guarantee is quantised to eight bits before anything reads it, and no learner can tell a
+   sub-ulp radiance difference from the gradient noise it already lives in. What determinism actually buys is a
+   refactor oracle, a host-against-device cross-check, and the ability to remove the Grid from the suspect list when
+   a Program behaves strangely — which is worth a great deal, and is a different thing from what it is usually sold
+   as. See [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md) § Determinism and Replay.
 4. **Honest embodiment.** A creature receives senses only. No scene graph access, no entity list, no ground truth.
 5. **Creature-sized resolution.** Sensors render tiny. Only the debug window renders large.
-6. **One Grid, two senses.** A single BVH serves visual and acoustic rays; surfaces will carry optical and acoustic
-   properties together.
+6. **One Grid, two senses.** A single BVH, one triangle table and one material index serve visual and acoustic rays
+   alike; the two coefficient sets are coupled by that index rather than packed into the same struct row.
 7. **Own everything that matters.** The BVH, the tracer, the maths, the windowing, the logging and the test harness are
    all in-house. External dependencies are limited to the Vulkan SDK, Volk, vulkan-hpp and Slang.
 8. **Platform parity.** Windows (Win32) and Linux (XCB) are both first-class. No macOS, no Wayland, no mobile.

@@ -45,7 +45,9 @@ tron-grid-lite/
   `vk::raii` throws on our behalf — and caught once in `main`, which logs fatal and returns
   `EXIT_FAILURE`. See [STYLE.md](../STYLE.md) § Error Handling. **They must never cross the Program
   ABI**: that boundary is `extern "C"` into a library the Grid did not compile, where an unwind is
-  undefined behaviour rather than an error path. And **failure must not reach `std::abort`** — a
+  undefined behaviour rather than an error path. The Program is bound to the same prohibition from
+  its own side by [PROGRAM_INTERFACE.md](../docs/PROGRAM_INTERFACE.md) § Rules, and the rule is
+  written twice because each side is read alone. And **failure must not reach `std::abort`** — a
   command-line program owes its caller a meaningful exit code, and abort delivers an abnormal
   termination instead, runs no destructor, and on Windows can raise the CRT's termination dialog,
   which on a machine with nobody watching is a hang rather than a failure. `logFatal` does flush and
@@ -138,6 +140,27 @@ of the other lands on a neon tube instead of on black, and one contracted multip
 The figure is worth keeping precisely because it is stable: measure it before and after a change, and
 if the *cross-vendor* disagreement moves, something has become genuinely less deterministic.
 
+**What the digest cannot see.** It is a check on the picture, and the picture is produced by a
+single-threaded path. A lock inversion, a lost wakeup, or a `join()` waiting behind
+`acquireNextImage(UINT64_MAX)` all leave it green. So does ThreadSanitizer, which proves the absence
+of *races* — a safety property — and says nothing about order. Anything that touches threading needs
+its own check, and a refactor of the threading is precisely the case where a green digest is least
+reassuring and feels most so.
+
+**A mismatch has two suspects, not one.** The digest is a check on the code and, unintentionally, a
+check on the machine: re-running an unchanged binary and getting a different digest is
+near-conclusive evidence of hardware rather than of anything in the tree. The reverse follows and is
+the awkward half — a mismatch after an edit is ambiguous between the edit and a flipped bit, which
+is the one thing the check exists to disambiguate. Re-run the unchanged binary before believing
+either verdict, and treat that as mandatory rather than cautious on any machine with a history of
+unexplained crashes.
+
+**Moving code between targets cannot move the digest by contraction.** No preset and no
+`CMakeLists.txt` sets `INTERPROCEDURAL_OPTIMIZATION`, `-flto` or `/GL`, so a translation unit's
+floating-point behaviour does not depend on which static library it lands in. Re-take the digest
+after a structural move anyway — it is cheap against a lost afternoon — but do not budget GPU rounds
+for that specific fear.
+
 A digest changes legitimately whenever the picture is meant to change. Update the table in the same
 commit, and say in the message what moved and why.
 
@@ -169,6 +192,15 @@ are listed here rather than left to be discovered.
 fixed camera path as `--record` so that two runs are comparable. **Never measure a pass by timing
 `--record`** — most of that wall clock is PPM files.
 
+**One check would not belong in this table, and that is the point of mentioning it.** "Fires only
+when somebody remembers it" is a property of *these three* rather than of checking in this
+repository: a per-tick physics state hash needs no device, so it would run under `ctest` on every
+push and would be the first determinism check here that fires without being remembered. It is open
+work — [TODO.md](../TODO.md) § Etape 16 — and it is named beside the claim so that the claim is read
+as a fact about three commands rather than as a law about this repository. Like every comparison
+here it needs a did-anything-move floor, and like every one of them it gets broken deliberately once
+before it is trusted.
+
 ## Hard-won rules
 
 Each of these cost real time at least once. They are here rather than in a journal because a lesson
@@ -193,8 +225,21 @@ written as a story is read once, and written as a rule it is read every session.
 - **Distrust a measurement with no mechanism, whichever way it points.** A 7% speedup from adding a
   level of indirection was warm-up. The same measurement 7% the other way would have looked exactly
   like the honest cost of the feature, and would have been believed.
+- **Confirm an optimisation exists before costing its loss.** Two separate design proposals argued
+  against a change on the grounds that it would kill the acoustic solve cache. There is no cache.
+  `src/acoustics.hpp` states, in the future tense, an obligation on whatever eventually drives
+  solves; nothing drives them yet. An argument whose weight rests on a named mechanism should name
+  the file the mechanism lives in, because a specification reads exactly like an implementation once
+  it has been quoted twice.
 - **Verify on both GPUs before claiming correctness** — see Target Hardware. Driver-specific
   behaviour is invisible on one.
+- **Grep the ancestor before planning to port anything out of it.** The earlier TronGrid describes a
+  windowed-versus-command-line duality in its README, its vision document and its AI interface
+  document, and implements it nowhere: `main` takes no `argv`, there is no mode flag, and the
+  window is constructed before the Vulkan instance exists, so a device that cannot present is
+  refused with `std::abort`. The remembered capability was prose, and the code did the opposite of
+  it. Two greps — one for the flag, one for the mechanism — would have replaced an afternoon of
+  planning to port something that was never written.
 
 **Where the bugs actually are**
 
@@ -210,6 +255,16 @@ Three questions, each of which has caught something more than once:
 3. **Where does this repository already do the same thing correctly?** The cinematic readback had a
    host-visibility barrier the acoustic pass lacked; `BAND_COUNT` had an assert `MAX_DEPTH` lacked.
    The correct twin is usually a few files away.
+
+A fourth question is worth asking of any *restructuring*, and it is the one that stops work rather
+than finding a bug:
+
+**What defect does this restructuring fix?** If the answer is "the file is long", there is no
+defect. Moving named, greppable, namespace-scope functions out of a large file gains a reader
+nothing that `grep -n "^[A-Za-z].*("` does not, and costs a diff of over a thousand lines that the
+reference render must then license. The restructurings worth doing are the ones that make a mistake
+unrepresentable — a type that owns two objects which must be resized together, a `static_assert`
+against the other side's literal — and each of those can name the mistake it prevents.
 
 **Tooling on this machine**
 

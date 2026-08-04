@@ -93,6 +93,11 @@ This is the preset where the honest answer is *do not build a framebuffer at all
 one UV-weighted scalar each, quantise coarsely, and require the creature to move over time to
 infer anything directional. Total observation: **two to four scalars per timestep.**
 
+A caution that has already cost one design its eyes. The anchor column above — *no eyes, no
+opsins, no optics* — describes the **animal**, not the render prescription. A creature built to
+this preset is not blind; it has the crudest possible vision, and the difference between two
+samples and none is the difference between a creature that can find a gradient and one that cannot.
+
 ### Presets `insect-min` / `insect-mid` / `insect-high`: a sample list, not a raster
 
 **An ommatidium is not a pixel.** It is one light-integrating sample that averages everything
@@ -339,6 +344,17 @@ These follow from everything above. They are binding on the renderer.
    acceptance angle per sample. Interommatidial angle varies severalfold across a single eye, so
    a single "equivalent resolution" is a communication device for this document, never the
    implementation.
+
+   The predecessor project is worth naming here, because it specified the opposite in detail and
+   the specification is tempting precisely because it is complete: a raster framebuffer at a
+   Program-requested size from 8×8 to 256×256, RGB plus depth, with a `double` field for the field
+   of view. Every clause of that is wrong for this Grid. **A depth channel is ground truth wearing
+   a sensor's costume** — the thing § Scope exists to forbid. A Program-requested size inverts the
+   direction of control, since sensor geometry is a property of the body. A `double` is not among
+   the fixed-width types the ABI admits. And the rectangle itself is the load-bearing mistake:
+   adopt it and the creature interface has a raster baked into it on day one, which is the shape
+   rule 3 and this rule both reject. There is a finished design available for free, and the correct
+   thing to do with it is not to build it.
 5. **Low channel counts, and spectral response is not RGB.** C. elegans gets one scalar weighted
    to 350–440 nm, zeroed above 545 nm, coarsely quantised. Insects get one to three. Quokka-class
    gets three, with the blue channel sparser and spatially biased. Uniform RGB is the exception
