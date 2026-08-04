@@ -92,18 +92,37 @@ C++20 (and **NOT** beyond it!).
 
 ### Error Handling
 
-Two mechanisms, chosen by whether the failure can still unwind cleanly:
+One mechanism, and two boundaries it must not cross.
 
-- **`throw std::runtime_error`** for unrecoverable failures in normal call flow — a bad command-line
-  argument, an unreadable SPIR-V module, no suitable memory type. `main()` wraps the whole run in one
-  `catch (const std::exception&)` that logs via `LoggingLib::Logger::logFatal()` and returns
-  `EXIT_FAILURE`, so destructors still run and Vulkan objects are released in order.
-- **`logFatal()` then `std::abort()`** (followed by a `return` statement) in the Vulkan setup types —
-  `Instance`, `Device`, `Swapchain`, `Allocator` — where the object cannot be left half-built and
-  there is nothing useful to unwind to.
+**`throw std::runtime_error`** for unrecoverable failures in normal call flow — a bad command-line
+argument, an unreadable SPIR-V module, no suitable memory type, no usable GPU. `main()` wraps the
+whole run in one `catch (const std::exception&)` that logs via `LoggingLib::Logger::logFatal()` and
+returns `EXIT_FAILURE`, so destructors still run and Vulkan objects are released in order.
 
 Library exceptions are caught where they can be acted on: `vk::OutOfDateKHRError` from `vk::raii`
 acquire/present is handled at the call site by recreating the swapchain.
+
+#### Failure must not reach `std::abort`
+
+A constructor that throws is the cleanest failure C++ offers, not the messiest: the object never
+existed, and every member already built is destroyed in reverse order by the language itself. "The
+object cannot be left half-built" is an argument *for* throwing rather than against it.
+
+What abort costs is everything after the diagnosis. `logFatal` flushes the queue and writes to
+`stderr` directly, so the *message* survives either way — but the process does not exit, it
+terminates abnormally, and three things follow. A caller reading the exit code cannot tell a refused
+GPU from a crash. No destructor runs, so nothing is released in order. And on Windows the CRT may
+raise its termination dialog, which is a modal box on somebody's screen and a hung job on a machine
+with nobody in front of it — the same failure this repository has already met once, from a debug
+assertion.
+
+#### Nothing crosses the Program ABI
+
+An exception must never propagate into or out of a Program. That boundary is `extern "C"` into a
+shared library the Grid did not compile, where unwinding is undefined behaviour rather than an error
+path — the two toolchains need not agree on what a stack frame is. The ABI header marks every
+function pointer `noexcept`, which since C++17 is part of the pointer's *type*, so a C++ Program that
+omits it fails to compile rather than being asked politely.
 
 ### Type Explicitness
 

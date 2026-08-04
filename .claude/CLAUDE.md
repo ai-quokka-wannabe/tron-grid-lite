@@ -40,7 +40,17 @@ tron-grid-lite/
 
 ## Rules
 
-- **Language:** C++20. No exceptions.
+- **Language:** C++20. Exceptions are used, narrowly, and three rules bound them. **They are thrown
+  only for unrecoverable failure in normal call flow** — `throw std::runtime_error`, plus whatever
+  `vk::raii` throws on our behalf — and caught once in `main`, which logs fatal and returns
+  `EXIT_FAILURE`. See [STYLE.md](../STYLE.md) § Error Handling. **They must never cross the Program
+  ABI**: that boundary is `extern "C"` into a library the Grid did not compile, where an unwind is
+  undefined behaviour rather than an error path. And **failure must not reach `std::abort`** — a
+  command-line program owes its caller a meaningful exit code, and abort delivers an abnormal
+  termination instead, runs no destructor, and on Windows can raise the CRT's termination dialog,
+  which on a machine with nobody watching is a hang rather than a failure. `logFatal` does flush and
+  write to stderr before it, so the diagnosis survives; what does not survive is the difference
+  between "this program failed" and "this program crashed".
 - **Platforms:** Windows (Win32) and Linux (X11) only. No macOS. No Wayland. No mobile.
 - **Spelling:** British English everywhere (colour, optimise, metres, synchronise, etc.). The LICENCE file content is untouchable (legal document).
 - **Vocabulary:** Tron terms, one word per concept — the Grid, Program, creature, User, tick, senses, actions.
