@@ -101,7 +101,17 @@ namespace LoggingLib
         void enqueue(Severity severity, std::string_view message);
 
         //! Worker thread entry point — drains the queue until stop is requested.
+        /*!
+            The worker thread's entry point, and nothing more than a catch-all around the drain.
+
+            An exception leaving a thread's entry point calls `std::terminate` with no handler able
+            to intervene, so the boundary is kept separate from the work to make it obvious that
+            nothing may be added outside it.
+        */
         void workerLoop(std::stop_token stop_token);
+
+        //! The actual draining. May throw; `workerLoop` is where that stops being survivable.
+        void drainUntilStopped(std::stop_token stop_token);
 
         SignalsLib::Signal<LogMessage> m_queue; //!< Thread-safe message queue.
         std::mutex m_mutex; //!< Protects the wake-up condition.
