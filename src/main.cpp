@@ -691,7 +691,7 @@ struct DeviceGather {
     const vk::raii::CommandBuffer& command_buffer{command_buffers.front()};
 
     command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    acoustic_tracer.record(command_buffer, static_cast<uint32_t>(ears.size()), config);
+    acoustic_tracer.record(command_buffer, config);
     command_buffer.end();
 
     const std::chrono::steady_clock::time_point start{std::chrono::steady_clock::now()};
@@ -1514,6 +1514,27 @@ int main(int argc, char** argv)
                 catch (...) {
                     // Nothing left that could report anything.
                 }
+            } catch (...) {
+                /*
+                    An exception leaving a thread's entry point calls `std::terminate` outright,
+                    with no handler anywhere able to intervene — so this catch is the difference
+                    between a reported failure and a crash, and it must not itself be able to throw.
+                */
+                channel.render_failed = true;
+
+                try {
+                    window->wakeEvents();
+                }
+                // NOLINTNEXTLINE(bugprone-empty-catch) — the flag above is the report.
+                catch (...) {
+                }
+
+                try {
+                    logger.logFatal("Render thread: an exception of unknown type escaped the render loop.");
+                }
+                // NOLINTNEXTLINE(bugprone-empty-catch) — the flag above is the report.
+                catch (...) {
+                }
             }
         }};
 
@@ -1535,13 +1556,39 @@ int main(int argc, char** argv)
             std::thread* thread;
             RenderChannel* channel;
 
+            /*
+                Everything here is inside a catch-all, because a destructor is implicitly `noexcept`
+                and all three of these can throw: `send` allocates and takes a lock, `join` reports
+                through `std::system_error`, and the callback detach is a platform call. A throw
+                escaping here does not become an error — it becomes `std::terminate`, and it does so
+                in the one place whose whole purpose is to let a failure be reported rather than
+                aborted.
+
+                Swallowing is right rather than merely expedient. This runs while the process is on
+                its way out, and the thing it would report is a failure to shut down cleanly after
+                some earlier failure that is already being reported by the handler below.
+            */
             ~RenderThreadGuard()
             {
-                window->setEventCallback(nullptr, nullptr);
+                try {
+                    window->setEventCallback(nullptr, nullptr);
 
+                    if (thread->joinable()) {
+                        channel->send(RenderEvent{.type = RenderEvent::Type::Stop});
+                        thread->join();
+                    }
+                }
+                // NOLINTNEXTLINE(bugprone-empty-catch) — see above: there is nothing left to report to.
+                catch (...) {
+                }
+
+                /*
+                    A thread still joinable here would call std::terminate on its own destructor, so
+                    the last resort is to detach it. The process is exiting either way; the choice is
+                    between exiting and crashing.
+                */
                 if (thread->joinable()) {
-                    channel->send(RenderEvent{.type = RenderEvent::Type::Stop});
-                    thread->join();
+                    thread->detach();
                 }
             }
         } render_thread_guard{window.get(), &render_thread, &channel};
@@ -1601,6 +1648,24 @@ int main(int argc, char** argv)
         // NOLINTNEXTLINE(bugprone-empty-catch) — the exit code below is the whole report now.
         catch (...) {
             // Deliberately swallowed: there is nothing left that could report anything.
+        }
+
+        return EXIT_FAILURE;
+    } catch (...) {
+        /*
+            Nothing in this repository throws anything outside the std::exception hierarchy, and
+            `vk::raii` reports through `vk::SystemError`, so reaching here today would take a
+            standard-library implementation doing something unusual. It is written anyway because
+            the alternative is not an unreported error, it is `std::terminate` — and because Phase 6
+            loads shared libraries whose authors this repository will never meet. A Program that
+            throws an `int` past its `noexcept` boundary is undefined behaviour rather than something
+            a catch can promise to hold, but a catch that exists at least converts the cases it can.
+        */
+        try {
+            logger.logFatal("Fatal error: an exception of unknown type reached main.");
+        }
+        // NOLINTNEXTLINE(bugprone-empty-catch) — the exit code below is the whole report now.
+        catch (...) {
         }
 
         return EXIT_FAILURE;

@@ -93,14 +93,18 @@ public:
     void setEars(const std::vector<MathLib::Vec3>& ears);
 
     /*!
-        Records one dispatch: one workgroup per ear.
+        Records one dispatch: one workgroup per ear placed by the last `setEars`.
+
+        **The ear count is not a parameter, and that is the point.** It was one, and every caller
+        passed the same number it had already given the constructor and then given `setEars` — the
+        same fact in three places, held together by two runtime checks that existed only because it
+        could disagree with itself. A dispatch gathers for the ears that are actually there.
 
         \param command_buffer Command buffer to record into.
-        \param ear_count Ears to gather for. Must be at least one and at most `maxEars()`.
         \param config Spectrum, air absorption, ray budget and caps.
         \throws std::runtime_error if the fixed-point scale could overflow at this ray budget.
     */
-    void record(const vk::raii::CommandBuffer& command_buffer, uint32_t ear_count, const Acoustics::GatherConfig& config) const;
+    void record(const vk::raii::CommandBuffer& command_buffer, const Acoustics::GatherConfig& config) const;
 
     /*!
         Reads back one ear's impulse response, converting out of fixed point.
@@ -109,15 +113,21 @@ public:
         memory is coherent, so what is missing is the GPU having finished writing it, and only the
         caller knows that.
 
-        \param ear_index Which ear, below `maxEars()`.
+        \param ear_index Which ear, below `earCount()`.
         \return Energy per band per time bin.
     */
     [[nodiscard]] Acoustics::ImpulseResponse read(uint32_t ear_index) const;
 
-    //! Returns the number of ears this was built for.
+    //! Returns the number of ears this was built for. The most `setEars` will accept.
     [[nodiscard]] uint32_t maxEars() const
     {
         return m_max_ears;
+    }
+
+    //! Returns the number of ears currently placed. Zero until `setEars`.
+    [[nodiscard]] uint32_t earCount() const
+    {
+        return m_ear_count;
     }
 
 private:
@@ -129,6 +139,7 @@ private:
     LoggingLib::Logger* m_logger{nullptr}; //!< Logger (non-owning).
 
     uint32_t m_max_ears{0u}; //!< Ears the buffers were sized for.
+    uint32_t m_ear_count{0u}; //!< Ears actually placed by setEars. Never above m_max_ears.
     uint32_t m_material_count{0u}; //!< Length of the source-strength table, for the shader's bounds guard.
 
     /*!

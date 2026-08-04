@@ -15,8 +15,8 @@
 #ifdef __linux__
 
 #include "xcb_window.hpp"
-#include <cstdlib>
 #include <cstring>
+#include <stdexcept>
 #include <string>
 
 //! Looks up or creates an X11 atom by name.
@@ -43,8 +43,7 @@ namespace WindowLib
         m_connection = xcb_connect(nullptr, &screen_num);
 
         if (xcb_connection_has_error(m_connection)) {
-            m_logger.logFatal("Failed to connect to X server.");
-            std::abort();
+            throw std::runtime_error{"Failed to connect to X server."};
             return;
         }
 
@@ -58,8 +57,7 @@ namespace WindowLib
             xcb_screen_next(&iter);
         }
         if ((iter.rem == 0) || (iter.data == nullptr)) {
-            m_logger.logFatal("X server reported no usable screen (screen_num=" + std::to_string(screen_num) + ").");
-            std::abort();
+            throw std::runtime_error{"X server reported no usable screen (screen_num=" + std::to_string(screen_num) + ")."};
             return;
         }
         m_screen = iter.data;

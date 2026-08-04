@@ -15,7 +15,7 @@
 #ifdef _WIN32
 
 #include "win32_window.hpp"
-#include <cstdlib>
+#include <stdexcept>
 
 namespace WindowLib
 {
@@ -60,8 +60,7 @@ namespace WindowLib
             wc.lpszClassName = CLASS_NAME;
 
             if (!RegisterClassExW(&wc)) {
-                m_logger.logFatal("Failed to register Win32 window class.");
-                std::abort();
+                throw std::runtime_error{"Failed to register Win32 window class."};
             }
             m_class_registered = true;
         }
@@ -117,8 +116,7 @@ namespace WindowLib
         );
 
         if (!m_hwnd) {
-            m_logger.logFatal("Failed to create Win32 window.");
-            std::abort();
+            throw std::runtime_error{"Failed to create Win32 window."};
         }
 
         ShowWindow(m_hwnd, SW_SHOW);

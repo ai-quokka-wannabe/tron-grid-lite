@@ -325,7 +325,7 @@ that want three different answers rather than one rule:
   beside the other argument handling rather than in the function that consumes the value.
 
 - [ ] Convert the fifteen non-constructor throws, by group
-- [ ] Convert the sixteen `std::abort` sites in `device.cpp`, `instance.cpp`, `swapchain.cpp` and the
+- [ ] Convert the fifteen `std::abort` sites in `device.cpp`, `instance.cpp`, `swapchain.cpp` and the
       three window backends
 
 **The aborts are the defect, not the throws.** `logFatal` flushes and writes to stderr before them, so

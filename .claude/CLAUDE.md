@@ -243,6 +243,25 @@ Three questions, each of which has caught something more than once:
 - **Expect a fresh batch whenever a new language first lands on main.** Default setup adds analysers
   automatically.
 
+**Two places where a throw is not an error but a crash**
+
+Both call `std::terminate` outright, with no handler anywhere in the process able to intervene, so
+each needs a `catch (...)` that cannot itself throw. Neither is visible to any check this repository
+has: the reference render only exercises the success path, and an error path that has never run is
+indistinguishable from one that works.
+
+- **Every thread entry point.** An exception leaving one terminates the process. The logger's worker
+  is the sharp case — allocating a message can throw `std::bad_alloc`, so under memory pressure the
+  first symptom would be the process dying silently, from the component whose whole job is to have
+  the last word. A logger that has stopped logging is the right outcome; a logger that has stopped
+  the program is not.
+- **Every destructor that does work.** A destructor is implicitly `noexcept`, so this is not
+  conditional on unwinding — any throw terminates. Joining a thread, sending on a queue and taking a
+  lock all qualify, and all three look harmless.
+
+The pattern is in `DeviceIdleGuard` and `RenderThreadGuard` in `main.cpp`, and in `Logger::workerLoop`,
+which is nothing but the boundary so that nothing can be added outside it.
+
 **Comments state what is, never what was**
 
 - **No change narration in code.** "This used to be X", "the previous version did Y", "fixed in the

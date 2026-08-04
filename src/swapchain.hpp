@@ -69,7 +69,25 @@ public:
     }
 
 private:
-    //! Internal: query surface and build swapchain + views.
+    /*!
+        Settles what this surface can do, once, and refuses it here if it cannot do enough.
+
+        Format, present mode and image usage are properties of a surface-and-device pair rather than
+        of a window size, so they are resolved at construction and never revisited. Two consequences
+        follow, and both are the reason this is separate from `build`.
+
+        **A surface the renderer cannot use is refused at startup rather than at the first resize.**
+        Both conditions checked here — that any format exists at all, and that the surface accepts a
+        transfer destination — are as true on the first frame as on the thousandth, so discovering
+        them during a window drag would mean a failure whose timing had nothing to do with its cause.
+
+        **And the format cannot change under the renderer.** Resolving it per rebuild would let a
+        driver that reports its formats in a different order hand back a different swapchain format
+        after a resize, while every pass downstream carried on assuming the first one.
+    */
+    void resolveSurfaceSettings();
+
+    //! Internal: build the swapchain and its views at a size. Cannot fail on surface capability.
     void build(uint32_t width, uint32_t height);
 
     LoggingLib::Logger* m_logger{nullptr}; //!< Logger pointer (non-owning).

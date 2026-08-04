@@ -18,7 +18,7 @@
 #elif defined(__linux__)
 #include "xcb_window.hpp"
 #endif
-#include <cstdlib>
+#include <stdexcept>
 
 namespace WindowLib
 {
@@ -30,8 +30,7 @@ namespace WindowLib
 #elif defined(__linux__)
         return std::make_unique<XcbWindow>(config, logger);
 #else
-        logger.logFatal("Unsupported platform.");
-        std::abort();
+        throw std::runtime_error{"Unsupported platform."};
         return nullptr;
 #endif
     }

@@ -126,6 +126,30 @@ namespace LoggingLib
 
     void Logger::workerLoop(std::stop_token stop_token)
     {
+        /*
+            The whole body is inside a catch-all because this is a thread's entry point, and an
+            exception leaving one of those calls std::terminate outright — no handler anywhere in the
+            process can intervene. The work below looks incapable of throwing and is not: allocating
+            a message string can throw std::bad_alloc, and locking can report through
+            std::system_error.
+
+            The irony is the reason it matters. This thread exists to report what went wrong, so
+            without this the first symptom of memory pressure would be the process dying without a
+            word — in the component whose entire job is to have the last word.
+
+            A logger that has stopped logging is the correct outcome here. The alternative is a
+            logger that has stopped the program.
+        */
+        try {
+            drainUntilStopped(stop_token);
+        }
+        // NOLINTNEXTLINE(bugprone-empty-catch) — reporting is exactly what has just failed.
+        catch (...) {
+        }
+    }
+
+    void Logger::drainUntilStopped(std::stop_token stop_token)
+    {
         while (!stop_token.stop_requested()) {
             // Wait for messages or stop — the CV checks stop_token automatically
             {
