@@ -27,22 +27,32 @@
 class Instance; // forward declaration
 
 /*!
-    Selects the best physical device and creates a logical device with graphics + present queues.
+    Selects the best physical device and creates a logical device.
 
     The requirements are deliberately modest: Vulkan 1.3 core (dynamic rendering and
-    synchronisation2), the swapchain extension, and a queue family that can both render and
-    present. Ray traversal is performed by hand in ordinary compute shaders against a
-    self-built BVH held in storage buffers, so no hardware ray-tracing or mesh-shader
-    extension is requested and the device is creatable on modest GPUs such as a GTX 1650 Ti.
+    synchronisation2), and a queue family that can dispatch compute. Ray traversal is performed by
+    hand in ordinary compute shaders against a self-built BVH held in storage buffers, so no hardware
+    ray-tracing or mesh-shader extension is requested and the device is creatable on modest GPUs such
+    as a GTX 1650 Ti.
+
+    **Presentation is optional, and that is the point.** TronGrid Lite is a command-line program that
+    can open a window, not a window that can be scripted: creatures perceive the Grid through a senses
+    buffer and never through a swapchain, so a training run needs no display and must not be refused
+    for lacking one. Passing a null surface asks for a device that can compute; passing a real one
+    additionally asks that it can present.
+
+    The difference is not cosmetic. Requiring presentation refuses a compute-only card with no monitor
+    attached — exactly the hardware a headless run would otherwise be happiest on.
 */
 class Device {
 public:
-    //! Pick the best GPU and create a logical device; the surface is needed to check present queue support.
     /*!
         Selects a physical device and creates a logical one.
 
         \param instance Vulkan instance to enumerate from.
-        \param surface Surface the device must be able to present to.
+        \param surface Surface the device must be able to present to, or `VK_NULL_HANDLE` for a
+               headless device. With a null surface no present queue is sought, `VK_KHR_swapchain` is
+               not required and not enabled, and `presentQueue()` must not be called.
         \param logger Logger for the selection summary.
         \param preferred_index Index of the GPU to use, as printed in the selection summary. Pass
                `NO_PREFERENCE` to take the highest-scoring device, which is what everything except

@@ -1221,12 +1221,27 @@ int main(int argc, char** argv)
     LoggingLib::Logger logger;
 
     try {
-        logger.logInfo("TronGrid Lite - Phase 4 (the Grid, a world for Programs; this window is for the User only).");
+        logger.logInfo("TronGrid Lite - Phase 4 (the Grid, a world for Programs).");
 
         /*
-            Recording mode. The window is still created because the device picks its present queue
-            against a surface, but nothing is ever presented to it.
+            Open a window and show the Grid to the User.
+
+            **Off by default, and that is the shape of the program rather than a preference.** The
+            Grid is a command-line application that Programs plug into; a creature perceives through a
+            senses buffer and never through a swapchain, so a run that hosts creatures needs no
+            display, no surface and no present queue — and must not be refused on a machine that has
+            none. A window is something the User asks for in order to check that things are in their
+            place.
+
+            **With a window there are no creatures.** This is a debug view of the Grid itself, not a
+            viewport onto a running simulation: it renders to the screen for a human, and no Program
+            is loaded. That is why the on-demand gate below may skip whole frames with a clear
+            conscience — there is nothing alive in the world whose tick could be missed while the User
+            drags a window edge.
         */
+        bool wants_window{false};
+
+        //! Record a flight through the Grid to PPM files. Needs no window.
         bool recording{false};
 
         /*
@@ -1281,7 +1296,9 @@ int main(int argc, char** argv)
                 return parsed;
             };
 
-            if (argument == "--record") {
+            if (argument == "--window") {
+                wants_window = true;
+            } else if (argument == "--record") {
                 recording = true;
             } else if (argument == "--verify-acoustics") {
                 verify_acoustics = true;
@@ -1304,8 +1321,24 @@ int main(int argc, char** argv)
             }
         }
 
-        const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - debug window", .width = 1280, .height = 720, .resizable = true, .decorated = true};
-        const std::unique_ptr<WindowLib::Window> window{WindowLib::create(window_config, logger)};
+        /*
+            Every way of asking this program to do something. Until a Program can be loaded there is
+            nothing for a bare invocation to run, and saying so before a device is opened is cheaper
+            and clearer than saying it after the Grid has been built and uploaded.
+        */
+        if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !list_gpus) {
+            logger.logInfo("Nothing to do. Pass --window to look at the Grid, or one of --record, --benchmark, "
+                           "--verify-acoustics, --verify-scene, --list-gpus.");
+            return EXIT_SUCCESS;
+        }
+
+        // The window, the surface and the swapchain are created together or not at all. Every mode
+        // other than the debug view runs without any of them.
+        std::unique_ptr<WindowLib::Window> window;
+        if (wants_window) {
+            const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - debug window", .width = 1280, .height = 720, .resizable = true, .decorated = true};
+            window = WindowLib::create(window_config, logger);
+        }
 
 #ifdef NDEBUG
         constexpr bool enable_validation{false};
@@ -1313,17 +1346,26 @@ int main(int argc, char** argv)
         constexpr bool enable_validation{true};
 #endif
 
-        const Instance instance{enable_validation, requiredSurfaceExtensions(), logger};
-        const vk::raii::SurfaceKHR surface{createSurface(instance.get(), *window)};
+        // Surface extensions are instance-level and only meaningful when a surface will be created.
+        // Asking for them headless would refuse to start on a machine with no windowing system at all.
+        const Instance instance{enable_validation, wants_window ? requiredSurfaceExtensions() : std::vector<const char*>{}, logger};
+
+        const vk::raii::SurfaceKHR surface{wants_window ? createSurface(instance.get(), *window) : vk::raii::SurfaceKHR{nullptr}};
+        const VkSurfaceKHR surface_handle{wants_window ? static_cast<VkSurfaceKHR>(*surface) : VK_NULL_HANDLE};
+
         if (list_gpus) {
             // Surveys and returns without creating a logical device, so it works even when nothing
-            // on the machine can run the renderer — which is exactly when somebody needs it.
-            return (Device::survey(instance, *surface, logger) > 0u) ? EXIT_SUCCESS : EXIT_FAILURE;
+            // on the machine can run the renderer — which is exactly when somebody needs it. Without
+            // --window it reports what can compute; with it, what can also present.
+            return (Device::survey(instance, surface_handle, logger) > 0u) ? EXIT_SUCCESS : EXIT_FAILURE;
         }
 
-        const Device device{instance, *surface, logger, preferred_gpu};
+        const Device device{instance, surface_handle, logger, preferred_gpu};
 
-        Swapchain swapchain{device, *surface, window->width(), window->height(), logger};
+        std::unique_ptr<Swapchain> swapchain;
+        if (wants_window) {
+            swapchain = std::make_unique<Swapchain>(device, *surface, window->width(), window->height(), logger);
+        }
 
         // The Grid: a flat mirror floor with neon tubes along its grid lines.
         const GridFloorConfig floor_config{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
@@ -1370,12 +1412,9 @@ int main(int argc, char** argv)
 
         const World world{device, bvh, logger};
 
-        Tracer tracer{device, world, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
-        tracer.resize(swapchain.extent());
-
-        PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};
-        post_process.resize(swapchain.extent(), tracer.outputViews());
-
+        // The acoustic checks need neither the tracer nor post-processing — only the Grid, a device
+        // and acoustics.spv. A check on hearing should not depend on sight, so it runs before the
+        // visual passes are built rather than after.
         if (verify_acoustics || verify_scene) {
             /*
                 Two ears a head apart, standing where the terraces are rather than out on the flat,
@@ -1406,6 +1445,15 @@ int main(int argc, char** argv)
             return verifyAcoustics(device, bvh, ears, logger, shader_directory, placement);
         }
 
+        Tracer tracer{device, world, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
+        PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};
+
+        // Sized to the window only when there is one. `--record` and `--benchmark` size themselves.
+        if (wants_window) {
+            tracer.resize(swapchain->extent());
+            post_process.resize(swapchain->extent(), tracer.outputViews());
+        }
+
         if (benchmarking) {
             return benchmark(device, tracer, post_process, logger, record_width, record_height, record_frames);
         }
@@ -1415,13 +1463,18 @@ int main(int argc, char** argv)
         }
 
         /*
-            From here the renderer runs on its own thread.
+            Everything below here is the debug view, and it is reachable only with `--window`.
 
-            Not for throughput — the GPU is the bottleneck and a thread does not make it faster. It
-            is for responsiveness: on Win32 a modal resize drag runs the platform's own message loop,
-            so a renderer sharing that thread simply stops until the User lets go of the window edge.
-            The window procedure keeps firing throughout, which is why the event callback below can
-            keep feeding the queue while the pump is stuck.
+            **No Program is loaded in this mode.** The window exists so the User can check that the
+            Grid itself is right — that the geometry is in its place, that the neon reads as neon —
+            and not to watch a simulation run. That is what lets the loop below skip whole frames
+            whenever the view has not changed: there is nothing alive whose tick could be missed.
+
+            The renderer runs on its own thread. Not for throughput — the GPU is the bottleneck and a
+            thread does not make it faster. It is for responsiveness: on Win32 a modal resize drag
+            runs the platform's own message loop, so a renderer sharing that thread simply stops
+            until the User lets go of the window edge. The window procedure keeps firing throughout,
+            which is why the event callback below can keep feeding the queue while the pump is stuck.
 
             The division of labour follows the constraint rather than taste. The message pump belongs
             to the thread that created the window, and `ShowCursor` is per-thread on Win32, so events
@@ -1432,7 +1485,7 @@ int main(int argc, char** argv)
 
         std::thread render_thread{[&device, &swapchain, &tracer, &post_process, &logger, &channel, &window]() {
             try {
-                runRenderLoop(device, swapchain, tracer, post_process, logger, channel);
+                runRenderLoop(device, *swapchain, tracer, post_process, logger, channel);
             } catch (const std::exception& error) {
                 channel.render_failed = true;
 

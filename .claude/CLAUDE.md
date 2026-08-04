@@ -131,11 +131,23 @@ if the *cross-vendor* disagreement moves, something has become genuinely less de
 A digest changes legitimately whenever the picture is meant to change. Update the table in the same
 commit, and say in the message what moved and why.
 
+## The shape of the program
+
+**Command-line first. `--window` is an opt-in debug view, and it is the only mode that presents.**
+A creature perceives through a senses buffer, never a swapchain, so a run that hosts Programs needs no
+display and `Device` accepts a null surface — no present queue is sought and `VK_KHR_swapchain` is
+neither required nor enabled. A compute-only card with no monitor is a perfectly good device here.
+
+**With `--window` there are no creatures.** It shows the Grid so a human can check it, not a
+simulation in progress. That is what licenses the on-demand gate to skip whole frames while the User
+drags a window edge: there is nothing alive whose tick could be missed. A Program that wants to show
+its own internals opens its own window; that is its business, and the Grid provides it nothing.
+
 ## The three checks worth running
 
-None of these can run in CI, because all three need a GPU. They fire only when somebody remembers
-them on a machine with a device attached, which is the reason they are listed here rather than left
-to be discovered.
+All three need a GPU but none needs a display. They cannot run in CI on a GPU-less runner, so they
+fire only when somebody remembers them on a machine with a device attached, which is the reason they
+are listed here rather than left to be discovered.
 
 | Command | Answers |
 |---------|---------|
@@ -220,6 +232,20 @@ Three questions, each of which has caught something more than once:
   alert as new. Expect that, and do not read it as a regression.
 - **Expect a fresh batch whenever a new language first lands on main.** Default setup adds analysers
   automatically.
+
+**Comments state what is, never what was**
+
+- **No change narration in code.** "This used to be X", "the previous version did Y", "fixed in the
+  commit that added Z" — all of it belongs in the commit message and the CHANGELOG, both of which are
+  dated and therefore honest. A comment claiming a past is stale the moment the code moves again, and
+  it costs a reader attention to work out that it is describing something no longer present.
+- **No progress narration either.** "Now handles the empty case", "this is the new path", "added for
+  Phase 6" — a comment is read by somebody looking at the code as it stands, for whom "new" is
+  meaningless.
+- **Explaining why the obvious alternative is wrong is different and welcome.** "Rows rather than a
+  matrix, because a matrix in a buffer means agreeing with the compiler about row-major" ages well:
+  it is about the design, not about its history. The test is whether the sentence would still make
+  sense to someone who had never seen an earlier version.
 
 **Pruning documentation**
 

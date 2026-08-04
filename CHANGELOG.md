@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--window`, and with it a command-line-first program.** The Grid no longer creates a window, a
+  surface or a swapchain unless the User asks to see it. `Device` accepts a null surface: no present
+  queue is sought, `VK_KHR_swapchain` is neither required nor enabled, and a compute-only card with no
+  monitor attached is a perfectly good device rather than a refused one.
+
+  This is the shape the project was always described as having. A creature perceives the Grid through
+  a senses buffer and never through a swapchain, so a run that hosts Programs needs no display — and
+  `--record`, `--benchmark`, `--verify-acoustics` and `--verify-scene` now genuinely run without one,
+  over SSH or on a machine with nothing plugged into it.
+
+  **With `--window` there are no creatures.** It is a debug view of the Grid, not a viewport onto a
+  simulation, which is what lets the on-demand gate skip whole frames while the User drags a window
+  edge: nothing alive can miss a tick. A Program that wants to show its own internals opens its own
+  window; the Grid knows nothing about how a Program works inside and provides it no display.
+
+  The acoustic checks now run before the visual passes are built, so a check on hearing does not need
+  `trace.spv`, `bloom.spv` or `postprocess.spv` to be present.
+
+  Recorded renders are byte-identical on both GPUs, and device selection is unchanged: headless simply
+  omits the hundred-point bonus for a shared graphics-and-present family, which no device can earn when
+  none presents.
 - **`--verify-scene`, which is the first thing that ever makes the device trace a transform.**
   Everything before it held the shader to the host at the identity, where a matrix and its transpose
   are the same sixteen numbers, so a layout mistake, a `to_world` used where `to_instance` was meant,
