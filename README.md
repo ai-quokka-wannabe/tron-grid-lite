@@ -90,8 +90,12 @@ a Program works inside and provides it no display.
 
 ## Checking it
 
-Three modes answer a question rather than drawing a picture. Each needs a GPU but none needs a display,
-so all three run over SSH or on a machine with no monitor attached.
+Three modes answer a question rather than drawing a picture. Each needs a device but none needs a
+display, and **the two verification modes run in CI on every push** against lavapipe, Mesa's software
+Vulkan driver — so a traversal regression is caught by a machine rather than by somebody remembering
+to look. Only `--benchmark` still wants real hardware, which is right: it measures a GPU.
+
+All three also run over SSH or on a machine with no monitor attached.
 
 | Command | Question |
 |---------|----------|

@@ -181,9 +181,66 @@ jobs:
                 ctest --preset=${{ matrix.preset }}-debug
                 ${{ matrix.test_exclude && format('--exclude-regex {0}', matrix.test_exclude) || '' }}
 
+    # Every check that can catch a traversal regression needs a device, so all of them used to fire
+    # only when somebody remembered them on a machine with a GPU attached. Lavapipe — Mesa's software
+    # Vulkan driver — is a device by every measure this renderer cares about: Vulkan 1.3, dynamic
+    # rendering, synchronisation2, and a graphics family that dispatches compute. It runs both
+    # comparisons in about a second each.
+    #
+    # What runs here is deliberately the pair that compares the host against the device, not the
+    # recorded render. Those two are tolerance-based, so they mean the same thing on any
+    # implementation. A digest is a bit pattern and would pin this job to one Mesa build and one set
+    # of CPU features, which is a maintenance burden bought for a check the two below already make.
+    verify-on-cpu:
+        name: Verify (software Vulkan)
+        needs: quick-checks
+        timeout-minutes: 20
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Install XCB development headers and lavapipe
+              run: |
+                sudo apt-get update
+                sudo apt-get install -y libxcb1-dev mesa-vulkan-drivers
+
+            - name: Setup Vulkan SDK
+              uses: ./.github/actions/setup-vulkan-linux
+              with:
+                version: ${{ env.VULKAN_SDK_VERSION }}
+
+            - name: Configure
+              run: cmake --preset=linux-x11-gcc
+
+            - name: Build (Release)
+              run: cmake --build --preset=linux-x11-gcc-release
+
+            # Naming the ICD explicitly rather than trusting the loader to find one: the runner has no
+            # GPU, so an empty device list would otherwise be indistinguishable from a driver that
+            # failed to load, and the job would report a missing device rather than a missing setup.
+            - name: Report the device
+              env:
+                VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+              run: ./build/linux-x11-gcc/src/Release/TronGridLite --list-gpus
+
+            - name: The shader and the host must agree
+              env:
+                VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+              run: ./build/linux-x11-gcc/src/Release/TronGridLite --verify-acoustics
+
+            # The same comparison with the Grid placed at an angle, which is the only thing that
+            # exercises transform arithmetic: at the identity a matrix and its transpose are the same
+            # sixteen numbers.
+            - name: They must still agree at an angle
+              env:
+                VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
+              run: ./build/linux-x11-gcc/src/Release/TronGridLite --verify-scene
+
     ci-success:
         name: CI Success
-        needs: [quick-checks, build, sanitisers]
+        needs: [quick-checks, build, sanitisers, verify-on-cpu]
         runs-on: ubuntu-latest
         if: always()
 
@@ -192,7 +249,8 @@ jobs:
               run: |
                 if [[ "${{ needs.quick-checks.result }}" != "success" ]] || \
                    [[ "${{ needs.build.result }}" != "success" ]] || \
-                   [[ "${{ needs.sanitisers.result }}" != "success" ]]; then
+                   [[ "${{ needs.sanitisers.result }}" != "success" ]] || \
+                   [[ "${{ needs.verify-on-cpu.result }}" != "success" ]]; then
                     echo "One or more jobs failed"
                     exit 1
                 fi

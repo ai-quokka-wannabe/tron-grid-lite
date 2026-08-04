@@ -178,9 +178,27 @@ its own internals opens its own window; that is its business, and the Grid provi
 
 ## The three checks worth running
 
-All three need a GPU but none needs a display. They cannot run in CI on a GPU-less runner, so they
-fire only when somebody remembers them on a machine with a device attached, which is the reason they
-are listed here rather than left to be discovered.
+All three need a device but none needs a display, and a device does not have to be a GPU. **The two
+verification modes run in CI on every push**, against lavapipe — Mesa's software Vulkan driver, which
+satisfies everything this renderer asks for (Vulkan 1.3, dynamic rendering, synchronisation2, a
+graphics family that dispatches compute) and answers both comparisons in about a second.
+
+That leaves `--benchmark` as the one still needing hardware, which is right: it measures a GPU, and a
+software implementation has nothing to say about that.
+
+Running them locally on real hardware is still worth doing, and for a reason CI cannot cover. Lavapipe
+is one implementation; the value of the checks is that they hold across implementations that share
+nothing, and the two GPUs in this machine differ from each other and from a CPU in different ways.
+
+To reach lavapipe locally, point the loader at its ICD and nothing else — `VK_ICD_FILENAMES` replaces
+the driver list rather than adding to it, which is what makes it a clean third opinion:
+
+```bash
+VK_ICD_FILENAMES=<path>/lvp_icd.x86_64.json  TronGridLite --verify-scene
+```
+
+On Windows the driver comes from `pal1000/mesa-dist-win` (`vulkan_lvp.dll` plus its ICD JSON); on
+Debian or Ubuntu it is `mesa-vulkan-drivers`. The Vulkan SDK ships neither — it has headers only.
 
 | Command | Answers |
 |---------|---------|
