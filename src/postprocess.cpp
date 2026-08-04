@@ -13,6 +13,7 @@
 */
 
 #include "postprocess.hpp"
+#include "spirv.hpp"
 #include "device.hpp"
 #include "vulkan_helpers.hpp"
 #include <algorithm>
@@ -24,7 +25,6 @@ namespace
 {
 
     using VulkanHelpers::findMemoryType;
-    using VulkanHelpers::readSpirv;
 
     //! Workgroup size, matching [numthreads(8, 8, 1)] in both post-processing shaders.
     constexpr uint32_t WORKGROUP_SIZE{8u};
@@ -126,14 +126,14 @@ PostProcess::PostProcess(const Device& device, uint32_t frames_in_flight, const 
         vk::PipelineLayoutCreateInfo{
             .setLayoutCount = 1u, .pSetLayouts = &*m_postprocess_layout, .pushConstantRangeCount = 1u, .pPushConstantRanges = &postprocess_range}};
 
-    const std::vector<uint32_t> bloom_code{readSpirv(bloom_shader_path)};
+    const std::vector<uint32_t> bloom_code{SpirvLib::read(bloom_shader_path)};
     const vk::raii::ShaderModule bloom_module{m_device->get(), vk::ShaderModuleCreateInfo{.codeSize = bloom_code.size() * sizeof(uint32_t), .pCode = bloom_code.data()}};
 
     m_extract_pipeline = makeComputePipeline(m_device->get(), bloom_module, "bloomExtractMain", m_bloom_pipeline_layout);
     m_downsample_pipeline = makeComputePipeline(m_device->get(), bloom_module, "bloomDownsampleMain", m_bloom_pipeline_layout);
     m_upsample_pipeline = makeComputePipeline(m_device->get(), bloom_module, "bloomUpsampleMain", m_bloom_pipeline_layout);
 
-    const std::vector<uint32_t> postprocess_code{readSpirv(postprocess_shader_path)};
+    const std::vector<uint32_t> postprocess_code{SpirvLib::read(postprocess_shader_path)};
     const vk::raii::ShaderModule postprocess_module{
         m_device->get(), vk::ShaderModuleCreateInfo{.codeSize = postprocess_code.size() * sizeof(uint32_t), .pCode = postprocess_code.data()}};
 

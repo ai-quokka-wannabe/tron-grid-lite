@@ -342,6 +342,9 @@ Every check this repository has that could catch a rendering or acoustic regress
 so all three fire only when somebody remembers them on a machine with one attached. Two things would
 change that, and neither needs the MMO or the server to exist first.
 
+- [x] Error-path tests that need no device.  is the first: the SPIR-V reader moved out from
+      behind a Vulkan header into `src/spirv.hpp`, which mentions no Vulkan type, so its six guards
+      are testable by a target linking `testing` alone. Five of the six are confirmed by mutation.
 - [ ] A per-tick physics state hash: N ticks from a fixed roster and a fixed action stream, hashing
       every body. It needs no device, so it runs under `ctest` on every push. `src/tests/` already
       compiles renderer translation units into GPU-free targets and CI already runs `ctest` on

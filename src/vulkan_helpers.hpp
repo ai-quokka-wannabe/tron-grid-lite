@@ -19,7 +19,6 @@
 #include <vulkan/vulkan_raii.hpp>
 #include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -30,14 +29,13 @@
     One home for them rather than one per pass. Without it the first two land byte-for-byte in the
     tracer and in the post-processing stage, and a third time in `main.cpp` under a different name
     and with a different error message — and three copies of a function is three places to fix a bug
-    in. The SPIR-V reader is the one that shows the cost: a reader that ignores the result of its own
-    read is silently wrong, and a fix lands in whichever copy somebody happened to be reading.
+    in.
+
+    Everything here needs a device or a physical device. Anything that does not belongs in a header
+    that does not include Vulkan, so that a test of it needs no SDK and no GPU — see `spirv.hpp`.
 */
 namespace VulkanHelpers
 {
-
-    //! First word of every SPIR-V module, per the specification.
-    inline constexpr uint32_t SPIRV_MAGIC{0x07230203u};
 
     /*!
         A device-local buffer.
@@ -70,49 +68,6 @@ namespace VulkanHelpers
         }
 
         throw std::runtime_error{"No memory type satisfies the requested properties."};
-    }
-
-    /*!
-        Reads a compiled SPIR-V module from disk.
-
-        \param path Absolute path to the `.spv` file.
-        \return The module's words.
-        \throws std::runtime_error when the file cannot be opened, has a size that is not a whole
-                number of words, is read short, or does not begin with the SPIR-V magic number.
-    */
-    [[nodiscard]] inline std::vector<uint32_t> readSpirv(const std::string& path)
-    {
-        std::ifstream file{path, std::ios::binary | std::ios::ate};
-        if (!file.is_open()) {
-            throw std::runtime_error{"Failed to open SPIR-V module: " + path};
-        }
-
-        const std::streamsize size_bytes{file.tellg()};
-        if ((size_bytes <= 0) || ((size_bytes % 4) != 0)) {
-            throw std::runtime_error{"SPIR-V module has an invalid size: " + path};
-        }
-
-        std::vector<uint32_t> words(static_cast<size_t>(size_bytes) / 4u);
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(words.data()), size_bytes);
-
-        /*
-            The read has to be checked. std::vector value-initialises, so a short read leaves a
-            silently zero-filled tail while the full size is still reported to vkCreateShaderModule.
-            A release build has no validation layer to reject the result, so the driver's SPIR-V
-            parser consumes the zeros — a hang or a crash instead of the clean error this function
-            is otherwise built to produce.
-        */
-        if (file.gcount() != size_bytes) {
-            throw std::runtime_error{"Truncated SPIR-V module: " + path};
-        }
-
-        // The magic number catches the likelier mistake of pointing at the wrong file entirely.
-        if (words.front() != SPIRV_MAGIC) {
-            throw std::runtime_error{"Not a SPIR-V module: " + path};
-        }
-
-        return words;
     }
 
     /*!
