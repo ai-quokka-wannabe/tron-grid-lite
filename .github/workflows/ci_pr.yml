@@ -217,25 +217,34 @@ jobs:
             - name: Build (Release)
               run: cmake --build --preset=linux-x11-gcc-release
 
-            # Naming the ICD explicitly rather than trusting the loader to find one: the runner has no
-            # GPU, so an empty device list would otherwise be indistinguishable from a driver that
-            # failed to load, and the job would report a missing device rather than a missing setup.
+            # Finding the ICD rather than assuming its path, and printing the directory when it is
+            # absent. A VK_ICD_FILENAMES pointing at a file that is not there leaves the loader with
+            # no drivers at all, and the failure it then reports — ErrorIncompatibleDriver from
+            # vkCreateInstance — is indistinguishable from a driver too old to use. One listing turns
+            # a guess into an answer.
+            - name: Locate the software ICD
+              run: |
+                echo "Vulkan ICD directory:"
+                ls -la /usr/share/vulkan/icd.d/ || echo "  (no such directory)"
+                icd=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json 2>/dev/null | head -1)
+                if [[ -z "$icd" ]]; then
+                    echo "::error::lavapipe ICD not found. mesa-vulkan-drivers may not ship it on this image."
+                    exit 1
+                fi
+                echo "Using $icd"
+                cat "$icd"
+                echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
+
             - name: Report the device
-              env:
-                VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
               run: ./build/linux-x11-gcc/src/Release/TronGridLite --list-gpus
 
             - name: The shader and the host must agree
-              env:
-                VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
               run: ./build/linux-x11-gcc/src/Release/TronGridLite --verify-acoustics
 
             # The same comparison with the Grid placed at an angle, which is the only thing that
             # exercises transform arithmetic: at the identity a matrix and its transpose are the same
             # sixteen numbers.
             - name: They must still agree at an angle
-              env:
-                VK_ICD_FILENAMES: /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
               run: ./build/linux-x11-gcc/src/Release/TronGridLite --verify-scene
 
     ci-success:
