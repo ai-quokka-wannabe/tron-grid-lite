@@ -15,8 +15,8 @@
 #include "instance.hpp"
 #include <algorithm>
 #include <array>
-#include <cstdlib>
 #include <ranges>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -68,8 +68,7 @@ Instance::Instance(bool enable_validation, const std::vector<const char*>& requi
 {
     // Step 1: Volk — find the Vulkan loader on this system.
     if (volkInitialize() != VK_SUCCESS) {
-        m_logger.logFatal("Vulkan not found on this system.");
-        std::abort();
+        throw std::runtime_error{"Vulkan not found on this system."};
     }
 
     // Feed Volk's vkGetInstanceProcAddr to the vulkan-hpp dynamic dispatcher.
@@ -78,9 +77,8 @@ Instance::Instance(bool enable_validation, const std::vector<const char*>& requi
     // Step 2: Check Vulkan version >= 1.3.
     uint32_t api_version{vk::enumerateInstanceVersion()};
     if ((VK_API_VERSION_MAJOR(api_version) < 1) || ((VK_API_VERSION_MAJOR(api_version) == 1) && (VK_API_VERSION_MINOR(api_version) < 3))) {
-        m_logger.logFatal("Vulkan 1.3 or later required (found " + std::to_string(VK_API_VERSION_MAJOR(api_version)) + "."
-            + std::to_string(VK_API_VERSION_MINOR(api_version)) + ").");
-        std::abort();
+        throw std::runtime_error{
+            "Vulkan 1.3 or later required (found " + std::to_string(VK_API_VERSION_MAJOR(api_version)) + "." + std::to_string(VK_API_VERSION_MINOR(api_version)) + ")."};
     }
 
     // Step 3: Gather required instance extensions.
@@ -94,8 +92,7 @@ Instance::Instance(bool enable_validation, const std::vector<const char*>& requi
     std::vector<vk::ExtensionProperties> available_extensions{vk::enumerateInstanceExtensionProperties()};
     for (const char* ext : extensions) {
         if (!isExtensionAvailable(available_extensions, ext)) {
-            m_logger.logFatal(std::string("Required Vulkan instance extension not available: ") + ext + ".");
-            std::abort();
+            throw std::runtime_error{std::string("Required Vulkan instance extension not available: ") + ext + "."};
         }
     }
 

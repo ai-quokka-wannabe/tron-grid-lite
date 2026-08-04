@@ -17,9 +17,9 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
-#include <cstdlib>
 #include <limits>
 #include <ranges>
+#include <stdexcept>
 #include <string>
 
 namespace
@@ -113,8 +113,7 @@ void Swapchain::build(uint32_t width, uint32_t height)
     const std::vector<vk::PresentModeKHR> present_modes{physical_device.getSurfacePresentModesKHR(m_surface)};
 
     if (formats.empty()) {
-        m_logger->logFatal("No surface formats available.");
-        std::abort();
+        throw std::runtime_error{"No surface formats available."};
     }
 
     // Choose optimal settings.
@@ -150,8 +149,7 @@ void Swapchain::build(uint32_t width, uint32_t height)
         indication of the cause.
     */
     if (!(capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferDst)) {
-        m_logger->logFatal("Surface does not support transfer-destination usage; the renderer cannot present its blit.");
-        std::abort();
+        throw std::runtime_error{"Surface does not support transfer-destination usage; the renderer cannot present its blit."};
     }
 
     m_image_usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;

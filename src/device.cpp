@@ -16,10 +16,10 @@
 #include "instance.hpp"
 #include <algorithm>
 #include <array>
-#include <cstdlib>
 #include <ranges>
 #include <set>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -160,8 +160,8 @@ struct QueueFamilyIndices {
         A rejection rather than a ten-point bonus, and the difference is not cosmetic. Scored as a
         bonus, a discrete GPU whose graphics family lacks compute still takes 10,000 for being
         discrete and beats a perfectly capable integrated device on 1,110 — so it gets selected, and
-        the constructor below then aborts with the fatal message about compute while a GPU that would
-        have worked sits unused. Rejecting here means the scoring loop simply passes over it.
+        the constructor below then refuses it while a GPU that would have worked sits unused.
+        Rejecting here means the scoring loop simply passes over it.
     */
     if (!indices.graphics_has_compute) {
         return -1;
@@ -282,8 +282,7 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     // Step 1: Enumerate physical devices.
     std::vector<vk::raii::PhysicalDevice> physical_devices{instance.get().enumeratePhysicalDevices()};
     if (physical_devices.empty()) {
-        m_logger.logFatal("No Vulkan-capable GPU found.");
-        std::abort();
+        throw std::runtime_error{"No Vulkan-capable GPU found."};
     }
 
     // Step 2: Score and pick the best device.
@@ -302,9 +301,9 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     }
 
     if (best_score < 0) {
-        m_logger.logFatal(std::string{"No suitable GPU found (need Vulkan 1.3 with dynamic rendering and synchronisation2, and a graphics family that dispatches compute"}
-            + ((surface != VK_NULL_HANDLE) ? ", plus a present queue and VK_KHR_swapchain)." : ")."));
-        std::abort();
+        throw std::runtime_error{
+            std::string{"No suitable GPU found (need Vulkan 1.3 with dynamic rendering and synchronisation2, and a graphics family that dispatches compute"}
+            + ((surface != VK_NULL_HANDLE) ? ", plus a present queue and VK_KHR_swapchain)." : ").")};
     }
 
     /*
@@ -315,13 +314,11 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
     */
     if (preferred_index != NO_PREFERENCE) {
         if (preferred_index >= physical_devices.size()) {
-            m_logger.logFatal("Requested GPU " + std::to_string(preferred_index) + " but only " + std::to_string(physical_devices.size()) + " are present.");
-            std::abort();
+            throw std::runtime_error{"Requested GPU " + std::to_string(preferred_index) + " but only " + std::to_string(physical_devices.size()) + " are present."};
         }
 
         if (rateDevice(physical_devices[preferred_index], surface) < 0) {
-            m_logger.logFatal("Requested GPU " + std::to_string(preferred_index) + " cannot run this renderer; see the scores above.");
-            std::abort();
+            throw std::runtime_error{"Requested GPU " + std::to_string(preferred_index) + " cannot run this renderer; see the scores above."};
         }
 
         best_index = preferred_index;
@@ -349,8 +346,7 @@ Device::Device(const Instance& instance, VkSurfaceKHR surface, LoggingLib::Logge
             outcome is a garbled or hung GPU rather than a clean refusal, and the log line that
             predicted it scrolls away unread.
         */
-        m_logger.logFatal("Graphics queue family does not support compute; this renderer is nothing but compute dispatches.");
-        std::abort();
+        throw std::runtime_error{"Graphics queue family does not support compute; this renderer is nothing but compute dispatches."};
     }
 
     // Step 4: Create the logical device.
