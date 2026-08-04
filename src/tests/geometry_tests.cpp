@@ -93,12 +93,12 @@ TEST_CASE(mesh_height_agrees_with_the_analytic_surface_at_grid_vertices)
 }
 
 /*
-    The regression test for the defect this function was written to fix.
+    What `gridMeshHeight` is for, and what goes wrong without it.
 
-    `plantOnFloor` originally asked `gridSurfaceHeight`, which is a step function once the relief is
-    terraced, while the drawn mesh ramps linearly across whichever cell a riser passes through. The
-    two disagree by up to a full terrace step, and the glowing column ended up standing 0.29 m clear
-    of its own reflection.
+    `plantOnFloor` must ask it rather than `gridSurfaceHeight`: the analytic surface is a step
+    function once the relief is terraced, while the drawn mesh ramps linearly across whichever cell a
+    riser passes through. The two disagree by up to a full terrace step — enough to leave the glowing
+    column standing 0.29 m clear of its own reflection.
 
     Every triangle's centroid lies strictly inside that triangle, so the mesh's own height there is
     unambiguous, and `gridMeshHeight` must reproduce it.

@@ -279,9 +279,9 @@ namespace BvhLib
             /*
                 Splitting only pays for itself when the triangle tests it saves outweigh the extra
                 interior node a ray must descend through. The traversal term therefore belongs on
-                the split's side of the comparison: written with a plus, as it was, the test could
-                never fire, because a split's cost is bounded above by the leaf's cost whenever the
-                bin bounds are subsets of the node's own.
+                the split's side of the comparison rather than the leaf's: added to the leaf's side
+                the test could never fire, because a split's cost is bounded above by the leaf's
+                cost whenever the bin bounds are subsets of the node's own.
             */
             if ((best_cost + (TRAVERSAL_COST * node_bounds.surfaceArea())) >= leaf_cost) {
                 makeLeaf(node_index, first, count);

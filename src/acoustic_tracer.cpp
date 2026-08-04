@@ -69,13 +69,12 @@ namespace
     static_assert(Acoustics::SURFACE_EPSILON == 1e-3f, "acoustics.slang declares SURFACE_EPSILON as 1e-3.");
 
     /*
-        The one that was missing, and the one that mattered most.
+        The one that matters most.
 
-        Every acoustic ray's heading comes from this number. The two sides agreeing to the last bit is
-        what dropped the host-device disagreement by a factor of three hundred and let the acceptance
-        threshold be tightened from one per cent to a tenth of one — so of all the constants duplicated
-        across this boundary, it is the one whose drift the verification is most sensitive to, and it
-        was the only one with nothing holding the copies together.
+        Every acoustic ray's heading comes from this number, so of all the constants duplicated across
+        this boundary it is the one whose drift the verification is most sensitive to. The two sides
+        agreeing to the last bit is worth a factor of three hundred in the host-device disagreement,
+        which is what lets the acceptance threshold sit at a tenth of a per cent.
     */
     static_assert(Acoustics::GOLDEN_TURN_FRACTION == 0.38196601125010515f, "acoustics.slang declares GOLDEN_TURN_FRACTION as 0.38196601125010515.");
 
@@ -119,8 +118,8 @@ AcousticTracer::AcousticTracer(const Device& device, const World& world, const s
     const vk::DeviceSize ear_bytes{static_cast<vk::DeviceSize>(max_ears) * sizeof(MathLib::Vec4)};
     const vk::DeviceSize histogram_bytes{static_cast<vk::DeviceSize>(max_ears) * HISTOGRAM_ENTRIES * sizeof(uint32_t)};
 
-    // Both land in the same host-visible block, which the arena maps once. Two allocations became
-    // one, and two mappings became one interior pointer each.
+    // Both land in the same host-visible block, which the arena maps once: one allocation and one
+    // mapping for the pair, and each buffer's address is an interior pointer into it.
     m_ears_mapped = createArenaBuffer(device, m_host_arena, ear_bytes, m_ears);
     m_histogram_mapped = createArenaBuffer(device, m_host_arena, histogram_bytes, m_histogram);
 
@@ -262,8 +261,8 @@ void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, uint3
         specification permits it to — the fact that it happens to work on the driver in front of me
         is the least reliable evidence available.
 
-        `recordCinematic` has done exactly this since Phase 4, forty lines from here, for its image
-        readback. This pass was written without it.
+        `recordCinematic` in `main.cpp` does exactly this for its image readback: the same dependency
+        for the same reason, and the twin to check this one against.
 
         There is deliberately no matching barrier for the ear positions going the other way, and the
         asymmetry is real rather than an oversight: submitting to a queue defines a memory dependency

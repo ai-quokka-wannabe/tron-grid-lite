@@ -347,8 +347,9 @@ TEST_CASE(a_material_index_past_the_table_is_silent_and_still_reflects)
 {
     /*
         The table is indexed by a triangle's material with no guarantee from the type system that the
-        two agree, so a short table is a caller error that used to be undefined behaviour — a read
-        past the end of a vector, which crashes somewhere else entirely or, worse, does not.
+        two agree, so a short table is a caller error, and reading it unchecked would be undefined
+        behaviour — a read past the end of a vector, which crashes somewhere else entirely or, worse,
+        does not.
 
         An unknown surface is treated as silent and still reflecting, which is the only sane reading
         of a surface nobody described, and both halves are checked here: the sounding patch goes

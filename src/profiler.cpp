@@ -148,15 +148,15 @@ void GpuProfiler::collect(uint32_t frame_slot)
         eWithAvailability is deliberate and eWait is deliberately absent. The caller has
         already waited on this slot's fence, so every timestamp that was actually recorded has
         finished — asking the driver to wait as well would stall the GPU for no reason.
-        Availability is requested per query because passes belonging to unimplemented phases
-        never write their timestamps. Each query therefore yields two values: the result, then
-        a non-zero availability marker.
+        Availability is requested per query because a pass that records nothing in a frame never
+        writes its timestamps. Each query therefore yields two values: the result, then a
+        non-zero availability marker.
 
         eNotReady is an expected, non-exceptional outcome and must NOT be treated as failure.
         The driver returns it whenever any query in the range is unavailable, regardless of
         eWithAvailability — the flag changes what is written into the buffer, not the return
-        code. While Trace, Sensors and Post are unimplemented their queries are always
-        unavailable, so this call returns eNotReady on every single frame. Bailing out here
+        code. A pass that is never recorded leaves its queries permanently unavailable, so this
+        call returns eNotReady on every frame in which any pass sits idle. Bailing out here
         would discard the passes that did resolve and the profiler would never report anything
         at all. The per-query availability markers are written in both cases, so they are what
         decides which passes are usable.
@@ -226,7 +226,7 @@ void GpuProfiler::logSummary()
         The line is built to be scanned rather than parsed: the whole-frame cost and the
         equivalent frame rate come first because they answer the question this renderer exists
         to answer, then the individual passes in execution order, then how much of a 60 fps
-        budget is left. Passes that are not implemented yet read 0.00.
+        budget is left. A pass that recorded no timestamps reads 0.00.
     */
     const float frame_ms{averageMs(GpuPass::Frame)};
 

@@ -27,10 +27,11 @@
 /*!
     The Vulkan chores every pass needs.
 
-    The first two existed three times over — byte-for-byte in the tracer and the post-processing
-    stage, and a third time in `main.cpp` with a different name and a different error message. Three
-    copies of a function is three places to fix a bug in, and the SPIR-V reader had exactly such a
-    bug: it ignored the result of its own read, and only one copy would have been noticed.
+    One home for them rather than one per pass. Without it the first two land byte-for-byte in the
+    tracer and in the post-processing stage, and a third time in `main.cpp` under a different name
+    and with a different error message — and three copies of a function is three places to fix a bug
+    in. The SPIR-V reader is the one that shows the cost: a reader that ignores the result of its own
+    read is silently wrong, and a fix lands in whichever copy somebody happened to be reading.
 */
 namespace VulkanHelpers
 {

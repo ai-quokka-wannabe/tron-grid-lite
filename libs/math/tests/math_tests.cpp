@@ -316,9 +316,9 @@ TEST_CASE(quat_multiply_combines_rotations)
 
 /*
     The test above cannot detect a swapped composition order, because it multiplies two identical
-    rotations about the same axis and those commute. It was the only use of the quaternion product
-    in this file, and `Quat::rotate` is implemented directly rather than through `operator*`, so
-    nothing else covered it either — a conjugated Hamilton product would have passed the whole suite.
+    rotations about the same axis and those commute. It is the only other use of the quaternion
+    product in this file, and `Quat::rotate` is implemented directly rather than through
+    `operator*`, so without the case below a conjugated Hamilton product would pass the whole suite.
 
     These two rotations do not commute. Taken in the order written, the result is (0, 1, 0); reversed
     it is (-1, 0, 0), so the assertion distinguishes them.
@@ -335,8 +335,8 @@ TEST_CASE(quat_multiply_does_not_commute)
 
 /*
     Mat4::inversed() is sixteen hand-transcribed cofactor expressions called by production code
-    (src/components.hpp) and, until now, exercised by nothing at all. A sign or index error in any
-    one of them produces a silently wrong inverse.
+    (src/components.hpp), and the cases below are the whole of its coverage. A sign or index error in
+    any one of them produces a silently wrong inverse.
 */
 TEST_CASE(mat4_inversed_round_trips)
 {

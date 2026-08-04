@@ -237,9 +237,9 @@ void Tracer::resize(vk::Extent2D extent)
     /*
         A zero extent is a minimised window, not an error. Swapchain::build already returns early on
         one, and the frame loop skips rendering while it lasts — but startup resizes unconditionally,
-        so a program launched into a minimised window reached vkCreateImage with a zero extent and
-        VUID-VkImageCreateInfo-extent-00944. Guarding here covers every caller rather than asking
-        each to remember.
+        so without this a program launched into a minimised window would reach vkCreateImage with a
+        zero extent and VUID-VkImageCreateInfo-extent-00944. Guarding here covers every caller rather
+        than asking each to remember.
     */
     if ((extent.width == 0u) || (extent.height == 0u)) {
         m_extent = vk::Extent2D{0u, 0u};

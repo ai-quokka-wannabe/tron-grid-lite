@@ -69,7 +69,7 @@ private:
     float m_radius_breathe{5.0f}; //!< How far the radius swells and shrinks over the loop, in metres.
     /*
         Height is measured from the floor's base level, not from the ground beneath the camera,
-        and the ground is no longer flat: the relief rises several metres. The mean sits high
+        and the ground is not flat: the relief rises several metres. The mean sits high
         enough that the bottom of the swing still clears the highest terrace with room to spare,
         because a camera that clips through a hill mid-orbit ruins the one shot this path exists
         to take.

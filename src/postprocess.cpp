@@ -198,7 +198,7 @@ void PostProcess::resize(vk::Extent2D extent, const std::vector<vk::ImageView>& 
     /*
         The zero-extent check comes first, and the order matters. A minimised window means the
         tracer created no output images, so there are no HDR views to count — checking the count
-        first turned a minimised launch into a fatal error. See the note in Tracer::resize.
+        first turns a minimised launch into a fatal error. See the note in Tracer::resize.
     */
     if ((extent.width == 0u) || (extent.height == 0u)) {
         m_extent = vk::Extent2D{0u, 0u};

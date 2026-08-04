@@ -27,13 +27,13 @@ namespace WindowLib
     {
         m_hinstance = GetModuleHandle(nullptr);
 
-        // Register window class once. CS_OWNDC was previously included but is meaningless
-        // here (we render via Vulkan, not GDI — there is no device context to "own"); dropped
-        // for hygiene. CS_HREDRAW | CS_VREDRAW invalidate the client area on resize so DWM
-        // immediately requests a repaint via WM_PAINT, eliminating stale-content artefacts.
-        // hbrBackground = BLACK_BRUSH gives DWM a defined fill colour for any client-area
-        // pixels that have not yet been written by the Vulkan swapchain (e.g. between window
-        // creation and the first present), avoiding the "hollow" desktop-show-through window.
+        // Register window class once. No CS_OWNDC: rendering goes through Vulkan rather than GDI,
+        // so there is no device context to "own". CS_HREDRAW | CS_VREDRAW invalidate the client
+        // area on resize so DWM immediately requests a repaint via WM_PAINT, eliminating
+        // stale-content artefacts. hbrBackground = BLACK_BRUSH gives DWM a defined fill colour for
+        // any client-area pixels that have not yet been written by the Vulkan swapchain (e.g.
+        // between window creation and the first present), avoiding the "hollow"
+        // desktop-show-through window.
         if (!m_class_registered) {
             WNDCLASSEXW wc = {};
             wc.cbSize = sizeof(WNDCLASSEXW);
@@ -105,13 +105,13 @@ namespace WindowLib
 
         // No WS_EX_NOREDIRECTIONBITMAP — that flag excludes the window from DWM
         // compositing, which means the GDI hbrBackground (BLACK_BRUSH set on the window
-        // class) is never painted between window creation and the first Vulkan present.
-        // Result was a "hollow" window showing whatever was on the desktop behind it for a
-        // visible moment. With DWM compositing enabled, BLACK_BRUSH paints immediately and
-        // the window appears as a solid black rectangle until Vulkan takes over. The
-        // tradeoff is that DWM's redirection bitmap may briefly stretch stale swapchain
-        // content during a resize — far less jarring than the hollow startup window, and
-        // our explicit Vulkan resize handling minimises that window of staleness anyway.
+        // class) is never painted between window creation and the first Vulkan present:
+        // a "hollow" window showing whatever is on the desktop behind it for a visible
+        // moment. With DWM compositing enabled, BLACK_BRUSH paints immediately and the
+        // window appears as a solid black rectangle until Vulkan takes over. The tradeoff
+        // is that DWM's redirection bitmap may briefly stretch stale swapchain content
+        // during a resize — far less jarring than the hollow startup window, and the
+        // explicit Vulkan resize handling minimises that window of staleness anyway.
         m_hwnd = CreateWindowExW(0, CLASS_NAME, title_wide.c_str(), style, x, y, window_width, window_height, nullptr, nullptr, m_hinstance,
             this // Pass this pointer for WM_NCCREATE
         );

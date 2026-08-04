@@ -78,7 +78,7 @@ namespace Acoustics
     {
         // One geometry at the identity, which is what the Grid is on the device as well. Expressing
         // the simple case as the general one rather than beside it means there is a single gather to
-        // keep correct, and the placement that Phase 6 needs costs nothing to have already.
+        // keep correct, and an instance sitting anywhere but the identity costs nothing to support.
         BvhLib::Scene scene{};
         scene.geometries.push_back(bvh);
         scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, MathLib::Mat4::identity()));
