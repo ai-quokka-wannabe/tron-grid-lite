@@ -143,7 +143,13 @@ true for one creature and false for the rest.
   anything else that can emit C-linkage exports, but the ABI itself is C.
 - **No exceptions across the boundary.** A Program written in C++ must catch everything at its own
   export boundary. An exception unwinding into the Grid is undefined behaviour and will very likely
-  terminate the process.
+  terminate the process. [STYLE.md](../STYLE.md) § Error Handling states the same rule from the
+  Grid's side and asks this header to enforce it rather than assert it: `noexcept` on a vtable
+  member is part of the pointer's *type* from C++17 onward, so a C++ Program that omits it fails to
+  compile instead of being asked politely. Spelling that in a header which must also compile as C99
+  costs one macro expanding to nothing on the C side — the only compiler-conditional construct the
+  header would contain, and the only available mechanism that makes the rule unrepresentable to
+  break.
 - **No memory ownership transfer.** Every pointer in a struct passed to a Program is owned by the
   Grid and is valid only for the duration of that call. The Program must copy anything it wishes to
   keep. Symmetrically, the Grid never frees anything a Program allocated.
@@ -235,10 +241,36 @@ typedef struct TglEyeDesc
         emphatically not always RGB. */
     uint32_t channels;
 
+    /*! Where this eye sits, in the frame of the segment named below. TglEarDesc carries a position
+        and this does not, which is survivable while a creature is a point and is not survivable on
+        a jointed body sampled at head and tail: the elegans prescription is one ray from the head
+        segment and one from the tail, and two eyes rendered from one origin are one eye. */
+    float position[3];
+
+    /*! Index of the body segment this eye rides, into the body's segment array. A body is a chain
+        of rigid segments, so an eye's world pose is its segment's pose composed with the offset
+        above; without the index the offset has no frame to be in. */
+    uint32_t segment;
+
     /*! For TGL_EYE_LAYOUT_SAMPLE_LIST, three floats per sample giving the unit view direction in
         body frame; NULL for a raster. A compound eye is a curved, non-uniform array rather than a
         rectangle, so the directions are handed over explicitly. Borrowed for the call only. */
     const float* sample_directions;
+
+    /*! One acceptance half-angle in radians per sample, matching sample_directions; NULL for a
+        raster, where the fields of view and the sample counts already imply it. PERCEPTION.md
+        rule 3 makes this part of the sensor descriptor rather than a constant, and rule 4 makes it
+        per sample: the ratio of acceptance angle to sample spacing is what decides whether an eye
+        blurs or aliases, and the sample spacing it is measured against varies severalfold across a
+        single eye. Without it every preset renders as a pinhole array, which is the Drosophila
+        case rendered as the desert ant case. Borrowed for the call only. */
+    const float* sample_acceptance_radians;
+
+    /*! Quantisation of a delivered sample in bits, before it is widened back to float; 0 leaves it
+        unquantised. PERCEPTION.md rule 3 names quantisation as part of the sensor rather than as
+        post-processing a Program may skip, and the elegans preset needs four bits or fewer against
+        roughly 1.2 log units of usable graded response. */
+    uint32_t sample_quantisation_bits;
 
     /*! Field of view in radians. Meaningful for a raster; for a sample list the directions above
         are authoritative and these merely bound them. */
@@ -378,10 +410,19 @@ typedef struct TglSenses
     /* -- Thermoreception ------------------------------------------------------------ */
 
     /*! Irradiance at the creature's position in the renderer's linear units: incoming radiance
-        integrated over the whole sphere, with no directional resolution whatsoever. One number,
-        one extra ray. This is not a cheapened eye but a faithful one — a pit viper's infrared
-        organ is likewise a very low-resolution radiance sensor, and it is enough to tell warm
-        from cold long before it is enough to see. */
+        integrated over the whole sphere, with no directional resolution whatsoever. This is not a
+        cheapened eye but a faithful one — a pit viper's infrared organ is likewise a very
+        low-resolution radiance sensor, and it is enough to tell warm from cold long before it is
+        enough to see.
+
+        A spherical integral is not one ray, and the arithmetic has to be faced rather than rounded
+        away: one ray is one direction, and choosing that direction at random is a one-sample Monte
+        Carlo estimate — precisely what Determinism and Replay forbids, because the answer would
+        then change with the draw. The direction set is therefore fixed and derived from the sample
+        index, exactly as the acoustic fan's is, and how many directions a body can afford is a
+        property of that body rather than a constant here. A fixed set carries the stationary
+        structured bias ACOUSTICS.md records against its own fan: it misses a small warm thing the
+        same way on every tick, and that error does not average out over time. */
     float irradiance;
 
     /* -- Hearing ------------------------------------------------------------------ */
@@ -451,8 +492,20 @@ nothing else, because acoustically every surface on the Grid is a perfect mirror
 /*! Geometry of one ear. Fixed for the creature's lifetime. */
 typedef struct TglEarDesc
 {
-    float position[3];        /*!< Ear position in body frame, metres. */
-    float direction[3];       /*!< Ear axis in body frame, unit length. */
+    /*! Ear position, in the frame of the segment named below. */
+    float position[3];
+
+    /*! Index of the body segment this ear rides, into the body's segment array, exactly as
+        TglEyeDesc::segment. The position above is an offset in that segment's frame. */
+    uint32_t segment;
+
+    /*! Ear axis in body frame, unit length. Nothing on the Grid reads it: every surface is a
+        perfect acoustic mirror, the gather treats an ear as a point, and there is no directivity
+        term anywhere in the acoustic model, so an ear facing backwards hears exactly what one
+        facing forwards hears. It is a field waiting for a job — a directivity weight applied at
+        the gather, which is a real acoustic model with a real cost — sitting in a document whose
+        own rule is that every field is populated. */
+    float direction[3];
 
     /*! Band edges in hertz, band_count + 1 values, ascending. Borrowed for the call only.
         Chosen from this body's audiogram, not from room-acoustics convention. */
@@ -706,6 +759,85 @@ The interface is designed so that a run can be reproduced:
 Consequently, recording every `TglSenses` a Program saw and replaying the sequence into the same
 Program build must reproduce the same `TglActions` sequence. A Program that fails this is
 non-deterministic internally, which is allowed but should be a deliberate choice.
+
+### What is actually guaranteed, and to whom
+
+**The guarantee is replayability, not pixels.** A run is reproducible from `(seed, initial state,
+input log)` on one build and one device. Bit-identical pixels are a *consequence* of that, per
+device and per build, and their value is as a refactor oracle rather than as anything a creature
+benefits from.
+
+That ordering matters because the two get conflated, and the conflation makes an easy question look
+like a dilemma. Three properties travel under one word here, and only the first is promised:
+
+1. **Reproducibility** — the same inputs and the same seed produce the same outputs. This is what is
+   claimed.
+2. **Absence of stochastic content** — nothing in the world is random. This is strictly stronger and
+   strictly more expensive, and it is what the code has. It is a fact about the code rather than a
+   vow binding subsystems nobody has written; the honest wording is that there is no *unseeded,
+   unrecorded or globally-stateful* randomness anywhere.
+3. **Cross-device bit-identity** — refused below, and correctly, because the expensive half of
+   determinism buys nothing here.
+
+The price of determinism lives almost entirely in that third tier, which is why the published horror
+stories do not price this project's decision: they are stories about replacing every float with
+fixed point, or forking an engine onto soft floats. Single-device, same-binary determinism is nearly
+free, and here it was not even bought — the aesthetic caused it. Smooth surfaces mean no Monte
+Carlo, no Monte Carlo means no denoiser, no denoiser means determinism. **This project is not
+maintaining determinism; it is noticing it.** The corollary is that unbanning randomness would
+unlock no rendering quality either: soft shadows and glossy reflections are forbidden by the
+aesthetic, not by the vow.
+
+The measurable runtime cost is three floating-point operations per acoustic ray, inside
+`--benchmark`'s own spread — and cost-*negative*, because the arithmetic that pays it also removes
+roughly 6e-4 radians of genuine float error.
+
+### The boundary, written before the first line of physics
+
+> The simulation is reproducible from `(seed, initial state, input log)` on one build and one
+> device. The presentation is not, and **nothing in the simulation may read the presentation.**
+
+**Inside:** physics integration, collision detection, contact resolution, constraint solving;
+everything producing a `TglSenses` buffer, visual and acoustic alike; Grid generation, spawn state
+and every stochastic quantity in the world; the tick itself.
+
+**Outside:** the debug view, overlays, bloom, tone mapping, post-hoc high-quality re-renders,
+profiling instrumentation.
+
+Half of that line is already drawn — creature sensors are exempt from tone mapping — and the other
+half needs three rules to stay drawn:
+
+- **Tick count is driven by the simulation or by the replay log, never by a wall clock.** This is
+  where a fixed-timestep accumulator's spiral-of-death clamp silently readmits nondeterminism,
+  because dropping accumulated time makes the number of ticks executed depend on machine load.
+  `dt_seconds` is supplied explicitly for exactly this reason. A fixed `dt` is also a physics
+  correctness decision independent of determinism — integrator stability, spring constants,
+  penetration slop and constraint stiffness are all tuned against a specific `dt` — so choosing it
+  costs nothing this project wanted.
+- **"Determinism forbids multithreading" is false.** It forbids *unstructured* multithreading:
+  atomic accumulation into shared state, work stealing whose result depends on who won the race,
+  thread-count-dependent partitioning, reductions applied in completion order. Parallelism is
+  permitted where the merge is order-independent or the partition is fixed — which is exactly what
+  the acoustic histogram's integer accumulation already is. A replay format must record the worker
+  count, because deterministic multithreaded physics is not thread-count independent, and it must
+  record the substep count for the same reason: contacts solved at zero compliance take their
+  stiffness from the substep count, so a replay recorded at one count does not reproduce at another
+  and must be refused rather than allowed to diverge.
+- **If physics ever rides the compute path it ships as a flagged non-deterministic fast mode, with
+  the host path retained as the reference implementation** for replay, regression and a
+  `--verify-physics` check — the same host-against-device shape `--verify-acoustics` and
+  `--verify-scene` already prove twice. Committing *unconditionally* to deterministic GPU physics
+  would mean committing to host physics permanently: the integer-associativity escape hatch that
+  rescued the acoustics has no analogue for a signed, wide-dynamic-range contact-impulse
+  accumulator.
+
+The cost of all this is a function of *when* it is decided, not of what is decided. Relaxing
+determinism later is a flag; re-acquiring it after a solver exists is a rewrite.
+
+One bound belongs beside the claim rather than left to be inferred: world replay is bit-identical
+for the same **build**, not merely the same device. The hierarchy builder rests on `std::partition`
+and `std::nth_element`, neither of which specifies a permutation, so triangle layout is a property
+of the standard library implementation — identical from the same binary, not guaranteed between two.
 
 ### Determinism is worth nothing to a learning Program, and a great deal to whoever debugs the Grid
 

@@ -187,11 +187,13 @@ The design is settled; these are the places it is settled *conditionally*, and e
 shape of the code rather than a constant in it. They are here rather than in a document because they
 are decisions waiting on the owner, not conclusions.
 
-1. **Does a live Program clock the Grid unconditionally, or may the Grid infer quiescence from zero
-   actions over K ticks?** There is no third option — an ABI field by which a Program declares itself
-   idle is cognition leaking into the Grid. Inference costs a creature that would have moved on tick
-   N+1 the tick N+1 in which to choose it. Unconditional ticking costs the CPU floor, which is a
-   number and should be quoted as one.
+1. ~~Does a live Program clock the Grid unconditionally?~~ **Decided: unconditionally.** A rezzed
+   Program is itself a reason to tick. The Grid is committed to knowing nothing about how a Program
+   works inside, so it cannot prove a motionless creature will stay motionless — and a Grid that gated
+   the tick on Grid state would reach its first still tick and stop, silently and deterministically,
+   invisible to every check, because a Program cannot tell it has been frozen. The rule keeps its
+   text and gains a boundary: only *presentation* may be skipped for a User-side reason. See
+   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) § Nothing Runs Without a Reason.
 2. **Does the world tick share the render thread, or get its own?** Sharing it for v1 keeps the render
    channel's audit comment true — *if a name is not a member of this struct, exactly one thread
    touches it* — and keeps the mapped instance array from becoming shared mutable state across three
@@ -203,9 +205,14 @@ are decisions waiting on the owner, not conclusions.
    5 ms where published humanoid models sit. The rate must never be sized to what looks smooth
    through the debug window; that window is the only part a human can perceive, which is exactly why
    it must not drive the decision.
-4. **Is world replay claimed at all?** Claiming it costs single-threaded host physics permanently —
-   cheap now, a constraint later. Not claiming it costs nothing today and invites somebody to assume
-   it.
+4. ~~Is world replay claimed at all?~~ **Decided: claimed.** A run is reproducible from
+   `(seed, initial state, input log)` on one build and one device. **This makes host physics
+   single-threaded permanently**, which is the price and is worth stating as one — parallelism is
+   allowed only where the merge is order-independent or the partition is fixed, never where the
+   result depends on who finished first. What it buys is that a creature doing something
+   inexplicable at tick 41,203 can be replayed exactly, and that changing one thing in an experiment
+   changes one thing. See [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md) § Determinism and
+   Replay, which now separates the three properties that travel under that one word.
 5. **Does the first creature body have geometry?** The largest single scope decision here. Without it,
    physics is still verifiable, the generation never moves, and `World` needs no change at all in v1.
    With it, the debug window shows the creature and the writable instance buffer, the frames-in-flight
@@ -244,6 +251,27 @@ are decisions waiting on the owner, not conclusions.
     `SpectatorController` still carries it; any restructuring commit is the cheapest moment that
     rename will ever cost. And if a type ever owns the tracer and the post-process together, is
     `Renderer` too grand for something that owns no device, no swapchain and no camera?
+
+Five more were settled while the header was still unwritten, which is the cheapest they will ever be:
+
+- **`TglEyeDesc` gains a position and a segment index**, as `TglEarDesc` has. A 430 mm body sampled at
+  head and tail cannot express either eye without them.
+- **It also gains a per-sample acceptance angle and a quantisation**, because
+  [docs/PERCEPTION.md](docs/PERCEPTION.md) rule 3 already requires both and the struct contradicted it.
+- **`TglEarDesc::direction` is removed.** Nothing reads it: the gather takes a bare position and casts
+  a full spherical set from it. Giving it a directivity model instead would be a feature nobody asked
+  for.
+- **Every vtable function pointer is `noexcept`.** `STYLE.md` already claimed this and the struct did
+  not have it, so the two documents disagreed. Since C++17 it is part of the pointer's *type*, which
+  makes it enforcement rather than request.
+- **`irradiance` becomes a mean over a fixed, per-body set of directions** indexed exactly as the
+  acoustic fan is. As written it specified a one-sample Monte Carlo estimate of a spherical integral,
+  which the determinism rule forbids outright.
+
+**Hosting a Program out of process is not documented, and that is deliberate.** In-process was chosen
+for speed with the crash cost accepted; documenting a child-process mode would make crash isolation a
+promise the ABI has to keep and would require every senses buffer to be serialisable rather than a
+pointer. Recorded here as a thing that could be built, not in the ABI as a thing that exists.
 
 One piece of work is not a question and blocks everything: **the ABI header does not exist.**
 `TGL_PROGRAM_ABI_VERSION`, `TglSenses` and `tglGetProgramVTable` are Markdown prose with no compiled

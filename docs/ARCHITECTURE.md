@@ -499,6 +499,64 @@ smooth skinning, so the cheap answer and the fitting answer are the same one —
 comfortable position an argument like this can end in, and worth being suspicious of exactly for that
 reason.
 
+#### The same hierarchy answers contact *(Phase 6, planned)*
+
+**One Grid, three senses if touch counts as one.** Nothing in the hierarchy, its layout or its
+traversal changes to serve physics, and that is not a coincidence — `Triangle` already stores `v0`,
+`edge1` and `edge2`, which are exactly the arguments a closest-point-on-triangle routine takes, with
+no conversion. `intersectTriangle` is two-sided, which physics wants and vision does not care about.
+Zero direction components are already replaced with a tiny constant, so a straight-down support probe
+is already protected from the `0 * inf` NaN. This is the strongest form of the argument this document
+makes for owning the BVH rather than importing a physics library: the structure was general because
+nothing in it was ever specific to light.
+
+Two properties of the existing code are load-bearing for physics and easy to undo by tidying:
+
+- **The instance-space ray is left unnormalised**, so a distance found in instance space is already
+  the world distance. A step trace's hit distance is therefore *directly* the fraction of the
+  commanded step that may be taken, with no rescaling anywhere.
+- **`build()` takes the triangle array by value and reorders it.** Any adjacency the physics needs —
+  active-edge classification, so a capsule does not catch on the shared edge between two coplanar
+  floor facets and stop dead on flat ground — must be computed **before** the build, from the
+  generator that knows it for free. Recovering it afterwards from a triangle soup does not, and a
+  terraced floor of flat-shaded facets is close to the worst case for the failure it prevents.
+
+The queries themselves are additions rather than changes: a point-to-AABB squared-distance descent
+(cheaper than the slab test, and with no reciprocal, so the zero-direction substitution and its NaN
+hazard leave the physics path entirely), closest-point-on-triangle, and a contact collector.
+
+**They return all contacts in range, never the nearest.** A body wedged where the floor meets a
+pillar touches two faces, and taking only the nearest makes the solver alternate between their
+normals across substeps, which is the jitter failure mode; when a fixed-capacity buffer overflows it
+evicts the *farthest*, so the surviving set is chosen by distance rather than by SAH node order.
+Contacts whose normals are within a couple of degrees are merged before solving, and that merge is
+not deferrable polish: jitter here is not cosmetic, because an oscillating position produces
+oscillating senses that a learning Program will chase as signal, and determinism is no defence — the
+jitter is perfectly reproducible and still poisonous.
+
+**Contact and friction are solved in the same pass.** Any arrangement that lifts a body onto a
+surface and then pushes it laterally chatters forever on every ledge, and the chatter arrives in
+`touch_*` as a periodic signal produced by nothing in the world.
+
+**Exactly one signature changes: an `exclude_instance` parameter on the host `intersectScene`**,
+because every physics probe starts inside the body that cast it. It is host-only — the shader casts
+no physics probe — and that asymmetry is stated here deliberately, because otherwise it reads later
+as drift between the two copies of the traversal.
+
+**`gridMeshHeight` is a bound seed and never an answer.** The vertical distance to the mesh is a
+valid upper bound on the distance to the nearest surface inside the floor extent, because the point
+directly below is itself on the mesh, and seeding the traversal with it makes the dominant case fast.
+Outside the floor's extent the height field clamps to the edge, so the bound becomes a lie and the
+seed is skipped — and a body that walks off the Grid genuinely finds nothing under it, which is the
+one fall this Grid can produce and is correct. Taking the maximum of the height field and the query
+would be two mechanisms answering one question, which is the failure this repository names first.
+
+**A body instance must be asserted rigid at the physics boundary.** A radius pushed through an
+instance transform is not frame-invariant the way a ray parameter is: under a scale a transformed
+radius is no longer the radius, and under a non-uniform one the sphere is not a sphere. `Instance`
+records nothing about whether its transform is rigid, and the failure mode is silent — the picture
+stays perfect while contact goes quietly wrong.
+
 ---
 
 ## The Compute Whitted Tracer
@@ -577,6 +635,162 @@ The rule applies to both senses, but they earn it differently:
 There is deliberately no flag to draw unconditionally. The GPU profiler averages over frames and a still camera
 produces none, so a run of frames to average is obtained by holding a movement key — which is what a flag would have
 done anyway, and is how every frame timing quoted in this repository was taken.
+
+### What the rule means once creatures exist *(Phase 6, planned)*
+
+The rule keeps its text and gains a boundary. Two sentences say the whole of it:
+
+- **No pass runs whose output would be identical to the one it already has.**
+- **A rezzed Program is itself a reason to tick.** The Grid is committed to knowing nothing about how
+  a Program works inside, so it cannot prove that a motionless creature will stay motionless. A
+  creature standing still for a hundred ticks and then moving is the expected case, not an anomaly,
+  and a Grid that gated the tick on Grid state would reach its first still tick and die — silently,
+  deterministically, and invisibly to every check, because a Program cannot tell it has been frozen.
+
+**Only presentation may be skipped for a User-side reason.** Every phase above it is gated on world
+state alone. This is not a nicety: `runRenderLoop` has three early exits — a blank or idle window, a
+swapchain rebuild, and an out-of-date acquire that the code's own comment says dragging a window edge
+produces *constantly* — and each is correct for a picture and catastrophic for a world. Anything that
+must not stop when the User grabs a window edge belongs above all three.
+
+The error asymmetry argued above for state comparison over dirty flags argues harder here. A
+redundant frame costs one frame; a window that has stopped updating is visible immediately. A
+creature whose senses have stopped tracking reality is worse than either, because nothing in the
+system is in a position to notice.
+
+### Three idle figures, not one
+
+The 0.09 s against 7.56 s above is measured on a static Grid with a still camera, and that case
+survives Phase 6 unchanged. It does not generalise, and stating the other two beside it is cheaper
+than letting one imply the others:
+
+| Regime | GPU work per tick | CPU floor per tick |
+|--------|-------------------|--------------------|
+| Empty roster, still camera | none | unchanged from today |
+| N rezzed, all settled | **exactly zero** — the generation does not move, so no eye redraws, no gather re-solves, nothing presents | N early-outs from the physics step, N support probes, N `program_tick` calls, one `144 * (N + 1)`-byte `memcmp` |
+| Anything moving | every pass | no saving is claimed, and none ever was |
+
+The first row must be **re-measured** with physics compiled in and shown unmoved, rather than assumed
+to still hold.
+
+### "Settled", precisely
+
+A body is settled only when all four hold, and the definition is written out because a vague one
+becomes an epsilon and an epsilon drifts:
+
+1. clamped intent is exactly `0.0f` in all three motion channels;
+2. the downward support probe found ground within the contact epsilon;
+3. achieved velocity is exactly `0.0f`, made so by the settle transition rather than merely small;
+4. all three have held for a fixed number of consecutive ticks.
+
+The physics step is still **called** for a settled body and early-outs inside it. A body that runs no
+code cannot notice the floor vanishing beneath it or a neighbour arriving, and its wake conditions —
+non-zero intent, the support probe losing ground, another body's inflated bounds overlapping — are
+evaluated on that path.
+
+The skip is exact rather than approximate, and for the same reason the acoustic skip is. Zero intent
+and zero velocity on support give a zero controller target, an integrated delta of
+`0.0f * dt == 0.0f`, and gravity cancelled by a support constraint clamping to the height already
+held: the pose that would be computed *equals* the pose that is there, bit for bit. Everything
+downstream then follows exactly — unchanged pose gives unchanged instance bytes, an equal `memcmp`,
+an unchanged generation, an equal `ViewState`, an unchanged gather key. A debug flag runs the full
+step for settled bodies and asserts bit-identity with the skipped one, and that assertion is
+deliberately broken once before it is trusted.
+
+The settle transition is a genuine one-time discontinuity and is documented rather than argued away:
+at most one rest-speed threshold times one tick of position, and one rest-speed of velocity,
+appearing as one bounded transient in `specific_force`. It happens once per settle and it is bounded,
+which is the most that can honestly be said for it. The absolute figure is deliberately not quoted
+here, because it is the product of two constants neither of which is fixed yet.
+
+A divisor was considered for the acoustic gather — solving only when `(tick % D) == 0` — and
+rejected. It is a clock inside a rule that says driven by change and never by a clock; the exact
+cache key already provides the skip; and [ACOUSTICS.md](ACOUSTICS.md) § Solve rate rules out one
+global rate by name. It buys nothing the key does not.
+
+## The Tick *(Phase 6, planned)*
+
+The frame flow below is the picture's. This is the world's, and the two meet only at the last step.
+Eleven phases, in this order, and the order is forced at every point where it looks arbitrary:
+
+| # | Phase | Reads | Writes |
+|---|-------|-------|--------|
+| 1 | Drain events | the render channel | camera, surface size |
+| 2 | Integrate physics | poses, intents, the hierarchy | poses, velocities, contacts |
+| 3 | Republish poses, bump the generation | poses | the instance array, the generation |
+| 4 | Render eyes | the hierarchy | eye targets |
+| 5 | Gather ears | the hierarchy, source strengths | impulse responses |
+| 6 | Read back eye targets | eye targets | host sample buffers |
+| 7 | Fill senses | everything above | `TglSenses` per creature |
+| 8 | `program_tick` | `TglSenses` | `TglActions` per creature |
+| 9 | Clamp and stage actions | `TglActions`, body limits | next tick's intents |
+| 10 | Present, if the picture would differ | `ViewState` | the swapchain |
+| 11 | Settle or wait | the roster | — |
+
+**Physics advances once per tick for all bodies, never once per creature.** Advancing it inside the
+per-creature loop cannot express creature-creature contact at all, and it makes roster iteration
+order physically observable in the world.
+
+**Within step 2 the bodies are advanced serially, in ascending roster index**, because bodies push
+each other and a parallel push has no defined order. Constraints inside a substep are projected in a
+single fixed order, in place, so the answer depends on the sequence: **a reordered roster is a
+different animal**, and the roster order is therefore part of the recorded run configuration rather
+than a detail of how the array happens to be built. This does not conflict with the ABI's licence to
+tick creatures in parallel — that licence is about step 8.
+
+**Senses describe the post-physics state of the same tick.** The ABI already designs in one tick of
+actuation latency between a sense and the action it motivates; sensing before physics would stack a
+second one on top of it.
+
+**Pose republication sits between physics and both senses** because both senses traverse the top
+level, and because the acoustic gather's cache key *is* the generation. A skip cannot be keyed on a
+generation that has not yet been recomputed.
+
+**Change detection is a `memcmp` of the instance-record array against the last published copy**, at
+the exact granularity the GPU reads, rather than a dirty flag — the same argument the debug view
+already makes one layer up, applied one layer down. A future writer who adds a field to
+`InstanceRecord` cannot forget to raise anything.
+
+**Eyes are issued before the gather** so the CPU spends the GPU's trace time on the gather. Both are
+pure reads of state frozen at step 3, so the order between them cannot change any result, and that is
+what makes the overlap free rather than clever.
+
+**Clamping is a separate phase from calling the Programs, run serially in ascending creature index.**
+Step 9 is the only phase where Program output enters world state, and therefore the only phase whose
+order could ever be observed. Keeping it serial and index-ordered now is what would make a parallel
+step 8 safe later; a queue would make application order equal completion order, and float addition is
+not associative.
+
+Senses publish the **achieved** speed the integrator produced, never the commanded value, and
+`dt_seconds` is always the constant. Non-finite action values are zeroed and logged before clamping,
+and the clamped result becomes the next tick's intent.
+
+### What the integrator may not do
+
+**A body is depenetrated along the contact normal with velocity projection; its height is never
+assigned.** Assigning `y` from a height field makes `specific_force` the second difference of a
+piecewise-linear function, and the Grid's floor is exactly that — `gridMeshHeight` exists because the
+drawn triangle is a ramp where the analytic function is a cliff, on a one-metre cell with terraces of
+roughly 0.83 m. At one metre per second and a 50 Hz tick a ramp boundary then produces on the order
+of 40 m/s² against the 9.81 the ABI promises a resting creature, and a faster tick makes that worse
+rather than better, because the same step change is divided by a smaller `dt` twice. The vestibular
+channel is the only sense that tells a creature which way is down on a mirror floor, and this is the
+cheapest way to poison it.
+
+### Where the picture and the world touch
+
+`ViewState` gains one `uint64_t generation` field, which is the lever it reserved for itself in
+advance, so presentation is gated on world change as well as on camera and surface change. With no
+creature rezzed the loop waits on the condition variable indefinitely, exactly as it does today; with
+a live roster it waits until the next tick deadline.
+
+**Descriptors are written only at a known safe point — after the fence for that frame in flight has
+signalled.** That one invariant replaces all update-after-bind reasoning, is auditable in review, and
+is what stops the alternating-frame flip-flop failure. It is the general form of the
+device-idle-on-resize rule this backend already follows, and per-creature descriptor writes are the
+first thing that will need the general form.
+
+On an empty Grid this loop is bit-identical to today's.
 
 ## Frame Flow
 
