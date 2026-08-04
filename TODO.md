@@ -335,9 +335,9 @@ itself.
 
 ## Etape 16 — A check that runs without a GPU
 
-Every check this repository has that could catch a rendering or acoustic regression needs a device,
-so all three fire only when somebody remembers them on a machine with one attached. Two things would
-change that, and neither needs the MMO or the server to exist first.
+Every check that could catch a rendering or acoustic regression needed a device, so all of them fired
+only when somebody remembered them on a machine with one attached. **A device turned out not to have
+to be a GPU**, which closes most of this etape and leaves one item behind.
 
 - [x] Error-path tests that need no device. `SpirvLib` is the first: the SPIR-V reader moved out from
       behind a Vulkan header into `src/spirv.hpp`, which mentions no Vulkan type, so its six guards
@@ -347,9 +347,23 @@ change that, and neither needs the MMO or the server to exist first.
       compiles renderer translation units into GPU-free targets and CI already runs `ctest` on
       `ubuntu-latest`, so the mechanism exists before the subsystem does. It would be the first
       determinism check here that fires without being remembered.
-- [ ] Evaluate lavapipe — Mesa's software Vulkan — as a CI device. If it runs the compute path,
-      `--verify-acoustics` and `--verify-scene` become CI checks rather than rituals. The digests
-      would not match a real GPU and are not the point; the host-against-device comparison is.
+- [x] Lavapipe as a CI device. It satisfies everything this renderer asks for — Vulkan 1.3, dynamic
+      rendering, synchronisation2, a graphics family that dispatches compute — and answers both
+      comparisons in about a second each. `--verify-acoustics` and `--verify-scene` now run on every
+      push and gate the success job.
+
+**The recorded render is deliberately not part of that job**, and the reason is worth keeping.
+Lavapipe renders reproducibly — the twelve-frame recipe gives the same digest twice running, in one
+to three seconds — so a digest check would work *on one machine*. But a digest is a bit pattern, and
+lavapipe compiles shaders through LLVM for whatever CPU it finds, so it would pin the job to one Mesa
+build and one set of CPU features and break on a runner with a different vector width. The two
+comparisons are tolerance-based and mean the same thing anywhere, which is why they are the ones that
+travel.
+
+Running them locally on real hardware stays worthwhile for a reason CI cannot cover: lavapipe is one
+implementation, and the value of these checks is that they hold across implementations sharing
+nothing. See [.claude/CLAUDE.md](.claude/CLAUDE.md) § The three checks worth running for how to reach
+it.
 
 A headless server, when one exists, is `libs/bvh` plus `libs/math` plus a tick loop with **zero device
 code** — which makes it the first substantial part of this project testable on any runner at all.
