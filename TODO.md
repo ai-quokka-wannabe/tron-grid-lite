@@ -158,7 +158,7 @@ and starts coming from a file that a downloaded creature pack could have written
 input genuinely is untrusted, the query is right, and confinement becomes a requirement rather than
 theatre.
 
-- [ ] Confine Program library paths before the Grid loads a Program from a config file
+- [x] Confine Program library paths before the Grid loads a Program from a config file
 
 Two dead ends already explored, so that nobody spends the afternoon again:
 
@@ -170,16 +170,18 @@ Two dead ends already explored, so that nobody spends the afternoon again:
   work would mean owning a hand-maintained workflow forever and disarming the query repository-wide.
 
 The fix that did work on the recorder was removing the capability rather than guarding it: `--preset`
-and `--config` name choices from constant tuples, so no path comes from `argv` at all. The same shape
-is the likely answer here — a Program identifier resolved against a known directory, rather than a
-path taken on trust.
+and `--config` name choices from constant tuples, so no path comes from `argv` at all. **That is the
+shape this took**: `ProgramLib::resolve` takes an identifier and a directory the Grid already trusts,
+and the identifier's alphabet — letters, digits, underscore, hyphen, beginning with a letter or digit
+— contains no dot, no separator and no colon. `..` is therefore unrepresentable rather than detected,
+which is why the code has no special case for it.
 
 **One sequencing point, because it is a real decision and not a preference.** The Program loader is
 not merely the thing that arrives *near* this etape — it **is** the untrusted-path code this etape
-exists to guard. So there are only two orders: confinement lands first and the loader is written
-against it, or the two land in one commit. "Loader now, confinement soon" is the one order that
-cannot be chosen, because it means shipping the exact code the alert describes while the dismissal
-that covered it has already expired.
+exists to guard. So there were only two orders: confinement first with the loader written against it,
+or both in one commit. "Loader now, confinement soon" was the one order that could not be chosen,
+because it means shipping the exact code the alert describes while the dismissal that covered it has
+already expired. They landed together.
 
 ## Etape 13 — Phase 6: questions to settle before writing the tick loop
 
@@ -316,7 +318,7 @@ The header and a Program returning constants ship **before** physics — the pha
 sensor interface plugs in, and physics is what makes the senses stop being constant afterwards.
 
 - [x] `libs/program-abi` — the C99 header, an `INTERFACE` target, vendorable into other trees
-- [ ] Load a Program: `LoadLibrary`/`dlopen`, one symbol, version refusal, vtable, lifecycle
+- [x] Load a Program: `LoadLibrary`/`dlopen`, one symbol, version refusal, vtable, lifecycle
 - [ ] One body with no physics — a transform that changes between ticks
 - [ ] Fill the senses from the tracers that already exist
 - [ ] Physics: gravity, contacts, friction

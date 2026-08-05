@@ -69,8 +69,34 @@ The corollary is that the Grid owes a Program an honest sensory simulation, and 
 
 ### Discovery and loading
 
-A Program is a single shared library. The Grid loads it with `LoadLibrary` (Windows) or `dlopen`
-(Linux) and resolves exactly one exported symbol:
+**A Program is named, never pathed.** The Grid takes an identifier and resolves it against a
+directory it already trusts, applying the platform's own decoration — `<name>.dll` on Windows,
+`lib<name>.so` on Linux.
+
+**One identifier resolves to exactly one filename, and a Program's build has to produce that name.**
+The Grid does not try a second spelling, because two candidate spellings would mean two possible
+binaries for one name, and which of them wins is not a question worth having an answer to in the code
+deciding what foreign library this process is about to run. Toolchains disagree here: MinGW prefixes
+shared libraries with `lib` on Windows as well as on Linux, so a Program built with it lands as
+`libquokka.dll` where the Grid wants `quokka.dll`. Set the target's prefix to empty there. The
+refusal says so when it sees the other spelling beside the one it wanted, rather than leaving four
+characters to be spotted.
+
+The identifier alphabet is ASCII letters, digits, underscore and hyphen, beginning with a letter or
+digit, and no longer than 64 characters. That is deliberately narrower than what a filesystem would
+accept, and the narrowness is the mechanism: an alphabet with no dot, no separator and no colon in it
+cannot express `..`, cannot express `/usr/lib/libc`, and cannot express `C:\windows\system32\...`, so
+there is no traversal to detect and no check anyone has to keep being right about. Rejecting the dot
+is what makes `..` unrepresentable rather than merely caught.
+
+This matters because of where the identifier comes from. A roster read from a configuration file is a
+file a downloaded creature pack can write, so it is genuinely untrusted input in a way `argv` from
+the person who launched the process is not. Removing the capability rather than guarding it is the
+same answer that worked for `tools/record_flyby.py`, where `--preset` and `--config` name choices
+from constant tuples so that no path arrives from outside at all.
+
+The Grid loads the resolved file with `LoadLibrary` (Windows) or `dlopen` (Linux) and resolves
+exactly one exported symbol:
 
 ```c
 /*! The single entry point every Program library must export with C linkage. */
