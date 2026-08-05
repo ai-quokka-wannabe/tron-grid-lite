@@ -1,0 +1,674 @@
+/*
+    Copyright (C) 2026 Matej Gomboc https://github.com/ai-quokka-wannabe/tron-grid-lite
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+    GNU General Public License for more details.
+*/
+
+/*!
+    \file tgl_program_abi.h
+    The whole contract between the Grid and a Program. One self-contained C header depending on
+    nothing but <stdint.h> and <stddef.h>, and on no Grid internal whatsoever.
+
+    An include guard rather than the repository's usual `#pragma once`, because this file is meant
+    to be vendored into other trees and two copies reaching one translation unit by different paths
+    must collapse to one. That is the only deliberate style deviation in the file.
+*/
+
+#ifndef TGL_PROGRAM_ABI_H
+#define TGL_PROGRAM_ABI_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+/* ================================================================================================
+   Version
+   ================================================================================================ */
+
+/*!
+    Bumped whenever anything in this file changes that an already-built Program could notice: a
+    member added, removed or reordered anywhere, a signature changed, a unit or sign convention
+    corrected, a threading promise widened or narrowed.
+
+    Exactly one change does not bump it, because it cannot hurt an already-built Program: appending
+    a member to the end of TglProgramVTable, which the Grid reaches only after checking struct_size.
+
+    `tools/check_abi_version.py` fingerprints this file with this line removed, and with comments and
+    whitespace removed so that rewording a doc comment or reflowing a declaration costs nothing. CI
+    runs it on every push and fails the build when the fingerprint moves and this number does not.
+    The rule is therefore a mechanism rather than a discipline, which matters: a forgotten bump
+    produces exactly the silent memory corruption the number exists to prevent, and produces it
+    without failing anywhere.
+*/
+#define TGL_ABI_VERSION 1u
+
+/* ================================================================================================
+   Toolchain glue
+   ================================================================================================ */
+
+/*! Applied by a Program to its one exported symbol. A Program defines TGL_PROGRAM_IMPLEMENTATION
+    before including this file; the Grid, which includes it only for the layouts, does not. */
+#if defined(TGL_PROGRAM_IMPLEMENTATION)
+#if defined(_WIN32)
+#define TGL_PROGRAM_EXPORT __declspec(dllexport)
+#else
+#define TGL_PROGRAM_EXPORT __attribute__((visibility("default")))
+#endif
+#else
+#define TGL_PROGRAM_EXPORT
+#endif
+
+/*!
+    No exception may cross this boundary, in either direction.
+
+    Since C++17 `noexcept` is part of a function pointer's type, so on the C++ side this macro
+    enforces the rule rather than requesting it: a C++ Program that omits it fails to compile, and
+    one that throws anyway calls std::terminate at the throw site with its own frames intact rather
+    than unwinding into a Grid frame built by a different toolchain. Both windows-msvc and
+    windows-mingw are configured presets, so that pairing is a configuration that exists today.
+
+    The rule is about the boundary, not about either codebase. The Grid is built with /EHsc and
+    throws by its own style guide; none of that may reach a Program. A Rust Program must be built
+    with `panic = "abort"`, because the macro cannot reach it.
+*/
+#ifdef __cplusplus
+#define TGL_NOEXCEPT noexcept
+#else
+#define TGL_NOEXCEPT
+#endif
+
+/*! Compile-time assertion. C11 or C++11 gives a readable diagnostic; the C99 fallback reports a
+    negative array size, which is correct and unpleasant. C11 is the supported path. */
+#if defined(__cplusplus)
+#define TGL_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
+#define TGL_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
+#else
+#define TGL_ASSERT_CAT2_(a, b) a##b
+#define TGL_ASSERT_CAT_(a, b) TGL_ASSERT_CAT2_(a, b)
+#define TGL_STATIC_ASSERT(cond, msg) typedef char TGL_ASSERT_CAT_(tgl_static_assert_, __LINE__)[(cond) ? 1 : -1]
+#endif
+
+/*! Size of one member without an instance to hand. Unevaluated, so the null pointer is never
+    dereferenced; this is the ordinary spelling of the idiom in both C and C++. */
+#define TGL_SIZEOF_MEMBER(type, member) sizeof(((type*)0)->member)
+
+TGL_STATIC_ASSERT(sizeof(void*) == 8u, "The Program ABI is 64-bit only. Every offset after the first pointer moves on a 32-bit build.");
+TGL_STATIC_ASSERT(sizeof(float) == 4u, "The Program ABI requires a 4-byte float.");
+
+/* ================================================================================================
+   The body frame
+
+   Right-handed, metres, +X to the creature's right, +Y up, -Z forward. Identical to the Grid's
+   world frame and to the debug camera, because this project has one convention rather than two.
+
+   Every three-float array below is (x, y, z) in that order, in body frame. A creature at rest reads
+   specific_force = { 0, +9.81, 0 }. Rotation sign is the right-hand rule about each axis, so a
+   positive angular_velocity[1] and a positive desired_turn_rate both mean a turn to the creature's
+   left seen from above.
+
+   One rigid frame, so a body-frame coordinate names one place and needs no further addressing.
+   Nothing here identifies a segment or reports a joint angle, and that is not an omission: a body
+   that bends needs a solver able to bend it, and until that solver exists a segment index would be a
+   number the Grid writes and nothing can act on. When it arrives it brings joint angle and joint
+   rate with it — separate signals, because they are separate receptors in every animal that has
+   them — and the version bumps.
+
+   A Program is never handed a diagram of its own body: no segment lengths, no rest pose, no
+   kinematic tree. Nowhere in an animal is there such a model, and the ABI reflects that. What a
+   creature gets is where it was touched, how it is moving, and what it can sense, from which the
+   shape of itself is something it may learn rather than something it is told.
+   ================================================================================================ */
+
+/* ================================================================================================
+   Descriptors, handed once at rez and never again
+   ================================================================================================ */
+
+/*! Grid-side facts a Program library may want before any creature exists. */
+typedef struct TglLibraryInfo {
+    /*! How many program_rez calls this library receives this run. The roster is fixed at startup,
+        so this is exact rather than a hint and a library may size a pool from it. */
+    uint32_t creature_count;
+
+    /*! Seconds per tick. The Grid runs a fixed timestep, so TglSenses::dt_seconds carries this same
+        value on every tick of the run. There is deliberately no tick_rate_hz: an integer hertz
+        cannot represent every reciprocal dt, so two spellings of one fact would drift. */
+    float nominal_dt_seconds;
+} TglLibraryInfo;
+
+/*!
+    Geometry of one eye. Fixed for the creature's lifetime.
+
+    One layout, and it is a sample list. There is no raster and no field-of-view pair, because not
+    one of the six sensor presets in PERCEPTION.md is a perspective raster: a rectangle plus two
+    angles cannot express a near-spherical insect field, a rodent's 8.38 steradians, or an
+    interommatidial angle that varies severalfold across a single eye. A raster is the degenerate
+    sample list whose directions happen to form a grid, so nothing is lost by omitting it.
+*/
+typedef struct TglEyeDesc {
+    /*! Three floats per sample: that sample's unit view direction in body frame, sample_count * 3
+        floats in total. Never NULL. Borrowed for the duration of the call. */
+    const float* sample_directions;
+
+    /*! One float per sample: that sample's acceptance angle in radians, as a Gaussian full width at
+        half maximum. The angle the sample integrates over, and the field that decides whether a
+        faithful render blurs or aliases. Never NULL. Borrowed for the duration of the call. */
+    const float* sample_acceptance_angles;
+
+    /*! Where this eye sits on the body, in body frame, metres. Two eyes on a head are two positions,
+        and that is how a stated binocular overlap becomes expressible. It is also why the simplest
+        preset is two eyes of one sample each rather than one eye of two samples: its head and tail
+        photoreceptors sit in different places, and a shared origin would collapse the only spatial
+        discrimination it has. */
+    float position[3];
+
+    /*! Number of samples, not floats. */
+    uint32_t sample_count;
+
+    /*! Values per sample. 1 is a scalar; 3 is the usual three-band eye. What each band weights is a
+        property of this body, documented per preset in PERCEPTION.md, and is emphatically not
+        always RGB. */
+    uint32_t channels;
+
+    /*! Distinct levels the Grid quantised this eye's samples to, expressed in bits. The samples
+        arrive as floats regardless; this says how much of that range carries information. Zero
+        means unquantised. The simplest preset is specified at four bits or fewer, and a Program
+        treating it as an eight-bit signal has invented six bits of dynamic range the animal does
+        not have. */
+    uint32_t quantisation_bits;
+} TglEyeDesc;
+
+/*!
+    Geometry of one ear. Fixed for the creature's lifetime.
+
+    There is no ear axis. The Grid's gather casts a full spherical direction set from a point, so an
+    ear has a position and no directivity whatsoever, and a direction member would be a field the
+    Grid reads and nothing acts on. It arrives when directivity does, and the version bumps then.
+*/
+typedef struct TglEarDesc {
+    /*! Band edges in hertz, band_count + 1 values, ascending. Chosen from this body's audiogram
+        rather than from room-acoustics convention. Never NULL. Borrowed for the call. */
+    const float* band_edges_hz;
+
+    /*! Atmospheric absorption per band, decibels per kilometre, band_count values. Authored per
+        body because the bands are per body; the air itself is fixed at 20 C and 70 % relative
+        humidity, so these are constants of the Grid resolved into this ear's bands. Never NULL.
+        Borrowed for the call. */
+    const float* air_absorption_db_per_km;
+
+    /*! Where this ear sits on the body, in body frame, metres. Two ears differ by position alone,
+        and the resulting path-length difference is the entire physical basis this ABI offers for
+        localisation. Performing the localisation is the Program's job. */
+    float position[3];
+
+    uint32_t band_count;
+
+    /*! Time bins in the impulse response delivered each tick. Bin b covers arrival delays
+        [b, b + 1) * bin_seconds measured from the start of the tick, so bin 0 is delay zero. The
+        span bin_count * bin_seconds is longer than one tick, which is correct rather than an
+        oversight: the response is the Grid's answer for the whole flight of a sound that left this
+        tick, and an echo of it arrives after this tick. */
+    uint32_t bin_count;
+
+    float bin_seconds;
+} TglEarDesc;
+
+/*!
+    The body this Program will drive. Sensor and actuator geometry only, and no Grid state.
+
+    Note the direction of control: the Grid decides how many eyes and ears a body has, where they
+    sit, what they resolve and how hard the body can push. A Program does not request a sense and
+    does not request a capability.
+*/
+typedef struct TglCreatureDesc {
+    /*! Stable within this run. For the Program's own logging; it names nothing on the Grid. */
+    uint64_t creature_id;
+
+    /*! Deterministic seed for any randomness the Program needs. Derived from the run seed and this
+        creature's roster index, so it is stable across runs of the same roster and distinct between
+        creatures of it. */
+    uint64_t random_seed;
+
+    /*! This body's eyes, in the order their views arrive each tick. NULL when eye_count is zero,
+        which is a legitimate body. Borrowed for the duration of the call, as is every array the
+        descriptors point at. */
+    const TglEyeDesc* eyes;
+
+    /*! This body's ears, same rules. NULL when ear_count is zero, which is the correct
+        specification for all three insect presets. */
+    const TglEarDesc* ears;
+
+    uint32_t eye_count;
+    uint32_t ear_count;
+
+    /*! Directions the Grid integrates to produce `TglSenses::irradiance`, from the same spherical
+        Fibonacci set the acoustic gather draws on.
+
+        Declared per body rather than fixed here because it is what the sense costs, and what a body
+        can afford differs: it is one ray each, and a creature with no eyes at all may reasonably
+        spend more on the only light sense it has than one already tracing a thousand.
+
+        Zero means the body has no thermoreception and `irradiance` reads zero every tick. That is a
+        real specification rather than a degenerate one — most presets in PERCEPTION.md have no such
+        organ. */
+    uint32_t irradiance_sample_count;
+
+    /*! Most contacts TglSenses::contacts can report in one tick. A Program may size a fixed buffer
+        from it, the same guarantee TglLibraryInfo::creature_count gives a library.
+
+        It is also a statement that the Grid truncates rather than growing without bound, and what it
+        keeps when it must choose: the strongest contacts by impulse magnitude, ties broken by the
+        Grid's own contact order, which is fixed for a given tick. Discarding the faintest is both the
+        deterministic choice and the biologically right one — an animal being struck hard does not
+        lose the blow to notice a graze. */
+    uint32_t max_contact_count;
+
+    /*! Magnitude bounds the Grid clamps TglActions to, in the units of the matching action fields,
+        all non-negative. A Program is told what its body can do rather than made to discover it by
+        experiment, because an animal has that knowledge and it is a fact about the body rather than
+        about the Grid. A bound of zero means the body has no such actuator. */
+    float max_forward_speed;
+    float max_turn_rate;
+    float max_vertical_speed;
+    float max_vocalisation_strength;
+} TglCreatureDesc;
+
+/* ================================================================================================
+   Views, handed every tick and valid only for the duration of one program_tick call
+   ================================================================================================ */
+
+/*!
+    One eye's samples for this tick.
+
+    sample_count and channels are repeated from the matching TglEyeDesc so that indexing this buffer
+    needs nothing else, and so a Program can bounds-check without trusting its own copy. Interpreting
+    the numbers still needs the descriptor: which direction sample i looked in, over what acceptance
+    angle, and what its channels weight are properties of the body and live where the body is
+    described. The Grid asserts the repeated values against the descriptor as it fills them.
+*/
+typedef struct TglEyeView {
+    /*! Linear-space sample values, channels floats per sample, sample i channel c at
+        samples[(i * channels) + c]. Un-tone-mapped and NOT clamped to [0, 1]: a sample looking
+        straight at a neon tube reads well above one. 16-byte aligned. Never NULL. */
+    const float* samples;
+
+    /*! Number of samples, not floats. Equals the matching TglEyeDesc::sample_count. */
+    uint32_t sample_count;
+
+    /*! Equals the matching TglEyeDesc::channels. */
+    uint32_t channels;
+} TglEyeView;
+
+/*! One ear's impulse response for this tick. */
+typedef struct TglEarView {
+    /*! Energy per (band, bin), band-major: element [(band * bin_count) + bin], and therefore
+        band_count * bin_count floats in total. 16-byte aligned. Never NULL.
+
+        Band-major because that is what a listener walks: finding arrival times within a band means
+        stepping through bins, and this layout makes that one contiguous run per band.
+
+        The unit is the primary neon tube, whose authored strength is 1.0 by definition. That is the
+        Grid's one reference level, it is the same reference TglActions::vocalisation_strength uses,
+        and a bin is a sum over every arrival from every source in those units. A bin no sound has
+        reached reads zero, which is the physical answer rather than a sentinel. */
+    const float* energy;
+
+    /*! Equals the matching TglEarDesc::band_count. Named first because the index is band-major. */
+    uint32_t band_count;
+
+    /*! Equals the matching TglEarDesc::bin_count. */
+    uint32_t bin_count;
+} TglEarView;
+
+/*!
+    One place the body was touched this tick.
+
+    A list rather than a single summed vector, because summing destroys the one thing touch is for.
+    A body lying along the floor contacts it in many places at once, and the sum of those is a number
+    that says "downwards" and nothing about lying down. Where matters more than how much.
+
+    The position is resolved in the body frame as the body actually is this tick, so nothing about it
+    requires a Program to know its own shape. It is also how a Program may come to know it: an animal
+    learns the extent of itself by bumping into the world, and this is the only sense here that
+    reports a point *on* the creature rather than a direction away from it.
+*/
+typedef struct TglContact {
+    /*! Where the contact happened, body frame, metres. */
+    float position[3];
+
+    /*! Impulse delivered to the body at that point, newton-seconds, in body frame. Direction is the
+        direction the body was pushed; magnitude is how hard. Never zero: a contact carrying no
+        impulse is not reported at all, so a Program need not filter them. */
+    float impulse[3];
+} TglContact;
+
+/*!
+    Everything a creature perceives this tick. Every pointer in it, and every pointer reachable
+    through it, is borrowed for the duration of the program_tick call and invalid afterwards.
+
+    No address the Grid hands over is stable or meaningful. A Program that hashes one, keys a cache
+    on one, or compares one against last tick's has left the reproducible set: addresses vary
+    between runs under address-space randomisation, and the replay path deliberately supplies
+    different ones for the same recorded tick.
+
+    Members are ordered widest first, so the struct has no padding on either supported platform.
+    That is worth more than grouping by modality, because a struct with holes has indeterminate
+    bytes and is therefore neither hashable nor recordable byte-wise, and this repository hashes
+    things. The modality grouping survives as comments, which is where legibility belongs.
+*/
+typedef struct TglSenses {
+    /*! Ticks since the run began, shared by every creature, so a creature rezzed later sees the
+        Grid's counter rather than its own age and two recordings line up. */
+    uint64_t tick;
+
+    /* -- Vision and hearing ------------------------------------------------------------------- */
+
+    /*! One view per eye, in the same order as TglCreatureDesc::eyes. NULL when eye_count is 0. */
+    const TglEyeView* eyes;
+
+    /*! One view per ear, in the same order as TglCreatureDesc::ears. NULL when ear_count is 0. */
+    const TglEarView* ears;
+
+    /* -- Touch ---------------------------------------------------------------------------------- */
+
+    /*! Contacts this tick, at most TglCreatureDesc::max_contact_count of them. NULL when
+        contact_count is 0, which is the ordinary case for a creature touching nothing. Order is the
+        Grid's own contact order and is fixed for a given tick, so a recording replays identically;
+        it carries no other meaning, and in particular it is not sorted by strength. */
+    const TglContact* contacts;
+
+    uint32_t eye_count;
+    uint32_t ear_count;
+    uint32_t contact_count;
+
+    /*! Duration of this tick in seconds, equal to TglLibraryInfo::nominal_dt_seconds on every tick.
+        The Grid runs a fixed timestep and holds no wall clock inside the simulation. */
+    float dt_seconds;
+
+    /* -- Proprioception: what the body's own actuators report about themselves ----------------- */
+
+    float body_forward_speed; /*!< Metres per second along -Z. Negative is reversing. */
+    float body_vertical_speed; /*!< Metres per second along +Y. */
+    float body_turn_rate; /*!< Radians per second about +Y, right-handed. */
+
+    /* -- Vestibular ---------------------------------------------------------------------------- */
+
+    /*! Specific force in body frame, metres per second squared: linear acceleration with gravity
+        included, exactly what an otolith senses. At rest this reads { 0, +9.81, 0 }. Gravity and
+        acceleration are conflated in one number because they are conflated in the animal, which is
+        precisely why a creature can be fooled about which way is down. */
+    float specific_force[3];
+
+    /*! Angular velocity about the body axes, radians per second, the semicircular-canal analogue.
+        Sensed inertially, which is not the commanded turn rate above: the two disagree whenever the
+        body is pushed rather than driven. */
+    float angular_velocity[3];
+
+    /* -- Thermoreception ------------------------------------------------------------------------ */
+
+    /*! Radiance arriving at the creature's position, integrated over the whole sphere, in the
+        renderer's linear units and with no directional resolution whatsoever. Strictly this is a
+        spherical fluence rate rather than an irradiance, which is hemispherical and cosine-weighted;
+        the name is inherited from PERCEPTION.md and ARCHITECTURE.md.
+
+        Deterministic: a fixed quadrature over the same spherical Fibonacci set the acoustic gather
+        uses, not a single sample. Nothing on the Grid samples randomly, and a one-ray sphere
+        integral would be exactly that. Faithful rather than cheapened, too: a pit viper's infrared
+        organ is likewise a very low-resolution radiance sensor, and it is enough to tell warm from
+        cold long before it is enough to see. */
+    float irradiance;
+} TglSenses;
+
+/*!
+    What the creature attempts this tick, and the only memory a Program may write across the
+    boundary. The Grid zeroes it before every call, so a Program that writes nothing coasts to a stop
+    rather than repeating last tick or reading whatever was on the stack.
+
+    Every field is physical intent in the body frame. The Grid replaces non-finite values with zero,
+    clamps to the matching TglCreatureDesc bound, and feeds the result to the physics step as intent
+    rather than as a teleport. Sanitise precedes clamp, in that order and no other, because most
+    hand-written clamps return NaN for a NaN input and a NaN velocity becomes a NaN position and then
+    a BVH traversal that does not terminate.
+*/
+typedef struct TglActions {
+    /*! Metres per second along -Z. Negative reverses. Clamped to +/- max_forward_speed. */
+    float desired_forward_speed;
+
+    /*! Radians per second about +Y, right-handed, so positive turns to the creature's left seen from
+        above. Clamped to +/- max_turn_rate. */
+    float desired_turn_rate;
+
+    /*! Metres per second along +Y. Clamped to +/- max_vertical_speed. */
+    float desired_vertical_speed;
+
+    /*! Loudness of one call emitted this tick, in the unit TglEarView::energy uses: relative to a
+        primary neon tube, whose authored strength is 1.0 by definition. Zero is silent, a negative
+        value is treated as zero, and the result is clamped to max_vocalisation_strength.
+
+        A call, not a channel: the Grid emits a single burst from the creature's own position and it
+        is over. No duration, spectrum or waveform, because there is no waveform anywhere on the
+        Grid. The body's descriptor carries what its voice sounds like; this says only whether it was
+        used, and how hard. */
+    float vocalisation_strength;
+} TglActions;
+
+/* ================================================================================================
+   The vtable and the one exported symbol
+   ================================================================================================ */
+
+/*! Opaque per-creature Program state. The Grid never dereferences it and never frees it. */
+typedef struct TglProgram TglProgram;
+
+/*!
+    Function pointers a Program library provides to the Grid.
+
+    This is the one struct in the interface the Program allocates and the Grid reads, and that
+    inversion is why it is the one struct with a size field. Every other struct here is allocated by
+    the Grid, so the Grid may grow it at the tail and an older Program simply never looks at the new
+    part. Grow this one without a size field and the Grid reads past the end of the Program's static
+    object and then calls through whatever its linker placed next, which usually appears to work
+    because that memory is usually zero.
+
+    struct_size cannot be retrofitted: adding it later moves every other member and breaks every
+    Program that exists. Four bytes, one line in TGL_PROGRAM_VTABLE_HEADER and one comparison in the
+    loader. It is the only piece of compatibility machinery in this file, and it is bought against a
+    named future need rather than a present one: a main-thread pump member, which Qt and GTK
+    diagnostic GUIs would require and which VST3 and CLAP both had to add after the fact.
+*/
+typedef struct TglProgramVTable {
+    /*! sizeof(TglProgramVTable) as the Program was compiled. Set by TGL_PROGRAM_VTABLE_HEADER. */
+    uint32_t struct_size;
+
+    /*! TGL_ABI_VERSION as the Program was compiled. Checked in addition to the value passed to
+        tglGetProgramVTable, because a hand-written binding in another language may ignore its
+        argument and must still fail loudly rather than silently. */
+    uint32_t abi_version;
+
+    /* -- Library scope: plain names, because these are dlopen and dlclose, facts about the
+          operating system rather than events on the Grid. ------------------------------------- */
+
+    /*! Called once after the library loads, before any Program is rezzed, on the roster thread.
+        Must not be NULL. */
+    void (*library_init)(const TglLibraryInfo* info) TGL_NOEXCEPT;
+
+    /* -- Program scope -------------------------------------------------------------------------- */
+
+    /*! Rezzes one Program onto one body. Returns NULL on failure. Roster thread. Must not be NULL. */
+    TglProgram* (*program_rez)(const TglCreatureDesc* desc)TGL_NOEXCEPT;
+
+    /*! Called once per tick per live creature, serially, in roster order, on one thread whose
+        identity is fixed for the whole run. Must not block. Must not be NULL. */
+    void (*program_tick)(TglProgram* program, const TglSenses* senses, TglActions* actions) TGL_NOEXCEPT;
+
+    /*! Derezzes one Program. The handle is invalid afterwards. Roster thread. Must not be NULL. */
+    void (*program_derez)(TglProgram* program) TGL_NOEXCEPT;
+
+    /*! Called once, after every handle has been derezzed, on the roster thread. The last chance to
+        destroy windows, unregister window classes and join threads. Must not be NULL. */
+    void (*library_shutdown)(void) TGL_NOEXCEPT;
+} TglProgramVTable;
+
+/*! Fills the two header members. Use as the first initialiser of a static vtable. */
+#define TGL_PROGRAM_VTABLE_HEADER (uint32_t)sizeof(TglProgramVTable), (uint32_t)TGL_ABI_VERSION
+
+/*! Smallest vtable the Grid accepts: the header plus the five members required at version 1. This
+    is a floor and never an equality, so that appending a member stays compatible. */
+#define TGL_PROGRAM_VTABLE_MIN_SIZE 48u
+
+/*!
+    The single symbol every Program library exports, with C linkage and this exact name.
+
+    The Grid passes TGL_ABI_VERSION as the Grid was built. A Program returns NULL if it cannot
+    satisfy that version, and the Grid then logs both numbers and refuses to start the run. No
+    negotiation and no shims.
+
+    The returned pointer must have static storage duration and remain valid until after
+    library_shutdown returns. The Grid never frees it.
+*/
+TGL_PROGRAM_EXPORT const TglProgramVTable* tglGetProgramVTable(uint32_t abi_version) TGL_NOEXCEPT;
+
+/*! Type of the above, for the Grid's dlsym / GetProcAddress cast. Declared here so that the cast
+    target is not a second, uncompiled copy of a signature that already exists in this file. */
+typedef const TglProgramVTable* (*TglGetProgramVTableFn)(uint32_t abi_version)TGL_NOEXCEPT;
+
+/* ================================================================================================
+   Layout, pinned
+
+   These fire in a Program's build as well as the Grid's, which is the whole point: a header that has
+   drifted fails to compile on the side that vendored it, rather than corrupting memory on the side
+   that loaded it. A comment saying "must equal" is not a mechanism.
+
+   Every struct is pinned three ways, and the third is not redundant. Sizes and offsets alone leave a
+   hole: narrow a member from uint64_t to uint32_t immediately before a pointer and the four bytes it
+   gives up are absorbed by the padding that aligns the pointer, so every offset and every size holds
+   while the meaning of the bytes has changed underneath. A Program built against the old header then
+   reads eight bytes where the Grid writes four, and nothing anywhere complains. So each struct also
+   asserts that its members account for all of it — which is the "no padding" claim made above in
+   prose, turned into something the compiler checks, and which no such change can survive.
+   ================================================================================================ */
+
+#define TGL_SUM2(t, a, b) (TGL_SIZEOF_MEMBER(t, a) + TGL_SIZEOF_MEMBER(t, b))
+#define TGL_SUM3(t, a, b, c) (TGL_SUM2(t, a, b) + TGL_SIZEOF_MEMBER(t, c))
+#define TGL_SUM4(t, a, b, c, d) (TGL_SUM3(t, a, b, c) + TGL_SIZEOF_MEMBER(t, d))
+#define TGL_SUM6(t, a, b, c, d, e, f) (TGL_SUM4(t, a, b, c, d) + TGL_SUM2(t, e, f))
+#define TGL_SUM7(t, a, b, c, d, e, f, g) (TGL_SUM4(t, a, b, c, d) + TGL_SUM3(t, e, f, g))
+#define TGL_SUM12(t, a, b, c, d, e, f, g, h, i, j, k, l) (TGL_SUM6(t, a, b, c, d, e, f) + TGL_SUM6(t, g, h, i, j, k, l))
+#define TGL_SUM14(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n) (TGL_SUM7(t, a, b, c, d, e, f, g) + TGL_SUM7(t, h, i, j, k, l, m, n))
+
+TGL_STATIC_ASSERT(TGL_SUM2(TglLibraryInfo, creature_count, nominal_dt_seconds) == sizeof(TglLibraryInfo), "TglLibraryInfo has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM6(TglEyeDesc, sample_directions, sample_acceptance_angles, position, sample_count, channels, quantisation_bits) == sizeof(TglEyeDesc),
+    "TglEyeDesc has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM6(TglEarDesc, band_edges_hz, air_absorption_db_per_km, position, band_count, bin_count, bin_seconds) == sizeof(TglEarDesc),
+    "TglEarDesc has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM12(TglCreatureDesc, creature_id, random_seed, eyes, ears, eye_count, ear_count, irradiance_sample_count, max_contact_count, max_forward_speed,
+                      max_turn_rate, max_vertical_speed, max_vocalisation_strength)
+        == sizeof(TglCreatureDesc),
+    "TglCreatureDesc has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM3(TglEyeView, samples, sample_count, channels) == sizeof(TglEyeView), "TglEyeView has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM3(TglEarView, energy, band_count, bin_count) == sizeof(TglEarView), "TglEarView has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM2(TglContact, position, impulse) == sizeof(TglContact), "TglContact has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM14(TglSenses, tick, eyes, ears, contacts, eye_count, ear_count, contact_count, dt_seconds, body_forward_speed, body_vertical_speed,
+                      body_turn_rate, specific_force, angular_velocity, irradiance)
+        == sizeof(TglSenses),
+    "TglSenses has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM4(TglActions, desired_forward_speed, desired_turn_rate, desired_vertical_speed, vocalisation_strength) == sizeof(TglActions),
+    "TglActions has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM7(TglProgramVTable, struct_size, abi_version, library_init, program_rez, program_tick, program_derez, library_shutdown)
+        == sizeof(TglProgramVTable),
+    "TglProgramVTable has padding: a member changed width.");
+
+TGL_STATIC_ASSERT(sizeof(TglLibraryInfo) == 8u, "TglLibraryInfo must be 8 bytes with no padding.");
+TGL_STATIC_ASSERT(offsetof(TglLibraryInfo, nominal_dt_seconds) == 4u, "TglLibraryInfo::nominal_dt_seconds must sit at offset 4.");
+
+TGL_STATIC_ASSERT(sizeof(TglEyeDesc) == 40u, "TglEyeDesc must be 40 bytes with no padding.");
+TGL_STATIC_ASSERT(offsetof(TglEyeDesc, sample_directions) == 0u, "TglEyeDesc::sample_directions must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglEyeDesc, sample_acceptance_angles) == 8u, "TglEyeDesc::sample_acceptance_angles must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglEyeDesc, position) == 16u, "TglEyeDesc::position must sit at offset 16.");
+TGL_STATIC_ASSERT(offsetof(TglEyeDesc, sample_count) == 28u, "TglEyeDesc::sample_count must sit at offset 28.");
+TGL_STATIC_ASSERT(offsetof(TglEyeDesc, channels) == 32u, "TglEyeDesc::channels must sit at offset 32.");
+TGL_STATIC_ASSERT(offsetof(TglEyeDesc, quantisation_bits) == 36u, "TglEyeDesc::quantisation_bits must sit at offset 36.");
+
+TGL_STATIC_ASSERT(sizeof(TglEarDesc) == 40u, "TglEarDesc must be 40 bytes with no padding.");
+TGL_STATIC_ASSERT(offsetof(TglEarDesc, band_edges_hz) == 0u, "TglEarDesc::band_edges_hz must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglEarDesc, air_absorption_db_per_km) == 8u, "TglEarDesc::air_absorption_db_per_km must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglEarDesc, position) == 16u, "TglEarDesc::position must sit at offset 16.");
+TGL_STATIC_ASSERT(offsetof(TglEarDesc, band_count) == 28u, "TglEarDesc::band_count must sit at offset 28.");
+TGL_STATIC_ASSERT(offsetof(TglEarDesc, bin_count) == 32u, "TglEarDesc::bin_count must sit at offset 32.");
+TGL_STATIC_ASSERT(offsetof(TglEarDesc, bin_seconds) == 36u, "TglEarDesc::bin_seconds must sit at offset 36.");
+
+TGL_STATIC_ASSERT(sizeof(TglCreatureDesc) == 64u, "TglCreatureDesc must be 64 bytes with no padding.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, creature_id) == 0u, "TglCreatureDesc::creature_id must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, random_seed) == 8u, "TglCreatureDesc::random_seed must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, eyes) == 16u, "TglCreatureDesc::eyes must sit at offset 16.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, ears) == 24u, "TglCreatureDesc::ears must sit at offset 24.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, eye_count) == 32u, "TglCreatureDesc::eye_count must sit at offset 32.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, ear_count) == 36u, "TglCreatureDesc::ear_count must sit at offset 36.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, irradiance_sample_count) == 40u, "TglCreatureDesc::irradiance_sample_count must sit at offset 40.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_contact_count) == 44u, "TglCreatureDesc::max_contact_count must sit at offset 44.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_forward_speed) == 48u, "TglCreatureDesc::max_forward_speed must sit at offset 48.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_turn_rate) == 52u, "TglCreatureDesc::max_turn_rate must sit at offset 52.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_vertical_speed) == 56u, "TglCreatureDesc::max_vertical_speed must sit at offset 56.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_vocalisation_strength) == 60u, "TglCreatureDesc::max_vocalisation_strength must sit at offset 60.");
+
+TGL_STATIC_ASSERT(sizeof(TglEyeView) == 16u, "TglEyeView is an array element, so its size is a stride. It must be 16 bytes.");
+TGL_STATIC_ASSERT(offsetof(TglEyeView, samples) == 0u, "TglEyeView::samples must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglEyeView, sample_count) == 8u, "TglEyeView::sample_count must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglEyeView, channels) == 12u, "TglEyeView::channels must sit at offset 12.");
+
+TGL_STATIC_ASSERT(sizeof(TglEarView) == 16u, "TglEarView is an array element, so its size is a stride. It must be 16 bytes.");
+TGL_STATIC_ASSERT(offsetof(TglEarView, energy) == 0u, "TglEarView::energy must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglEarView, band_count) == 8u, "TglEarView::band_count must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglEarView, bin_count) == 12u, "TglEarView::bin_count must sit at offset 12.");
+
+TGL_STATIC_ASSERT(sizeof(TglContact) == 24u, "TglContact is an array element, so its size is a stride. It must be 24 bytes with no padding.");
+TGL_STATIC_ASSERT(offsetof(TglContact, position) == 0u, "TglContact::position must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglContact, impulse) == 12u, "TglContact::impulse must sit at offset 12.");
+
+TGL_STATIC_ASSERT(sizeof(TglSenses) == 88u, "TglSenses must be 88 bytes with no padding anywhere.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, tick) == 0u, "TglSenses::tick must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, eyes) == 8u, "TglSenses::eyes must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, ears) == 16u, "TglSenses::ears must sit at offset 16.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, contacts) == 24u, "TglSenses::contacts must sit at offset 24.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, eye_count) == 32u, "TglSenses::eye_count must sit at offset 32.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, ear_count) == 36u, "TglSenses::ear_count must sit at offset 36.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, contact_count) == 40u, "TglSenses::contact_count must sit at offset 40.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, dt_seconds) == 44u, "TglSenses::dt_seconds must sit at offset 44.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, body_forward_speed) == 48u, "TglSenses::body_forward_speed must sit at offset 48.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, body_vertical_speed) == 52u, "TglSenses::body_vertical_speed must sit at offset 52.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, body_turn_rate) == 56u, "TglSenses::body_turn_rate must sit at offset 56.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, specific_force) == 60u, "TglSenses::specific_force must sit at offset 60.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, angular_velocity) == 72u, "TglSenses::angular_velocity must sit at offset 72.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, irradiance) == 84u, "TglSenses::irradiance must sit at offset 84.");
+
+TGL_STATIC_ASSERT(sizeof(TglActions) == 16u, "TglActions must be 16 bytes.");
+TGL_STATIC_ASSERT(offsetof(TglActions, desired_forward_speed) == 0u, "TglActions::desired_forward_speed must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglActions, desired_turn_rate) == 4u, "TglActions::desired_turn_rate must sit at offset 4.");
+TGL_STATIC_ASSERT(offsetof(TglActions, desired_vertical_speed) == 8u, "TglActions::desired_vertical_speed must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglActions, vocalisation_strength) == 12u, "TglActions::vocalisation_strength must sit at offset 12.");
+
+TGL_STATIC_ASSERT(sizeof(TglProgramVTable) >= TGL_PROGRAM_VTABLE_MIN_SIZE, "TglProgramVTable must be at least TGL_PROGRAM_VTABLE_MIN_SIZE bytes.");
+TGL_STATIC_ASSERT(offsetof(TglProgramVTable, struct_size) == 0u, "TglProgramVTable::struct_size must be first, for ever.");
+TGL_STATIC_ASSERT(offsetof(TglProgramVTable, abi_version) == 4u, "TglProgramVTable::abi_version must sit at offset 4.");
+TGL_STATIC_ASSERT(offsetof(TglProgramVTable, library_init) == 8u, "TglProgramVTable::library_init must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglProgramVTable, program_rez) == 16u, "TglProgramVTable::program_rez must sit at offset 16.");
+TGL_STATIC_ASSERT(offsetof(TglProgramVTable, program_tick) == 24u, "TglProgramVTable::program_tick must sit at offset 24.");
+TGL_STATIC_ASSERT(offsetof(TglProgramVTable, program_derez) == 32u, "TglProgramVTable::program_derez must sit at offset 32.");
+TGL_STATIC_ASSERT(offsetof(TglProgramVTable, library_shutdown) == 40u, "TglProgramVTable::library_shutdown must sit at offset 40.");
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* TGL_PROGRAM_ABI_H */

@@ -1,4 +1,5 @@
 add_subdirectory(testing)
+add_subdirectory(program-abi)
 add_subdirectory(signals)
 add_subdirectory(logging)
 add_subdirectory(math)

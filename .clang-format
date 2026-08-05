@@ -34,6 +34,10 @@ BraceWrapping:
   SplitEmptyRecord: true
   SplitEmptyNamespace: true
 
+# An `extern "C"` block wraps a whole header rather than a section of one, so indenting its contents
+# indents the entire file to no purpose. The brace still goes on its own line (AfterExternBlock).
+IndentExternBlock: NoIndent
+
 # Line length
 ColumnLimit: 170
 

@@ -324,6 +324,73 @@ body's actuators report about themselves, the second is what inertia reports abo
 agree while a creature drives itself and disagree the moment it is pushed, slides or falls — and
 that disagreement is information a Program can use.
 
+**Touch is a list of contact points rather than a summed vector, and the reason is that summing
+throws away the answer.** A body lying along the floor touches it in many places at once; add those
+contacts together and the result says "downwards" and nothing whatever about lying down. Where
+matters more than how much. Each contact therefore carries a body-frame position and the impulse
+delivered there, which is direction and strength in one, and both fall out of the physics step
+anyway.
+
+It is also the only sense that reports a point **on** the creature rather than a direction away from
+it — which makes it the route by which a Program may come to know the extent of its own body, by
+bumping into things. That is how an animal learns it.
+
+### How an animal knows where its own limbs are
+
+Worth setting down, because the intuitive answer is wrong and it decides what a jointed body must
+eventually report. It is not the feeling of weight shifting: limb position sense survives underwater,
+with the limb supported, and in orbit. Load and configuration are separate channels.
+
+**Muscle spindles do most of the work.** They lie *inside* the muscle, in parallel with the working
+fibres, and transduce muscle length and its rate of change; since length follows joint angle, length
+is effectively angle. The two afferent classes split the job — primary (Ia) endings are strongly
+velocity-sensitive, secondary (II) endings report static length. They also have their own motor
+supply, the gamma system, which co-contracts the spindle so it does not go slack as the muscle
+shortens. That is automatic gain control on a sensor, driven by the motor command.
+
+**Golgi tendon organs sit in series at the muscle–tendon junction and sense tension, not length.**
+That is the load channel, and biology keeps it separate from the position channel.
+
+**Joint receptors are largely not the position sense**, despite decades of assuming they were. The
+Ruffini and Pacinian endings in the capsule signal extremes of range and fast movement; people with
+total joint replacements, capsule and receptors gone, retain position sense. Skin stretch
+contributes, especially at the digits, and **efference copy** contributes too — part of knowing where
+a limb is, is predicting where the outgoing motor command should have put it.
+
+The decisive demonstration is **tendon vibration**: buzzing a tendon at 70–100 Hz drives the Ia
+afferents artificially and the limb is felt to move where it has not. The canonical form is the
+Pinocchio illusion — vibrate the biceps while the subject holds their own nose and the nose is felt
+to lengthen, because the arm is felt to extend while touch insists the fingertip has not moved.
+
+**Invertebrates are the closer model here.** Arthropods use chordotonal organs, stretch sensors
+spanning a joint; in the Drosophila femoral organ the populations are functionally distinct at the
+cell level, with "claw" neurons encoding position, "hook" neurons movement, and "club" neurons
+vibration. Campaniform sensilla — dome-shaped strain gauges in the cuticle — carry load, and hair
+plates act as end-of-range switches.
+
+**And *C. elegans* has no global posture sense at all.** Its B-type motor neurons sense the curvature
+of the body region immediately anterior to them and bend to match, so the undulatory wave propagates
+because each piece copies its neighbour with a delay. Nowhere in the animal is there a representation
+of the animal's shape.
+
+Four things follow, and they are binding on any jointed body this project grows:
+
+1. **Local per-joint signals, never a global pose.** No animal computes forward kinematics, so
+   handing a Program a body diagram would model something biology does not have.
+2. **Angle and rate are separate signals**, because they are separate receptors. Supplying both is
+   faithful rather than redundant, and it spares a Program differencing a noisy position.
+3. **Load is a third channel**, and it arrives when a body can strain against something.
+4. **Global posture is inferred, and frequently wrong.** That is what the illusions demonstrate. A
+   Program that misjudges its own configuration is behaving like an animal, not failing.
+
+A Pinocchio body sharpens all of this rather than complicating it. Every reason a spindle reading is
+ambiguous — it measures muscle rather than joint, muscles cross two joints, the sensor slackens under
+contraction — is a consequence of anatomy a wooden creature does not have. It is driven at the
+joints, so a clean absolute joint angle is the physically honest sensor for that body rather than a
+simplification of one. The nearest robotic analogue is not a bare potentiometer but a series-elastic
+actuator with a load cell and a separate tachometer, which is roughly where roboticists arrive once
+encoder-difference noise starts eating the derivative term.
+
 ## Design rules
 
 These follow from everything above. They are binding on the renderer.

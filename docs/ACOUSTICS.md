@@ -836,67 +836,26 @@ approximating anything. It buys nothing the key does not, and costs a committed 
 
 ### The ABI shape
 
-Following the descriptor/view pattern that vision already uses, and the ABI's own rules — C99,
-fixed-width types only, no hand-written padding, no ownership transfer, layout selectors as `uint32_t`
-constants rather than enums:
+`TglEarDesc` and `TglEarView` follow the descriptor/view pattern vision uses, and are declared in
+[`libs/program-abi/include/tgl/tgl_program_abi.h`](../libs/program-abi/include/tgl/tgl_program_abi.h)
+along with the rest of the interface. The reasoning behind each member lives in
+[PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md) § Hearing; what this document owes them is the acoustics
+underneath, which is everything above.
 
-```c
-/*! Geometry of one ear. Fixed for the creature's lifetime. */
-typedef struct TglEarDesc
-{
-    float position[3];        /*!< Ear position in body frame, metres. */
-    float direction[3];       /*!< Ear axis in body frame, unit length. */
+Two consequences of the model are worth restating where the model is derived. **An ear is a point
+with no axis**, because the gather casts a full spherical set from it and every surface is a perfect
+acoustic mirror, so there is no directivity term for an axis to feed. And **the reference level is the
+primary neon tube**, whose authored strength is 1.0 by definition — not the emitting source's own
+energy, because a bin holds the sum of everything that arrived within it and a sum over 16,640 tubes
+has no single source to be relative to.
 
-    /*! Band edges in hertz, band_count + 1 values, ascending. Borrowed for the call only.
-        Chosen from this body's audiogram, not from room-acoustics convention. */
-    const float* band_edges_hz;
-    uint32_t band_count;
+An `ear_count` of zero is a legitimate body, and is the correct specification for all three insect
+presets. The direction of control is the same as for eyes: **the Grid decides how many ears a body
+has, where they sit, and what bands they resolve.** A Program does not request an ear.
 
-    uint32_t bin_count;       /*!< Time bins delivered per tick. */
-    float bin_seconds;        /*!< Width of one bin. */
-} TglEarDesc;
-
-/*! One ear's arrivals for this tick. */
-typedef struct TglEarView
-{
-    /*! Energy per (band, bin), **band-major**: element [(band * bin_count) + bin], and therefore
-        band_count * bin_count floats in total. Never NULL.
-
-        Band-major rather than bin-major because that is what a listener walks. Finding the
-        arrival times within a band means stepping through bins, and this layout makes that
-        one contiguous run per band; the transpose would make every step a stride.
-
-        Relative to the emitting source's energy; there is no absolute reference level.
-        A bin no sound has reached yet reads zero, which is the physical answer and not a
-        sentinel: there is no "not yet filled" state to flag. */
-    const float* energy;
-
-    uint32_t bin_count;       /*!< Repeated from TglEarDesc so a tick handler needs nothing else. */
-    uint32_t band_count;
-} TglEarView;
-```
-
-`TglCreatureDesc` gains `const TglEarDesc* ears; uint32_t ear_count;`. `TglSenses` gains
-`const TglEarView* ears; uint32_t ear_count;` under a new `/* -- Hearing -- */` banner, keeping the
-modality grouping the document commits to. `ear_count` of zero is a legitimate body and is the correct
-specification for all three insect presets.
-
-The direction of control is the same as for eyes: **the Grid decides how many ears a body has, where
-they sit, and what bands they resolve.** A Program does not request an ear.
-
-If echolocation is wanted — and PROGRAM_INTERFACE.md already observes that it "needs no new sense at all"
-once hearing and vocalisation exist — `TglActions` gains a vocalisation field in the **same** bump, not
-a later one. That is the whole of the second breaking change, and it should not be split.
-
-`TGL_PROGRAM_ABI_VERSION` **does not move**. It is pinned at `1u` until 0.1.0 and stays there: this
-project owes nobody backward compatibility before its first release, so the interface changes whenever
-it needs to and both sides rebuild. The constant is kept only for the one job it can still do
-honestly, which is catching a stale `.dll` or `.so` loaded against struct layouts that have moved
-underneath it. (An earlier revision of this document specified a bump to `2u`; that was written before
-the versioning rule was settled, and `PROGRAM_INTERFACE.md` § Versioning is authoritative.)
-
-**The cost of this breaking change is in any case zero**: there is no header to edit, no Program
-repository consuming it, and `tglGetProgramVTable` is unimplemented on the Grid side too.
+Echolocation needs no new sense once hearing and vocalisation both exist, which is why
+`TglActions::vocalisation_strength` is in the same version rather than a later one — one call emitted
+from the creature's own position, in the same units an ear reports.
 
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
 time bin per ear, and stops.** Anything that names a source, separates streams, reports "a wall is

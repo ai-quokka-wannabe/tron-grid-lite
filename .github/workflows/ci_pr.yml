@@ -64,6 +64,15 @@ jobs:
                     exit 1
                 fi
 
+            # TGL_ABI_VERSION stops the Grid loading a Program built against a different layout, and
+            # nothing enforces it by itself. A forgotten bump leaves both sides agreeing on the number
+            # while disagreeing about the bytes - which is the silent memory corruption the number is
+            # kept for, and it does not fail loudly at run time. So the header is fingerprinted with
+            # the version line removed, and a changed fingerprint at an unchanged version is refused
+            # here rather than in a reviewer's memory.
+            - name: Check the Program ABI version was bumped
+              run: python3 tools/check_abi_version.py check
+
     build:
         name: Build (${{ matrix.preset }})
         needs: quick-checks
