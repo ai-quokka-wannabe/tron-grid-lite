@@ -18,6 +18,46 @@ add_library(tgl_test_program SHARED test_program.c)
 target_link_libraries(tgl_test_program PRIVATE program_abi)
 set_target_properties(tgl_test_program PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
 
+# Programs that are wrong, one way each, so the loader's refusals have something to refuse. One
+# source, one variant per target: the interesting part of each is the single line where it differs
+# from a correct Program.
+#
+# They are built beside tgl_test_program because the loader resolves an identifier against a
+# directory rather than opening a path, so a fixture is reachable only by being in one.
+set(TGL_BROKEN_PROGRAM_VARIANTS
+    no_symbol
+    refuses_version
+    wrong_version
+    small_vtable
+    null_library_init
+    null_program_rez
+    null_program_tick
+    null_program_derez
+    null_library_shutdown
+)
+
+foreach(variant IN LISTS TGL_BROKEN_PROGRAM_VARIANTS)
+    string(TOUPPER "${variant}" variant_macro)
+    add_library(tgl_broken_${variant} SHARED broken_program.c)
+    target_link_libraries(tgl_broken_${variant} PRIVATE program_abi)
+    target_compile_definitions(tgl_broken_${variant} PRIVATE TGL_BROKEN_${variant_macro})
+    set_target_properties(tgl_broken_${variant} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+
+    # Beside the good fixture, so one directory holds every Program the loader tests resolve.
+    set_target_properties(tgl_broken_${variant} PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:tgl_test_program>"
+        RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:tgl_test_program>"
+    )
+endforeach()
+
+# One name for "every Program fixture", so that a consumer in another directory depends on the set
+# rather than on a list of target names it would have to be kept in step with.
+add_custom_target(tgl_test_programs)
+add_dependencies(tgl_test_programs tgl_test_program)
+foreach(variant IN LISTS TGL_BROKEN_PROGRAM_VARIANTS)
+    add_dependencies(tgl_test_programs tgl_broken_${variant})
+endforeach()
+
 add_executable(program_abi_tests program_abi_tests.cpp)
 target_link_libraries(program_abi_tests PRIVATE program_abi program_abi_c99 testing)
 add_test(NAME program_abi_tests COMMAND program_abi_tests)

@@ -284,6 +284,20 @@ reference render must then license. The restructurings worth doing are the ones 
 unrepresentable — a type that owns two objects which must be resized together, a `static_assert`
 against the other side's literal — and each of those can name the mistake it prevents.
 
+**Windows answers some failures with a dialog box rather than an error code**
+
+- **`LoadLibrary` on a malformed library raises a modal "Bad Image" box and does not return until
+  somebody dismisses it.** On a build machine or an unattended run that is a hung process rather than
+  a failed one — the same trade this repository already refuses around `std::abort` and the CRT's
+  termination dialog. `SetThreadErrorMode(SEM_FAILCRITICALERRORS, …)` around the call suppresses it;
+  per-thread rather than `SetErrorMode`, which is process-wide and not the loader's to change.
+  Capture `GetLastError` before restoring the mode, since it is what the refusal quotes.
+- **A child process inherits the process error mode, so "change nothing" is not a control.** A probe
+  written to reproduce this could not, because it was launched from a shell that already had
+  `SEM_FAILCRITICALERRORS` set and inherited it — and `GetThreadErrorMode` returns 0 in that state,
+  which reads exactly like "no suppression". Clear it with `SetErrorMode(0)` explicitly to get a real
+  control, and expect the unsuppressed run to hang rather than fail.
+
 **Tooling on this machine**
 
 - **Never edit a file through PowerShell `Set-Content` or `Out-File`.** The round trip re-encodes

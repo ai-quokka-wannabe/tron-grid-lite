@@ -20,3 +20,16 @@ add_test(NAME acoustics_tests COMMAND acoustics_tests)
 add_executable(spirv_tests spirv_tests.cpp)
 target_link_libraries(spirv_tests PRIVATE testing)
 add_test(NAME spirv_tests COMMAND spirv_tests)
+
+# The Program loader mentions no Vulkan either, for the same reason and to the same benefit: every
+# refusal it makes is reachable here, on a machine with no device at all.
+#
+# It needs the fixtures to exist before it runs, and it needs to be told where they are. The
+# directory arrives as a compile definition from the target that produces them rather than as a
+# string assembled here, so a fixture moving in the build tree cannot leave this test resolving
+# nothing and reporting that everything was correctly refused.
+add_executable(program_library_tests program_library_tests.cpp ../program_library.cpp)
+target_link_libraries(program_library_tests PRIVATE program_abi testing ${CMAKE_DL_LIBS})
+target_compile_definitions(program_library_tests PRIVATE TGL_TEST_PROGRAM_DIR="$<TARGET_FILE_DIR:tgl_test_program>")
+add_dependencies(program_library_tests tgl_test_programs)
+add_test(NAME program_library_tests COMMAND program_library_tests)

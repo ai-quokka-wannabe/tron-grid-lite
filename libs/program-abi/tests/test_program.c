@@ -34,9 +34,30 @@
     dereferences it — so one static object serves every creature. */
 static int g_creature_state = 0;
 
+/*! Which lifecycle entry points have been called, as bit flags.
+
+    Scaffolding, and the only thing here that a real Program would not have. It exists because "the
+    loader calls library_init once the library is accepted, and library_shutdown before unloading"
+    is otherwise a claim with nothing behind it: a loader that skipped both would pass every other
+    test in the suite, since nothing else can tell whether a no-op was called or not. */
+static uint32_t g_lifecycle = 0u;
+
+#define TGL_TEST_LIFECYCLE_INIT 1u
+#define TGL_TEST_LIFECYCLE_SHUTDOWN 2u
+
+/*! Reads the flags above. Exported so a test can hold its own reference to this library, watch the
+    Grid load and unload it, and see what actually happened in between. */
+TGL_PROGRAM_EXPORT uint32_t tglTestProgramLifecycle(void) TGL_NOEXCEPT;
+
+TGL_PROGRAM_EXPORT uint32_t tglTestProgramLifecycle(void) TGL_NOEXCEPT
+{
+    return g_lifecycle;
+}
+
 static void libraryInit(const TglLibraryInfo* info) TGL_NOEXCEPT
 {
     (void)info;
+    g_lifecycle |= TGL_TEST_LIFECYCLE_INIT;
 }
 
 static TglProgram* programRez(const TglCreatureDesc* desc) TGL_NOEXCEPT
@@ -59,6 +80,7 @@ static void programDerez(TglProgram* program) TGL_NOEXCEPT
 
 static void libraryShutdown(void) TGL_NOEXCEPT
 {
+    g_lifecycle |= TGL_TEST_LIFECYCLE_SHUTDOWN;
 }
 
 /*! Static storage duration, as the header requires: the Grid holds this pointer past

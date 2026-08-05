@@ -14,6 +14,7 @@ add_executable(${PROJECT_NAME}
     geometry.cpp
     profiler.cpp
     spectator.cpp
+    program_library.cpp
     cinematic.cpp
 )
 
@@ -43,6 +44,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     logging
     math
     bvh
+    program_abi
     ${CMAKE_DL_LIBS}
 )
 
