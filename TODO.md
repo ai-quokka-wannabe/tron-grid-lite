@@ -217,18 +217,34 @@ are decisions waiting on the owner, not conclusions.
    physics is still verifiable, the generation never moves, and `World` needs no change at all in v1.
    With it, the debug window shows the creature and the writable instance buffer, the frames-in-flight
    write, the per-tick `flatten` trap and runtime rez all come due at once.
-6. **How many segments, and does the first worm get its two eyes?** Segment count is action-space
-   dimension only when there is per-segment drive, and v1 has none, so eight segments cost nothing but
-   instance count. Two one-sample eyes make the creature testable against the one documented behaviour
-   in the literature; zero make it cheaper and untestable against anything.
+   **The material is settled either way: mirror panels and emissive edge tubes**, from the same
+   continuous model every other surface uses. It costs no new pass and no new shader — a body is one
+   instance in the two-level hierarchy carrying a material slot — and three things fall out of it for
+   free. Creatures become visible to each other because they emit; they become acoustic occluders and
+   reflectors because the same instance answers acoustic rays; and since the floor is a perfect mirror,
+   a glowing creature has a reflection in its own visual field. The mirror self-recognition test
+   materialises out of the material model without anyone building it.
+6. ~~How many segments, and does the first worm get its two eyes?~~ **Decided: one rigid segment.**
+   A body that bends needs a solver able to bend it, and no physics exists in this repository at all
+   yet; an articulated multi-body solver with joint limits is a substantially larger first step than a
+   rigid body with contacts. So no segment addressing and no joint angles reach ABI v1 — a `segment`
+   index would be a number the Grid writes and nothing can act on, which is the same test that removed
+   `TglEarDesc::direction`. Both arrive together in v2, and the bump costs nothing while no Program
+   exists. Two one-sample eyes still make the creature testable against the one documented behaviour in
+   the literature, and are unaffected by this.
 7. **Roster size, bounded by the top-level sweep rather than by physics.** Four bodies stays
    comfortably inside the regime `intersectScene`'s linear sweep was measured in. Twenty bodies of
    eight segments is 161 instances, and with two eyes each that is tens of millions of instance-box
    tests per tick — which forces a top-level hierarchy now rather than later.
-8. **Is the per-segment-drive ABI break made now on principle, or later on evidence?** Deferring is
-   defensible while no Program exists to demonstrate the need. The counter-argument is that the break
-   is cheaper today than after the first Program ships, and every published creature environment feeds
-   per-joint state back as observation.
+8. ~~Is the per-segment-drive ABI break made now on principle, or later on evidence?~~
+   **Decided: later, with the solver.** It follows from question 6 — there is nothing to drive
+   per-segment until a body has segments. When it lands it brings **joint angle and joint rate as
+   separate signals**, because they are separate receptors in every animal that has them: muscle
+   spindles split position and velocity across two afferent classes, and the Drosophila femoral
+   chordotonal organ splits them across distinct cell populations. Supplying both is faithful rather
+   than redundant, and it spares a Program differencing a noisy position across ticks. Load is a third
+   channel and arrives when a body can strain against something. See
+   [docs/PERCEPTION.md](docs/PERCEPTION.md) § How an animal knows where its own limbs are.
 9. **Does `desired_vertical_speed` survive into the written header?** On a Grid with no water, nothing
    climbable and nothing to fall off, it clamps to zero for every plausible v1 body, and it is the one
    action field with no proprioceptive counterpart. Retiring it now is the honest reading of *every
@@ -252,10 +268,25 @@ are decisions waiting on the owner, not conclusions.
     rename will ever cost. And if a type ever owns the tracer and the post-process together, is
     `Renderer` too grand for something that owns no device, no swapchain and no camera?
 
-Five more were settled while the header was still unwritten, which is the cheapest they will ever be:
+More were settled while the header was still unwritten, which is the cheapest they will ever be:
 
-- **`TglEyeDesc` gains a position and a segment index**, as `TglEarDesc` has. A 430 mm body sampled at
-  head and tail cannot express either eye without them.
+- **`TglEyeDesc` gains a position**, as `TglEarDesc` has. A 430 mm body sampled at head and tail cannot
+  express either eye without one. It gains no segment index — see question 6.
+- **Touch is a list of contacts rather than three normalised scalars or one summed vector.** Summing
+  destroys what touch is for: a body lying along the floor contacts it in many places at once, and the
+  sum says "downwards" and nothing about lying down. Each contact carries a body-frame position and the
+  impulse delivered there, which is direction and strength in one, and the physics step computes both
+  anyway. `TglCreatureDesc::max_contact_count` bounds the list and states that the Grid truncates by
+  discarding the faintest — deterministic, and the way an animal being struck hard does not lose the
+  blow to notice a graze.
+- **A Program is never handed a diagram of its own body.** No segment lengths, no rest pose, no
+  kinematic tree. Nowhere in an animal is there such a model; posture is inferred, and the tendon
+  vibration illusions demonstrate how wrong the inference can be. The extent of itself is something a
+  creature may learn by bumping into the world.
+- **Every struct also asserts that its members account for all of its bytes.** Sizes and offsets alone
+  leave a hole that mutation testing found: narrowing a member from `uint64_t` to `uint32_t` before a
+  pointer is absorbed by the padding that aligns the pointer, so every offset and size holds while the
+  meaning of the bytes has changed. The no-padding claim was prose; it is now a mechanism.
 - **It also gains a per-sample acceptance angle and a quantisation**, because
   [docs/PERCEPTION.md](docs/PERCEPTION.md) rule 3 already requires both and the struct contradicted it.
 - **`TglEarDesc::direction` is removed.** Nothing reads it: the gather takes a bare position and casts
@@ -268,48 +299,53 @@ Five more were settled while the header was still unwritten, which is the cheape
   acoustic fan is. As written it specified a one-sample Monte Carlo estimate of a spherical integral,
   which the determinism rule forbids outright.
 
+**A creature controlling its own glow is recorded here rather than in the ABI.** An
+`emission_strength` action would parallel `vocalisation_strength` exactly — one scalar, clamped to a
+bound in the body's descriptor, in the same units the material model already uses — and it is very
+much the vibe, since a derezzing Program dims. It is not in the header because nothing needs it: no
+body has a reason to signal yet, and a field the Grid reads and nothing acts on is the thing this
+etape keeps removing. It becomes interesting the moment two creatures share a Grid and one can see the
+other.
+
 **Hosting a Program out of process is not documented, and that is deliberate.** In-process was chosen
 for speed with the crash cost accepted; documenting a child-process mode would make crash isolation a
 promise the ABI has to keep and would require every senses buffer to be serialisable rather than a
 pointer. Recorded here as a thing that could be built, not in the ABI as a thing that exists.
 
-One piece of work is not a question and blocks everything: **the ABI header does not exist.**
-`TGL_PROGRAM_ABI_VERSION`, `TglSenses` and `tglGetProgramVTable` are Markdown prose with no compiled
-existence anywhere in the tree. The header and a Program returning constants ship **before** physics —
-the phase milestone is that the sensor interface plugs in, and physics is what makes the senses stop
-being constant afterwards.
+The header and a Program returning constants ship **before** physics — the phase milestone is that the
+sensor interface plugs in, and physics is what makes the senses stop being constant afterwards.
 
-- [ ] `libs/program-abi` — the C99 header, an `INTERFACE` target, vendorable into other trees
+- [x] `libs/program-abi` — the C99 header, an `INTERFACE` target, vendorable into other trees
 - [ ] Load a Program: `LoadLibrary`/`dlopen`, one symbol, version refusal, vtable, lifecycle
 - [ ] One body with no physics — a transform that changes between ticks
 - [ ] Fill the senses from the tracers that already exist
 - [ ] Physics: gravity, contacts, friction
 - [ ] A remote-operated demo Program with its own telemetry GUI
 
-### Thirteen defects in `docs/PROGRAM_INTERFACE.md`, found by writing the header against it
+### What is left of the thirteen defects in `docs/PROGRAM_INTERFACE.md`
 
-The document is the specification and it does not currently compile as one. Correcting it is part of
-writing the header, not separate from it.
+The document was the specification and did not compile as one. It is no longer the specification: the
+header is, and the document no longer restates any struct. **That closes most of the list by
+construction** — a listing that does not exist cannot omit the ear members, contradict the header
+about field order, or describe a layout nothing implements. `TGL_EYE_LAYOUT_RASTER`, the missing eye
+position, the absent acceptance angle and quantisation, the single-sample `irradiance`, the unread
+`TglEarDesc::direction`, the clamps promised against limits in no struct, and the tick rate spelled
+three ways are all settled in the header itself.
 
-The fatal one: **the version constant cannot do the job it is kept for.** It is `1u` and documented to
-stay `1u` forever, so a stale library compiled against an older header also carries `1u`, passes the
-check, returns a vtable, and produces exactly the memory corruption the paragraph describes. The fix
-is a constant that bumps on any change an already-built Program could notice, plus a CI step that
-hashes the header with the version line removed and fails when the hash moves and the number does not
-— a mechanism rather than a discipline.
+The version constant is settled too, and it was the fatal one: pinned at `1u` and documented to stay
+there, so a stale library compiled against an older header carried `1u`, passed the check, returned a
+vtable, and produced the corruption the check exists to prevent. It now bumps on any change an
+already-built Program could notice, and `tools/check_abi_version.py` enforces that in CI against a
+fingerprint of the header — a mechanism rather than a discipline.
 
-The rest, in brief: the lifecycle puts *advance physics* and *apply actions* both inside the
-per-creature loop, which makes roster order semantically load-bearing and "actions take effect next
-tick" false; threading promises a single tick thread and parallel creature ticks one bullet apart;
-the struct listings a reader is told to transcribe omit the ear members entirely; `TglEyeDesc` has no
-position or optical axis where `TglEarDesc` has both; `TGL_EYE_LAYOUT_RASTER` has zero users among the
-six presets and samples solid angle backwards for a foveated eye; `TglEyeDesc` omits the per-sample
-acceptance angle and quantisation that PERCEPTION.md rule 3 requires; the acoustic scale has two
-reference levels and one of them names something that does not exist; `irradiance` as specified is a
-single-sample Monte Carlo estimate, which the determinism rule forbids; the ear histogram's span is
-undefined and two documents disagree about it, 16 bins against the 64 the code delivers; the clamps
-are promised seven times against limits that appear in no struct; `TglEarDesc::direction` is read by
-nothing; and the tick rate is spelled three different ways.
+Three remain, and none is in the header:
+
+- [ ] **The lifecycle puts *advance physics* and *apply actions* both inside the per-creature loop**,
+      which makes roster order semantically load-bearing and "actions take effect next tick" false.
+- [ ] **Threading promises a single tick thread and parallel creature ticks one bullet apart.**
+- [ ] **The acoustic scale had two reference levels**, and while PROGRAM_INTERFACE.md and ACOUSTICS.md
+      now agree that the primary neon tube is the only one, nothing checks that they still agree. It
+      is a number stated in two documents, which is the shape this repository loses time to.
 
 ## Etape 14 — Name every Vulkan object, and handle a lost device once
 

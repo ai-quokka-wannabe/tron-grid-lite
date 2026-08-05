@@ -215,107 +215,29 @@ notice, so it moves `TGL_PROGRAM_ABI_VERSION`. See [Versioning](#versioning).
 
 ### Library and creature descriptors
 
-```c
-/*! Grid-side facts a Program library may want at load time. */
-typedef struct TglLibraryInfo
-{
-    uint32_t abi_version;    /*!< ABI version the Grid is running. */
-    uint32_t tick_rate_hz;   /*!< Ticks per second. The same constant as nominal_dt_seconds, the other way up. */
-} TglLibraryInfo;
+**The layouts are not written down here.** They live in
+[`libs/program-abi/include/tgl/tgl_program_abi.h`](../libs/program-abi/include/tgl/tgl_program_abi.h),
+which is the file both the Grid and every Program compile, and it is the only place any member of the
+interface is spelled out. A struct copied into prose is a second copy of a fact with nothing holding
+the two together — the shape of defect this repository loses most of its time to — and the copy is
+the one people read. What belongs here is the reasoning, which the header states only in summary.
 
-/*! How one eye's samples are arranged. */
-#define TGL_EYE_LAYOUT_RASTER      0u  /*!< A width x height grid, row-major, top row first. */
-#define TGL_EYE_LAYOUT_SAMPLE_LIST 1u  /*!< Arbitrary sample directions; height is 1. */
-
-/*! Geometry of one eye. Fixed for the creature's lifetime. */
-typedef struct TglEyeDesc
-{
-    uint32_t layout;    /*!< One of TGL_EYE_LAYOUT_*. */
-
-    /*! Raster width and height, or sample count and 1 for a sample list. */
-    uint32_t width;
-    uint32_t height;
-
-    /*! Values per sample. 1 is a scalar; 3 is the usual three-band eye. What each band weights
-        is a property of this body and is documented per sensor preset in PERCEPTION.md — it is
-        emphatically not always RGB. */
-    uint32_t channels;
-
-    /*! Where this eye sits, in the frame of the segment named below. TglEarDesc carries a position
-        and this does not, which is survivable while a creature is a point and is not survivable on
-        a jointed body sampled at head and tail: the elegans prescription is one ray from the head
-        segment and one from the tail, and two eyes rendered from one origin are one eye. */
-    float position[3];
-
-    /*! Index of the body segment this eye rides, into the body's segment array. A body is a chain
-        of rigid segments, so an eye's world pose is its segment's pose composed with the offset
-        above; without the index the offset has no frame to be in. */
-    uint32_t segment;
-
-    /*! For TGL_EYE_LAYOUT_SAMPLE_LIST, three floats per sample giving the unit view direction in
-        body frame; NULL for a raster. A compound eye is a curved, non-uniform array rather than a
-        rectangle, so the directions are handed over explicitly. Borrowed for the call only. */
-    const float* sample_directions;
-
-    /*! One acceptance half-angle in radians per sample, matching sample_directions; NULL for a
-        raster, where the fields of view and the sample counts already imply it. PERCEPTION.md
-        rule 3 makes this part of the sensor descriptor rather than a constant, and rule 4 makes it
-        per sample: the ratio of acceptance angle to sample spacing is what decides whether an eye
-        blurs or aliases, and the sample spacing it is measured against varies severalfold across a
-        single eye. Without it every preset renders as a pinhole array, which is the Drosophila
-        case rendered as the desert ant case. Borrowed for the call only. */
-    const float* sample_acceptance_radians;
-
-    /*! Quantisation of a delivered sample in bits, before it is widened back to float; 0 leaves it
-        unquantised. PERCEPTION.md rule 3 names quantisation as part of the sensor rather than as
-        post-processing a Program may skip, and the elegans preset needs four bits or fewer against
-        roughly 1.2 log units of usable graded response. */
-    uint32_t sample_quantisation_bits;
-
-    /*! Field of view in radians. Meaningful for a raster; for a sample list the directions above
-        are authoritative and these merely bound them. */
-    float fov_horizontal;
-    float fov_vertical;
-} TglEyeDesc;
-
-/*! Description of the body this Program will drive. Sensor geometry only — no Grid state. */
-typedef struct TglCreatureDesc
-{
-    /*! Stable identifier for this creature within the run. Useful for the Program's own logging. */
-    uint64_t creature_id;
-
-    /*! Deterministic seed the Program should use for any randomness it needs. */
-    uint64_t random_seed;
-
-    /*! This body's eyes, in the order their views arrive each tick. May be zero — a creature with
-        no image-forming eye at all is a legitimate body, and the simplest preset is exactly that.
-        Borrowed for the duration of the call; copy anything worth keeping. */
-    const TglEyeDesc* eyes;
-    uint32_t eye_count;
-
-    /*! This body's ears, in the order their views arrive each tick. May be zero. Borrowed for the
-        duration of the call; copy anything worth keeping. TglEarDesc is declared under Hearing
-        below, and the header declares it ahead of this struct. */
-    const TglEarDesc* ears;
-    uint32_t ear_count;
-
-    /*! Seconds per tick. A constant the Grid supplies, never a measurement — there is no actual
-        value distinct from this one. TglSenses repeats it every tick so a tick handler needs
-        nothing else. */
-    float nominal_dt_seconds;
-} TglCreatureDesc;
-```
+`TglLibraryInfo` carries what a Program library may want before any creature exists;
+`TglCreatureDesc` describes one body, and `TglEyeDesc` and `TglEarDesc` describe its sensors. All of
+them are handed over once, at rez, and never again.
 
 **`dt_seconds` is a constant the Grid supplies, and the Grid does not measure it.** There is no
-actual value distinct from the nominal one, and the wording above is deliberately not "nominal, with
-the actual value repeated each tick". A Grid that timed a tick with a `steady_clock` and handed the
+actual value distinct from the nominal one, and the wording is deliberately not "nominal, with the
+actual value repeated each tick". A Grid that timed a tick with a `steady_clock` and handed the
 result to every Program would be the single largest replay hazard in the project, and it would
 arrive dressed as a convenience.
 
-That number lives in four places spanning a C ABI — `tick_rate_hz`, `nominal_dt_seconds`,
-`TglSenses::dt_seconds`, and the Grid-side constant the physics step integrates against — which is
-the duplicated-fact shape this repository loses most of its time to. It is held together by a
-`static_assert` against this header's literal, because a comment saying "must equal" is not a
+**It is one number spelled one way, and that is a decision rather than an oversight.** There is no
+`tick_rate_hz` beside it, tempting as the convenience is: an integer hertz cannot represent every
+reciprocal `dt`, so the two spellings would disagree in the last bits and then drift. The number
+still spans a C ABI — `TglLibraryInfo::nominal_dt_seconds`, `TglSenses::dt_seconds`, and the
+Grid-side constant the physics step integrates against — and those are held together by a
+`static_assert` against the header's literal, because a comment saying "must equal" is not a
 mechanism.
 
 Note the direction of control: the **Grid** decides how many eyes a body has, how many samples each
@@ -323,13 +245,16 @@ one takes, in which directions and in how many channels, and hands the lot to th
 does not request an eye. Sensor geometry is a property of the creature's body, not of its cognition,
 and bodies are the Grid's business.
 
-**No sensor preset in [PERCEPTION.md](PERCEPTION.md) is a rectangle, and that is worth knowing
-before reaching for one.** `elegans` is two body-referenced samples, the three insect presets are
-direction lists by construction, the rodent field is a uniform buffer wrapped around two thirds of a
-sphere rather than a frustum, and the macropod is a streak with an embedded area centralis plus a
-coarser periphery — a graded specification that document calls more honest than one number.
-`TGL_EYE_LAYOUT_RASTER` survives because a debug eye and a first Program are both easier to read as
-a picture, not because anything in the sensor model asked for it.
+**No sensor preset in [PERCEPTION.md](PERCEPTION.md) is a rectangle, which is why an eye is a sample
+list and there is no raster layout at all.** `elegans` is two body-referenced samples, the three
+insect presets are direction lists by construction, the rodent field is a uniform buffer wrapped
+around two thirds of a sphere rather than a frustum, and the macropod is a streak with an embedded
+area centralis plus a coarser periphery — a graded specification that document calls more honest than
+one number. A rectangle plus two field-of-view angles cannot express any of them.
+
+A raster is the degenerate sample list whose directions happen to form a grid, so nothing is lost by
+leaving it out, and something is gained: one code path, and no layout enumeration for a Program to
+branch on.
 
 It is the wrong shape for a foveated eye specifically, and not merely a coarse one. A perspective
 raster spends a constant *tangent* step per column, so the solid angle one sample covers shrinks
@@ -349,101 +274,38 @@ eyes are also modest in the terms that matter here, and because a creature must 
 simulate in numbers. See `docs/PERCEPTION.md` for the reasoning behind the sizes and the sensor
 model.
 
-```c
-/*! One eye's samples for this tick. */
-typedef struct TglEyeView
-{
-    /*! Linear-space sample values, `channels` floats per sample, in the order described by the
-        matching TglEyeDesc. Never NULL. */
-    const float* samples;
+`TglSenses` and the two view structs are declared in
+[the header](../libs/program-abi/include/tgl/tgl_program_abi.h), for the same reason the descriptors
+are: one copy, compiled by both sides. What follows is why each modality is shaped as it is.
 
-    /*! Number of samples, not floats. Equals width * height of the matching TglEyeDesc. */
-    uint32_t sample_count;
+**Thermoreception is a spherical integral, and the arithmetic has to be faced rather than rounded
+away.** One ray is one direction, and choosing that direction at random is a one-sample Monte Carlo
+estimate — precisely what Determinism and Replay forbids, because the answer would then change with
+the draw. The direction set is therefore fixed, drawn from the same spherical Fibonacci set the
+acoustic gather uses, and how many directions a body can afford is a property of that body rather
+than a constant in the ABI. A fixed set carries the stationary structured bias ACOUSTICS.md records
+against its own fan: it misses a small warm thing the same way on every tick, and that error does not
+average out over time.
 
-    /*! Values per sample, repeated from TglEyeDesc so a tick handler needs nothing else. */
-    uint32_t channels;
-} TglEyeView;
+**Touch is a list of contacts, not a summed vector**, because summing destroys the one thing touch is
+for. A body lying along the floor contacts it in many places at once, and the sum of those is a
+number that says "downwards" and nothing at all about lying down. Each contact carries where it
+happened in the body frame and the impulse delivered there, so direction and strength arrive
+together; the physics step computes both anyway, which makes the richer answer the cheaper one.
 
-/*! Everything a creature perceives this tick. All pointers are borrowed for the call only. */
-typedef struct TglSenses
-{
-    /*! Monotonic tick counter. */
-    uint64_t tick;
-
-    /*! Seconds per tick — the same constant TglCreatureDesc::nominal_dt_seconds carries, repeated
-        here so a tick handler needs nothing else. Never a measured elapsed time. */
-    float dt_seconds;
-
-    /* -- Vision ------------------------------------------------------------------- */
-
-    /*! One view per eye, in the same order as TglCreatureDesc::eyes. NULL when eye_count is 0. */
-    const TglEyeView* eyes;
-    uint32_t eye_count;
-
-    /* -- Proprioception ----------------------------------------------------------- */
-
-    /*! What the body's own actuators report about themselves. */
-    float body_forward_speed;  /*!< Metres per second along the body axis. */
-    float body_turn_rate;      /*!< Radians per second about the body's up axis. */
-
-    /* -- Vestibular ---------------------------------------------------------------- */
-
-    /*! Specific force in body frame, in metres per second squared: linear acceleration with
-        gravity included, exactly what an otolith or an accelerometer senses. A creature at rest
-        reads roughly 9.81 along its up axis. Gravity and acceleration are deliberately conflated
-        in one number, because they are conflated in the animal too — which is precisely why a
-        creature can be fooled about which way is down. On a Grid of perfect mirrors it will be. */
-    float specific_force[3];
-
-    /*! Angular velocity about the body axes in radians per second — the semicircular-canal
-        analogue. Sensed inertially, which is not the same thing as the commanded turn rate above:
-        the two disagree whenever the body is pushed rather than driven. */
-    float angular_velocity[3];
-
-    /* -- Touch -------------------------------------------------------------------- */
-
-    /*! Contact intensity from collisions this tick, normalised to [0, 1]. */
-    float touch_front;
-    float touch_rear;
-    float touch_lateral;
-
-    /* -- Thermoreception ------------------------------------------------------------ */
-
-    /*! Irradiance at the creature's position in the renderer's linear units: incoming radiance
-        integrated over the whole sphere, with no directional resolution whatsoever. This is not a
-        cheapened eye but a faithful one — a pit viper's infrared organ is likewise a very
-        low-resolution radiance sensor, and it is enough to tell warm from cold long before it is
-        enough to see.
-
-        A spherical integral is not one ray, and the arithmetic has to be faced rather than rounded
-        away: one ray is one direction, and choosing that direction at random is a one-sample Monte
-        Carlo estimate — precisely what Determinism and Replay forbids, because the answer would
-        then change with the draw. The direction set is therefore fixed and derived from the sample
-        index, exactly as the acoustic fan's is, and how many directions a body can afford is a
-        property of that body rather than a constant here. A fixed set carries the stationary
-        structured bias ACOUSTICS.md records against its own fan: it misses a small warm thing the
-        same way on every tick, and that error does not average out over time. */
-    float irradiance;
-
-    /* -- Hearing ------------------------------------------------------------------ */
-
-    /*! One view per ear, in the same order as TglCreatureDesc::ears. NULL when ear_count is 0.
-        TglEarView is declared under Hearing below, and the header declares it ahead of this
-        struct. */
-    const TglEarView* ears;
-    uint32_t ear_count;
-} TglSenses;
-```
+That is also the only sense here that reports a point **on** the creature rather than a direction
+away from it, and it is how a Program may come to know the extent of its own body — by bumping into
+the world, which is how an animal learns it too.
 
 ### The senses at a glance
 
 | Sense | Field | What it physically is | Status |
 |-------|-------|----------------------|--------|
 | Vision | `eyes` | Rays traced from each eye through the shared BVH | Phase 6 |
-| Proprioception | `body_forward_speed`, `body_turn_rate` | The body's own actuator state | Phase 6 |
+| Proprioception | `body_forward_speed`, `body_vertical_speed`, `body_turn_rate` | The body's own actuator state | Phase 6 |
 | Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has | Phase 6 |
-| Touch | `touch_*` | Short contact queries against the same BVH | Phase 6 |
-| Thermoreception | `irradiance` | One unresolved radiance sample | Phase 6 |
+| Touch | `contacts`, `contact_count` | Where the body was struck this tick, and how hard | Phase 6 |
+| Thermoreception | `irradiance` | A fixed quadrature over the whole sphere, undirected | Phase 6 |
 | Hearing | `ears` | Acoustic rays through the same BVH, delivered as an impulse response per ear | Phase 6 |
 
 Every one of them is a **consequence of the creature's position on the Grid**, computed by the
@@ -460,8 +322,13 @@ Points worth stating plainly, because they are the whole design:
   object identifiers, or other creatures' states. No such field will be added. A compass was
   considered and rejected for exactly this reason: it would hand the Program the structure the Grid
   exists to make it earn.
-- Nothing here is a valuation. The Grid reports contact intensity; whether that amounts to pain is
-  the Program's business, and pain is cognition wearing a sensory costume.
+- Nothing here is a valuation. The Grid reports where the body was struck and with what impulse;
+  whether that amounts to pain is the Program's business, and pain is cognition wearing a sensory
+  costume.
+- **A Program is never handed a diagram of its own body** — no segment lengths, no rest pose, no
+  kinematic tree, and no joint angles while the body is a single rigid piece. Nowhere in an animal is
+  there such a model either. What a creature gets is where it was touched, how it is moving and what
+  it can sense, and the shape of itself is something it may learn rather than something it is told.
 - Every field is populated. A modality that does not exist yet has no field waiting for it — the
   struct describes what the Grid can currently sense, and gains members when that changes.
 - **An ear delivers an impulse response, not a sound.** It says how much energy arrived in each
@@ -488,72 +355,40 @@ rather than being asserted. Surfaces carry one authored acoustic number — how 
 nothing else, because acoustically every surface on the Grid is a perfect mirror. See
 [ACOUSTICS.md](ACOUSTICS.md) for why, and for the open-half-space assumption that makes it safe.
 
-```c
-/*! Geometry of one ear. Fixed for the creature's lifetime. */
-typedef struct TglEarDesc
-{
-    /*! Ear position, in the frame of the segment named below. */
-    float position[3];
+`TglEarDesc` and `TglEarView` are declared in
+[the header](../libs/program-abi/include/tgl/tgl_program_abi.h), like everything else in the
+interface. The decisions behind them:
 
-    /*! Index of the body segment this ear rides, into the body's segment array, exactly as
-        TglEyeDesc::segment. The position above is an offset in that segment's frame. */
-    uint32_t segment;
+**An ear has a position and no axis.** The gather casts a full spherical direction set from a point,
+every surface is a perfect acoustic mirror, and there is no directivity term anywhere in the acoustic
+model — so an ear facing backwards hears exactly what one facing forwards hears. A `direction` member
+would be a field the Grid reads and nothing acts on, in a document whose own rule is that every field
+is populated. It arrives when directivity does, and the version bumps then.
 
-    /*! Ear axis in body frame, unit length. Nothing on the Grid reads it: every surface is a
-        perfect acoustic mirror, the gather treats an ear as a point, and there is no directivity
-        term anywhere in the acoustic model, so an ear facing backwards hears exactly what one
-        facing forwards hears. It is a field waiting for a job — a directivity weight applied at
-        the gather, which is a real acoustic model with a real cost — sitting in a document whose
-        own rule is that every field is populated. */
-    float direction[3];
+**Band edges come from the body's audiogram, not from room-acoustics convention**, and the
+per-band atmospheric absorption is authored beside them because both follow from the same audiogram:
+a creature that hears in a different part of the spectrum needs different numbers in both. There is
+deliberately no function on the Grid turning a frequency into an absorption — the air is fixed at
+20 °C and 70 % relative humidity, so these are constants resolved into this ear's bands.
 
-    /*! Band edges in hertz, band_count + 1 values, ascending. Borrowed for the call only.
-        Chosen from this body's audiogram, not from room-acoustics convention. */
-    const float* band_edges_hz;
-    uint32_t band_count;
+**The response's span is a hard edge rather than a soft one.** An arrival later than
+`bin_count * bin_seconds` is dropped rather than folded into the last bin, so the last bin is an
+ordinary bin and never a catch-all. The span is sized against the Grid's own acoustic horizon rather
+than against a listener's patience: `Acoustics::RANGE_METRES` of total path is 58 ms at 343 m/s,
+inside the 64 ms that `Acoustics::BIN_COUNT` bins of `Acoustics::BIN_SECONDS` cover, so nothing the
+gather can produce falls off the end. An ear asking for a shorter span is asking to be deaf to its
+own late arrivals.
 
-    /*! Time bins delivered per tick, and the width of one bin in seconds. Their product is the
-        response's whole span, and that span is a hard edge rather than a soft one: an arrival
-        later than bin_count * bin_seconds is dropped rather than folded into the last bin, so the
-        last bin is an ordinary bin and never a catch-all. The span is sized against the Grid's own
-        acoustic horizon rather than against a listener's patience — Acoustics::RANGE_METRES of
-        total path is 58 ms at 343 m/s, inside the 64 ms that Acoustics::BIN_COUNT bins of
-        Acoustics::BIN_SECONDS cover — so nothing the gather can produce falls off the end. An ear
-        asking for a shorter span is asking to be deaf to its own late arrivals. */
-    uint32_t bin_count;
-    float bin_seconds;
+**Energy is band-major**, element `[(band * bin_count) + bin]`, because that is what a listener
+walks: finding arrival times within a band means stepping through bins, and this layout makes that
+one contiguous run per band where the transpose would make every step a stride.
 
-    /*! Atmospheric absorption per band, decibels per kilometre, band_count values.
-        Borrowed for the call only. Authored beside the band edges because both follow from the
-        same audiogram: a creature that hears in a different place needs different numbers in
-        both. There is deliberately no function on the Grid that turns a frequency into an
-        absorption — the Grid is fixed at 20 C and 70 % humidity, so these are constants. */
-    const float* air_absorption_db_per_km;
-} TglEarDesc;
-
-/*! One ear's arrivals for this tick. */
-typedef struct TglEarView
-{
-    /*! Energy per (band, bin), **band-major**: element [(band * bin_count) + bin], and therefore
-        band_count * bin_count floats in total. Never NULL.
-
-        Band-major rather than bin-major because that is what a listener walks. Finding the
-        arrival times within a band means stepping through bins, and this layout makes that
-        one contiguous run per band; the transpose would make every step a stride.
-
-        Relative to a primary neon tube, which is the unit of the acoustic scale and the only
-        reference level on the Grid; there is no absolute one, so no dB SPL figure is derivable
-        from these numbers. Not relative to "the emitting source", because a bin holds the sum of
-        everything that arrived within it, and a sum over 16,640 tubes and any number of calling
-        creatures has no single source to be relative to.
-        A bin no sound has reached yet reads zero, which is the physical answer and not a
-        sentinel: there is no "not yet filled" state to flag. */
-    const float* energy;
-
-    uint32_t bin_count;       /*!< Repeated from TglEarDesc so a tick handler needs nothing else. */
-    uint32_t band_count;
-} TglEarView;
-```
+**The unit is the primary neon tube**, whose authored strength is 1.0 by definition. It is the Grid's
+only reference level — there is no absolute one, so no dB SPL figure is derivable from these numbers
+— and it is the same reference `TglActions::vocalisation_strength` uses. It is *not* relative to "the
+emitting source": a bin holds the sum of everything arriving within it, and a sum over 16,640 tubes
+and any number of calling creatures has no single source to be relative to. A bin no sound has
+reached reads zero, which is the physical answer rather than a sentinel.
 
 An `ear_count` of zero is a legitimate body, and is the correct specification for all three insect
 presets: an ear costs a gather, and a body with nothing worth hearing should not pay for one. The

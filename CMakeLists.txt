@@ -1,7 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 
+# C is enabled for one reason: the Program ABI is a C header, and a check that only ever compiles it
+# as C++ does not check the thing Programs are written against. It buys the C99 assertion fallback
+# and a Program built as a shared library, neither of which C++ can reach.
 project(TronGridLite
-    LANGUAGES CXX
+    LANGUAGES CXX C
     VERSION 0.1.0
     DESCRIPTION "Simplified Vulkan-based Tron Grid renderer for AI creatures"
 )
@@ -24,7 +27,9 @@ if(MSVC)
     # /utf-8 because the sources are UTF-8 without a BOM and MSVC would otherwise decode them in the
     # active code page — which on this project's own development machine is Windows-1250, and which
     # has silently mangled em dashes in these files before.
-    add_compile_options(/EHsc /W4 /WX /utf-8)
+    #
+    # /EHsc is C++ only. C has no exceptions to model, and MSVC objects to being told about them.
+    add_compile_options(/W4 /WX /utf-8 $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
 else()
     add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 endif()

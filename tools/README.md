@@ -3,6 +3,32 @@
 Scripts that operate on the renderer from the outside. Nothing here is part of the build, and
 nothing the renderer does at runtime depends on any of it.
 
+| Script | What it does | Needs the venv |
+|--------|--------------|----------------|
+| [`record_flyby.py`](record_flyby.py) | Renders the fixed camera path and encodes the README's clip | Yes |
+| [`check_abi_version.py`](check_abi_version.py) | Refuses a change to the Program ABI header that forgot to bump `TGL_ABI_VERSION` | No — standard library only |
+
+## Keeping the Program ABI version honest
+
+`TGL_ABI_VERSION` is what stops the Grid loading a Program built against a different memory layout,
+and by itself it enforces nothing: a forgotten bump leaves both sides agreeing on the number while
+disagreeing about the bytes, which is the silent corruption the number is kept for and which fails
+nowhere at run time.
+
+So the header is fingerprinted beside itself in `libs/program-abi/abi_fingerprint.txt`, and CI checks
+it on every push. The fingerprint ignores the version line, all comments and all whitespace, so only
+the declarations count — rewording a doc comment or reflowing a struct is free, and a member added,
+removed, renamed or retyped is not.
+
+```bash
+python tools/check_abi_version.py check    # what CI runs
+python tools/check_abi_version.py update   # after bumping the version, re-record
+```
+
+`update` refuses to record a changed header at an unchanged version, which is the whole point. If a
+change genuinely cannot affect any Program — the escape exists and is deliberately visible in a diff
+— delete the fingerprint file and re-record.
+
 ## Setting up
 
 The tools are Python, and they expect a virtual environment beside them so that nothing is
