@@ -22,7 +22,10 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <unistd.h>
 #endif
+
+#include <vector>
 
 namespace
 {
@@ -171,6 +174,15 @@ namespace
             return m_handle;
         }
 
+        //! Takes ownership of a handle, closing whatever was held before.
+        void reset(void* handle) noexcept
+        {
+            if (m_handle != nullptr) {
+                closeLibrary(m_handle);
+            }
+            m_handle = handle;
+        }
+
         //! Hands ownership to the caller once every check has passed.
         [[nodiscard]] void* release() noexcept
         {
@@ -186,6 +198,58 @@ namespace
     [[noreturn]] void refuse(std::string_view identifier, const std::string& reason)
     {
         throw std::runtime_error{"Program \"" + std::string{identifier} + "\": " + reason};
+    }
+
+    //! Full path of the running executable.
+    [[nodiscard]] std::filesystem::path executablePath()
+    {
+#if defined(_WIN32)
+        /*
+            The buffer grows rather than assuming MAX_PATH. A path longer than 260 characters is
+            ordinary on a build agent, and GetModuleFileNameW's answer to a short buffer is to
+            truncate, set ERROR_INSUFFICIENT_BUFFER and still report success on older Windows — so a
+            single call with a fixed buffer can return a path that exists and is the wrong one.
+        */
+        std::vector<wchar_t> buffer(MAX_PATH);
+        for (;;) {
+            SetLastError(ERROR_SUCCESS);
+            const DWORD length{GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()))};
+
+            if (length == 0u) {
+                throw std::runtime_error{"Cannot determine where this executable is: " + lastLoaderError()};
+            }
+
+            if ((length < buffer.size()) && (GetLastError() != ERROR_INSUFFICIENT_BUFFER)) {
+                return std::filesystem::path{std::wstring{buffer.data(), length}};
+            }
+
+            if (buffer.size() >= 65536u) {
+                throw std::runtime_error{"This executable's path is implausibly long."};
+            }
+
+            buffer.resize(buffer.size() * 2u);
+        }
+#else
+        std::vector<char> buffer(1024);
+        for (;;) {
+            const ssize_t length{readlink("/proc/self/exe", buffer.data(), buffer.size())};
+            if (length < 0) {
+                throw std::runtime_error{"Cannot determine where this executable is: /proc/self/exe is unreadable."};
+            }
+
+            // readlink neither terminates nor reports truncation, so a full buffer is ambiguous
+            // between an exact fit and a path that was cut short. Grow and ask again.
+            if (static_cast<size_t>(length) < buffer.size()) {
+                return std::filesystem::path{std::string{buffer.data(), static_cast<size_t>(length)}};
+            }
+
+            if (buffer.size() >= 65536u) {
+                throw std::runtime_error{"This executable's path is implausibly long."};
+            }
+
+            buffer.resize(buffer.size() * 2u);
+        }
+#endif
     }
 
 } // namespace
@@ -218,6 +282,11 @@ namespace ProgramLib
         return true;
     }
 
+    std::filesystem::path defaultDirectory()
+    {
+        return executablePath().parent_path() / "programs";
+    }
+
     std::filesystem::path resolve(const std::filesystem::path& directory, std::string_view identifier)
     {
         if (!identifierIsWellFormed(identifier)) {
@@ -230,77 +299,109 @@ namespace ProgramLib
         return directory / (LIBRARY_PREFIX + std::string{identifier} + LIBRARY_SUFFIX);
     }
 
-    Library::Library(const std::filesystem::path& directory, std::string_view identifier, const TglLibraryInfo& info) :
-        m_identifier(identifier)
+    namespace
     {
-        const std::filesystem::path path{resolve(directory, identifier)};
 
         /*
+            Everything between resolving a name and having a vtable worth trusting. Shared so that
+            the loader and the command-line check answer identically: a check that agreed a Program
+            was fine and then failed to load it during a run would be worse than no check at all.
+
+            The handle is an out-parameter rather than a return value because the caller decides what
+            happens to it — kept for the life of a Library, dropped again by a check.
+        */
+        [[nodiscard]] const TglProgramVTable* validate(const std::filesystem::path& directory, std::string_view identifier, HandleGuard& handle)
+        {
+            const std::filesystem::path path{resolve(directory, identifier)};
+
+            /*
             Asked before loading purely so that the commonest mistake gets the clearest answer. The
             loader would refuse a missing file anyway, but it would do it in the platform's words,
             and "The specified module could not be found" is also what a *present* library with a
             missing dependency reports — which is a different problem entirely.
         */
-        std::error_code status;
-        if (!std::filesystem::is_regular_file(path, status)) {
-            const std::filesystem::path other{directory / (OTHER_TOOLCHAIN_PREFIX + std::string{identifier} + LIBRARY_SUFFIX)};
+            std::error_code status;
+            if (!std::filesystem::is_regular_file(path, status)) {
+                const std::filesystem::path other{directory / (OTHER_TOOLCHAIN_PREFIX + std::string{identifier} + LIBRARY_SUFFIX)};
 
-            std::error_code other_status;
-            if ((other != path) && std::filesystem::is_regular_file(other, other_status)) {
-                refuse(identifier,
-                    "no library at " + path.string() + ", though " + other.filename().string() + " is sitting beside it. A Program library is named exactly "
-                        + path.filename().string() + "; some toolchains, MinGW among them, decorate shared library names differently by default.");
+                std::error_code other_status;
+                if ((other != path) && std::filesystem::is_regular_file(other, other_status)) {
+                    refuse(identifier,
+                        "no library at " + path.string() + ", though " + other.filename().string() + " is sitting beside it. A Program library is named exactly "
+                            + path.filename().string() + "; some toolchains, MinGW among them, decorate shared library names differently by default.");
+                }
+
+                refuse(identifier, "no library at " + path.string());
             }
 
-            refuse(identifier, "no library at " + path.string());
-        }
+            handle.reset(openLibrary(path));
+            if (handle.get() == nullptr) {
+                refuse(identifier, "the operating system refused to load " + path.string() + ": " + lastLoaderError());
+            }
 
-        HandleGuard handle{openLibrary(path)};
-        if (handle.get() == nullptr) {
-            refuse(identifier, "the operating system refused to load " + path.string() + ": " + lastLoaderError());
-        }
+            const TglGetProgramVTableFn entry_point{findEntryPoint(handle.get())};
+            if (entry_point == nullptr) {
+                refuse(identifier, "exports no tglGetProgramVTable. Every Program library exports exactly that name, with C linkage.");
+            }
 
-        const TglGetProgramVTableFn entry_point{findEntryPoint(handle.get())};
-        if (entry_point == nullptr) {
-            refuse(identifier, "exports no tglGetProgramVTable. Every Program library exports exactly that name, with C linkage.");
-        }
+            const TglProgramVTable* const vtable{entry_point(TGL_ABI_VERSION)};
+            if (vtable == nullptr) {
+                refuse(identifier, "cannot satisfy ABI version " + std::to_string(TGL_ABI_VERSION) + ", which is the version this Grid was built against.");
+            }
 
-        const TglProgramVTable* const vtable{entry_point(TGL_ABI_VERSION)};
-        if (vtable == nullptr) {
-            refuse(identifier, "cannot satisfy ABI version " + std::to_string(TGL_ABI_VERSION) + ", which is the version this Grid was built against.");
-        }
-
-        /*
+            /*
             struct_size is read before anything else in the vtable, because it is what says how much
             of the vtable there is to read. It is first in the struct for ever, and this is the whole
             reason it exists: without it a Grid that grew the vtable would read past the end of an
             older Program's static object and call through whatever its linker placed next, which
             usually appears to work because that memory is usually zero.
         */
-        if (vtable->struct_size < TGL_PROGRAM_VTABLE_MIN_SIZE) {
-            refuse(identifier,
-                "returned a vtable of " + std::to_string(vtable->struct_size) + " bytes, smaller than the " + std::to_string(TGL_PROGRAM_VTABLE_MIN_SIZE)
-                    + " that ABI version 1 requires. Initialise it with TGL_PROGRAM_VTABLE_HEADER.");
-        }
+            if (vtable->struct_size < TGL_PROGRAM_VTABLE_MIN_SIZE) {
+                refuse(identifier,
+                    "returned a vtable of " + std::to_string(vtable->struct_size) + " bytes, smaller than the " + std::to_string(TGL_PROGRAM_VTABLE_MIN_SIZE)
+                        + " that ABI version 1 requires. Initialise it with TGL_PROGRAM_VTABLE_HEADER.");
+            }
 
-        /*
+            /*
             Checked in addition to the argument passed in above, and not instead of it. A Program
             written in C or C++ gets this field from a macro and cannot easily get it wrong, but a
             hand-written binding in another language may ignore the argument entirely and return a
             vtable regardless — and it must still fail here rather than at the first tick.
         */
-        if (vtable->abi_version != TGL_ABI_VERSION) {
-            refuse(identifier,
-                "was built against ABI version " + std::to_string(vtable->abi_version) + " and this Grid speaks version " + std::to_string(TGL_ABI_VERSION)
-                    + ". Rebuild the Program against this header.");
+            if (vtable->abi_version != TGL_ABI_VERSION) {
+                refuse(identifier,
+                    "was built against ABI version " + std::to_string(vtable->abi_version) + " and this Grid speaks version " + std::to_string(TGL_ABI_VERSION)
+                        + ". Rebuild the Program against this header.");
+            }
+
+            if ((vtable->library_init == nullptr) || (vtable->program_rez == nullptr) || (vtable->program_tick == nullptr) || (vtable->program_derez == nullptr)
+                || (vtable->library_shutdown == nullptr)) {
+                refuse(identifier, "left a required entry point null. All five are required at ABI version 1.");
+            }
+
+            return vtable;
         }
 
-        if ((vtable->library_init == nullptr) || (vtable->program_rez == nullptr) || (vtable->program_tick == nullptr) || (vtable->program_derez == nullptr)
-            || (vtable->library_shutdown == nullptr)) {
-            refuse(identifier, "left a required entry point null. All five are required at ABI version 1.");
-        }
+    } // namespace
 
-        m_vtable = vtable;
+    Inspection inspect(const std::filesystem::path& directory, std::string_view identifier)
+    {
+        HandleGuard handle{nullptr};
+        const TglProgramVTable* const vtable{validate(directory, identifier, handle)};
+
+        /*
+            Only the two numbers travel out. The rest of the vtable is function pointers into a module
+            that is unmapped the moment this returns, so handing any of it back would be handing back
+            addresses that are already wrong — and they would look perfectly valid.
+        */
+        return Inspection{vtable->abi_version, vtable->struct_size};
+    }
+
+    Library::Library(const std::filesystem::path& directory, std::string_view identifier, const TglLibraryInfo& info) :
+        m_identifier(identifier)
+    {
+        HandleGuard handle{nullptr};
+        m_vtable = validate(directory, identifier, handle);
         m_handle = handle.release();
 
         // Last, because until now the library could still be refused, and library_init is the point

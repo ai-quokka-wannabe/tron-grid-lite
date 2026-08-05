@@ -17,6 +17,7 @@
 #include <tgl/tgl_program_abi.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -66,6 +67,20 @@ namespace ProgramLib
     [[nodiscard]] bool identifierIsWellFormed(std::string_view identifier) noexcept;
 
     /*!
+        The directory Program identifiers resolve against: `programs/` beside the executable.
+
+        Beside the *executable*, deliberately, and never the working directory. The whole point of
+        resolving a name against a trusted directory is that the directory is a property of the
+        installation rather than of the invocation — if it followed the working directory, anyone who
+        could choose where the Grid was launched from could choose which binary a roster entry named,
+        and the confinement would only be moving the question rather than answering it.
+
+        \return `<directory containing this executable>/programs`.
+        \throws std::runtime_error if the operating system will not say where the executable is.
+    */
+    [[nodiscard]] std::filesystem::path defaultDirectory();
+
+    /*!
         The file an identifier names inside a directory, with the platform's own decoration applied:
         `<identifier>.dll` on Windows, `lib<identifier>.so` on Linux, matching what CMake builds.
 
@@ -75,6 +90,31 @@ namespace ProgramLib
         \throws std::runtime_error when the identifier is not well formed.
     */
     [[nodiscard]] std::filesystem::path resolve(const std::filesystem::path& directory, std::string_view identifier);
+
+    //! What a Program library says about itself, once it has passed every check.
+    struct Inspection {
+        uint32_t abi_version{0u};
+        uint32_t struct_size{0u};
+    };
+
+    /*!
+        Answers whether a library is a Program the Grid could run, and unloads it again.
+
+        Every check `Library` makes, and none of the consequences: the library is loaded, its symbol
+        resolved and its vtable validated, then it is dropped. `library_init` is deliberately not
+        called, which is what makes this answerable at all right now — `TglLibraryInfo` carries the
+        tick length, the Grid's tick rate is not yet chosen, and a check that invented one would be
+        handing a Program a number the run would later contradict.
+
+        Only the two version numbers come back. Everything else in a vtable is a pointer into a
+        module that is unmapped before this returns.
+
+        \param directory Directory the Grid trusts to hold Program libraries.
+        \param identifier Name of the Program, not a path.
+        \return What the library declared about itself.
+        \throws std::runtime_error naming the identifier and the reason, exactly as `Library` would.
+    */
+    [[nodiscard]] Inspection inspect(const std::filesystem::path& directory, std::string_view identifier);
 
     /*!
         One loaded Program library, and the vtable it exported.

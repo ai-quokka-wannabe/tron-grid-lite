@@ -38,6 +38,7 @@
 #include "instance.hpp"
 #include "postprocess.hpp"
 #include "profiler.hpp"
+#include "program_library.hpp"
 #include "spectator.hpp"
 #include "surface.hpp"
 #include "swapchain.hpp"
@@ -923,7 +924,7 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
     Camera camera{MathLib::Vec3{0.0f, 6.0f, 40.0f}};
     SpectatorController spectator;
 
-    logger.logInfo("Phase 4 initialised on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
+    logger.logInfo("Debug view ready on " + device.name() + " - fly with WASD, look with the mouse, Tab toggles cursor capture.");
 
     uint32_t frame_index{0u};
     bool needs_recreate{false};
@@ -1221,7 +1222,9 @@ int main(int argc, char** argv)
     LoggingLib::Logger logger;
 
     try {
-        logger.logInfo("TronGrid Lite - Phase 4 (the Grid, a world for Programs).");
+        // No phase number. It was two behind by the time anybody noticed, because nothing anywhere
+        // checks a number printed in a banner and the roadmap it names lives in another file.
+        logger.logInfo("TronGrid Lite - the Grid, a world for Programs.");
 
         /*
             Open a window and show the Grid to the User.
@@ -1267,6 +1270,14 @@ int main(int argc, char** argv)
 
         //! List every Vulkan device and whether it can run this renderer, then exit.
         bool list_gpus{false};
+
+        /*!
+            Identifier of a Program to check, then exit. Never a path — see
+            [ProgramLib](program_library.hpp): a Program is named and resolved against `programs/`
+            beside the executable, so nothing a roster or a creature pack writes can name a file
+            elsewhere.
+        */
+        std::string program_identifier;
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -1310,6 +1321,8 @@ int main(int argc, char** argv)
                 preferred_gpu = value(preferred_gpu);
             } else if (argument == "--list-gpus") {
                 list_gpus = true;
+            } else if ((argument == "--program") && ((index + 1) < argc)) {
+                program_identifier = argv[++index];
             } else if (argument == "--width") {
                 record_width = value(record_width);
             } else if (argument == "--height") {
@@ -1326,9 +1339,28 @@ int main(int argc, char** argv)
             nothing for a bare invocation to run, and saying so before a device is opened is cheaper
             and clearer than saying it after the Grid has been built and uploaded.
         */
-        if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !list_gpus) {
+        if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !list_gpus && program_identifier.empty()) {
             logger.logInfo("Nothing to do. Pass --window to look at the Grid, or one of --record, --benchmark, "
-                           "--verify-acoustics, --verify-scene, --list-gpus.");
+                           "--verify-acoustics, --verify-scene, --list-gpus, --program <name>.");
+            return EXIT_SUCCESS;
+        }
+
+        /*
+            Checking a Program needs no device, so it happens before one is opened. It is the only
+            mode that touches nothing of the Grid at all: it answers whether a library is something
+            the Grid could run, which is a question worth being able to ask on its own — a Program
+            that will not load is far easier to diagnose here than three seconds into a run.
+
+            It stops short of library_init deliberately. That call carries the tick length, the tick
+            rate is not chosen yet, and a check that invented one would hand a Program a number the
+            eventual run would contradict.
+        */
+        if (!program_identifier.empty()) {
+            const std::filesystem::path directory{ProgramLib::defaultDirectory()};
+            const ProgramLib::Inspection inspection{ProgramLib::inspect(directory, program_identifier)};
+
+            logger.logInfo("Program \"" + program_identifier + "\" loads. ABI version " + std::to_string(inspection.abi_version) + ", vtable "
+                + std::to_string(inspection.struct_size) + " bytes, from " + ProgramLib::resolve(directory, program_identifier).string() + ".");
             return EXIT_SUCCESS;
         }
 

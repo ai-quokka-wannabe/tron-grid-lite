@@ -95,6 +95,16 @@ the person who launched the process is not. Removing the capability rather than 
 same answer that worked for `tools/record_flyby.py`, where `--preset` and `--config` name choices
 from constant tuples so that no path arrives from outside at all.
 
+The trusted directory is `programs/` **beside the executable**, never beside the working directory.
+That distinction is the whole of the confinement rather than a detail of it: a directory that
+followed the working directory would let whoever chose where the Grid was launched from choose which
+binary a roster entry named, which moves the question rather than answering it.
+
+`--program <name>` performs every check below and then unloads, so a Program that will not load can
+be diagnosed on its own rather than three seconds into a run. It stops short of `library_init`,
+because that call carries the tick length and a check that invented one would hand a Program a number
+the run would later contradict.
+
 The Grid loads the resolved file with `LoadLibrary` (Windows) or `dlopen` (Linux) and resolves
 exactly one exported symbol:
 

@@ -256,6 +256,32 @@ TEST_CASE(an_embedded_null_does_not_truncate_an_identifier)
     TEST_CHECK(!ProgramLib::identifierIsWellFormed(std::string_view{"good\0../evil", 12u}));
 }
 
+TEST_CASE(the_default_directory_sits_beside_the_executable_and_not_beside_the_caller)
+{
+    /*
+        The property that matters is not the name `programs` but that the directory follows the
+        executable rather than the working directory. If it followed the caller, whoever chose where
+        the Grid was launched from would choose which binary a roster entry named, and the
+        confinement would have moved the question rather than answered it.
+
+        Checked by running from somewhere else and getting the same answer.
+    */
+    const std::filesystem::path from_here{ProgramLib::defaultDirectory()};
+
+    const std::filesystem::path original{std::filesystem::current_path()};
+    std::filesystem::current_path(std::filesystem::temp_directory_path());
+    const std::filesystem::path from_elsewhere{ProgramLib::defaultDirectory()};
+    std::filesystem::current_path(original);
+
+    TEST_CHECK_EQUAL(from_here.generic_string(), from_elsewhere.generic_string());
+    TEST_CHECK_EQUAL(from_here.filename().string(), std::string{"programs"});
+    TEST_CHECK(from_here.is_absolute());
+
+    // Its parent is the directory this test executable is sitting in, which is the one thing about
+    // the answer this test can check independently.
+    TEST_CHECK(std::filesystem::exists(from_here.parent_path()));
+}
+
 TEST_CASE(resolution_applies_the_platform_decoration)
 {
     const std::filesystem::path resolved{ProgramLib::resolve("/programs", "quokka")};
@@ -308,6 +334,58 @@ TEST_CASE(loading_calls_library_init_and_unloading_calls_library_shutdown)
     TEST_CHECK((after_load & LIFECYCLE_INIT) != 0u);
     TEST_CHECK((after_load & LIFECYCLE_SHUTDOWN) == 0u);
     TEST_CHECK((after_unload & LIFECYCLE_SHUTDOWN) != 0u);
+}
+
+TEST_CASE(inspecting_reports_what_the_library_declares)
+{
+    const ProgramLib::Inspection inspection{ProgramLib::inspect(fixtureDirectory(), GOOD_PROGRAM)};
+
+    TEST_CHECK_EQUAL(inspection.abi_version, static_cast<uint32_t>(TGL_ABI_VERSION));
+    TEST_CHECK(inspection.struct_size >= TGL_PROGRAM_VTABLE_MIN_SIZE);
+}
+
+TEST_CASE(inspecting_does_not_call_library_init)
+{
+    /*
+        The property the check is built around, and the reason it exists as something separate from
+        loading. TglLibraryInfo carries the tick length; the Grid's tick rate is not chosen yet; and
+        a check that invented one would hand a Program a number the eventual run would contradict.
+        So it answers "could this run?" without starting anything.
+
+        Observable only because the fixture records what it was asked to do.
+    */
+    const std::filesystem::path path{ProgramLib::resolve(fixtureDirectory(), GOOD_PROGRAM)};
+
+    const LifecycleObserver observer{path};
+    TEST_CHECK(observer.opened());
+    TEST_CHECK_EQUAL(observer.flags(), 0u);
+
+    static_cast<void>(ProgramLib::inspect(fixtureDirectory(), GOOD_PROGRAM));
+
+    TEST_CHECK_EQUAL(observer.flags(), 0u);
+}
+
+TEST_CASE(inspecting_refuses_exactly_what_loading_refuses)
+{
+    /*
+        The two share their validation, and this is what holds them together. A check that passed a
+        Program the run would then reject would be worse than having no check: it would move the
+        failure to the least convenient moment and attach the Grid's blessing to it on the way.
+    */
+    const std::vector<std::string_view> refused{"../../etc/passwd", "tgl_no_such_program", "tgl_broken_no_symbol", "tgl_broken_refuses_version",
+        "tgl_broken_wrong_version", "tgl_broken_small_vtable", "tgl_broken_null_program_tick"};
+
+    for (const std::string_view identifier : refused) {
+        std::string inspection_message;
+        try {
+            static_cast<void>(ProgramLib::inspect(fixtureDirectory(), identifier));
+        } catch (const std::runtime_error& error) {
+            inspection_message = error.what();
+        }
+
+        TEST_CHECK_EQUAL(inspection_message, refusalFor(identifier));
+        TEST_CHECK(!inspection_message.empty());
+    }
 }
 
 // ---------------------------------------------------------------------------------------------

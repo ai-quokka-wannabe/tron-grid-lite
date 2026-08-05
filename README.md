@@ -88,6 +88,18 @@ Program is loaded in that mode, and the picture is rendered for a human rather t
 A Program that wants to show its own internals opens its own window. The Grid knows nothing about how
 a Program works inside and provides it no display.
 
+**A Program is named, never pathed.** `--program <name>` resolves that name against `programs/`
+beside the executable and reports whether the library there is something the Grid could run:
+
+```text
+Program "quokka" loads. ABI version 1, vtable 48 bytes, from .../programs/quokka.dll.
+```
+
+The name may contain letters, digits, underscore and hyphen only. That alphabet has no dot and no
+separator in it, so a name cannot reach out of that directory — which matters because the roster
+will one day come from a configuration file, and a configuration file is something a downloaded
+creature pack can write. It needs no device, so it answers on any machine.
+
 ## Checking it
 
 Three modes answer a question rather than drawing a picture. Each needs a device but none needs a
@@ -102,6 +114,7 @@ All three also run over SSH or on a machine with no monitor attached.
 | `--verify-acoustics` | Do the acoustic shader and the host gather agree? |
 | `--verify-scene` | Do they still agree with the Grid placed at an angle, where transform arithmetic can actually be wrong? |
 | `--benchmark` | What does each GPU pass cost? |
+| `--program <name>` | Is that library something the Grid could run? Needs no device at all. |
 
 ```text
 Trace 3.342041 ms | post 0.294431 ms | frame 3.636273 ms.
