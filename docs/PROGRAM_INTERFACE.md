@@ -73,6 +73,15 @@ The corollary is that the Grid owes a Program an honest sensory simulation, and 
 directory it already trusts, applying the platform's own decoration — `<name>.dll` on Windows,
 `lib<name>.so` on Linux.
 
+**One identifier resolves to exactly one filename, and a Program's build has to produce that name.**
+The Grid does not try a second spelling, because two candidate spellings would mean two possible
+binaries for one name, and which of them wins is not a question worth having an answer to in the code
+deciding what foreign library this process is about to run. Toolchains disagree here: MinGW prefixes
+shared libraries with `lib` on Windows as well as on Linux, so a Program built with it lands as
+`libquokka.dll` where the Grid wants `quokka.dll`. Set the target's prefix to empty there. The
+refusal says so when it sees the other spelling beside the one it wanted, rather than leaving four
+characters to be spotted.
+
 The identifier alphabet is ASCII letters, digits, underscore and hyphen, beginning with a letter or
 digit, and no longer than 64 characters. That is deliberately narrower than what a filesystem would
 accept, and the narrowness is the mechanism: an alphabet with no dot, no separator and no colon in it

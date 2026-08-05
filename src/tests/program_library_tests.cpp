@@ -326,6 +326,43 @@ TEST_CASE(a_missing_library_is_refused_by_name)
     TEST_CHECK(refusedBecause("tgl_no_such_program", "no library at"));
 }
 
+TEST_CASE(a_library_under_the_other_toolchains_name_is_refused_and_the_difference_pointed_out)
+{
+    /*
+        MinGW prefixes shared libraries with `lib` on Windows as well as on Linux, so a Program built
+        with it lands as `libquokka.dll` where the Grid resolves `quokka.dll`. The Grid is right to
+        refuse — one identifier resolves to one filename, and two candidate spellings would mean two
+        possible binaries for one name — but "no library at ..." beside a directory that visibly
+        contains the thing is four characters somebody has to spot.
+
+        This is not hypothetical. It is how this loader first failed CI, on the one preset that
+        cannot be built on the development machine.
+    */
+    const TemporaryDirectory directory{"other_toolchain"};
+
+    const std::filesystem::path expected{ProgramLib::resolve(directory.path(), "tgl_misnamed")};
+    const std::string suffix{expected.extension().string()};
+    const bool prefixed{expected.filename().string().rfind("lib", 0u) == 0u};
+    const std::string other_name{prefixed ? "tgl_misnamed" + suffix : "libtgl_misnamed" + suffix};
+
+    std::ofstream out{directory.path() / other_name, std::ios::binary};
+    out << "not a real library, but it is named the way the other toolchain names one";
+    out.close();
+
+    std::string message;
+    try {
+        const ProgramLib::Library library{directory.path(), "tgl_misnamed", libraryInfo()};
+        static_cast<void>(library.vtable());
+    } catch (const std::runtime_error& error) {
+        message = error.what();
+    }
+
+    TEST_CHECK(!message.empty());
+    TEST_CHECK(message.find("no library at") != std::string::npos);
+    TEST_CHECK(message.find(other_name) != std::string::npos);
+    TEST_CHECK(message.find("named exactly") != std::string::npos);
+}
+
 TEST_CASE(a_file_that_is_not_a_library_is_refused)
 {
     /*

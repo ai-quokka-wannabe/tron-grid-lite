@@ -27,12 +27,25 @@
 namespace
 {
 
+/*
+    One filename per identifier, and exactly one. Two candidate spellings would mean an identifier
+    that resolves two ways, and which of them wins is not a question worth having an answer to in
+    the code that decides what foreign binary this process is about to run.
+
+    The alternative spelling is still worth knowing, though, because toolchains disagree about it and
+    the disagreement produces a file that looks right to whoever built it. MinGW prefixes shared
+    libraries with `lib` even on Windows, so a Program built with it lands as `libquokka.dll` where
+    the Grid wants `quokka.dll`. That is refused, and the refusal says so rather than leaving the
+    author to spot four characters.
+*/
 #if defined(_WIN32)
     constexpr const char* LIBRARY_PREFIX{""};
     constexpr const char* LIBRARY_SUFFIX{".dll"};
+    constexpr const char* OTHER_TOOLCHAIN_PREFIX{"lib"};
 #else
     constexpr const char* LIBRARY_PREFIX{"lib"};
     constexpr const char* LIBRARY_SUFFIX{".so"};
+    constexpr const char* OTHER_TOOLCHAIN_PREFIX{""};
 #endif
 
     //! The operating system's account of why the last load or lookup failed, as text.
@@ -230,6 +243,15 @@ namespace ProgramLib
         */
         std::error_code status;
         if (!std::filesystem::is_regular_file(path, status)) {
+            const std::filesystem::path other{directory / (OTHER_TOOLCHAIN_PREFIX + std::string{identifier} + LIBRARY_SUFFIX)};
+
+            std::error_code other_status;
+            if ((other != path) && std::filesystem::is_regular_file(other, other_status)) {
+                refuse(identifier,
+                    "no library at " + path.string() + ", though " + other.filename().string() + " is sitting beside it. A Program library is named exactly "
+                        + path.filename().string() + "; some toolchains, MinGW among them, decorate shared library names differently by default.");
+            }
+
             refuse(identifier, "no library at " + path.string());
         }
 

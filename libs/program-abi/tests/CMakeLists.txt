@@ -18,6 +18,19 @@ add_library(tgl_test_program SHARED test_program.c)
 target_link_libraries(tgl_test_program PRIVATE program_abi)
 set_target_properties(tgl_test_program PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
 
+# The Grid resolves an identifier to exactly one filename: `<name>.dll` on Windows, `lib<name>.so` on
+# Linux. CMake agrees on Linux and disagrees on Windows under MinGW, which prefixes shared libraries
+# with `lib` there too — so a fixture built with it lands as `libtgl_test_program.dll` and the loader
+# correctly refuses to find it. Every Program has to satisfy this, so the fixtures satisfy it the
+# same way a Program's own build would.
+if(WIN32)
+    set(TGL_PROGRAM_LIBRARY_PREFIX "")
+else()
+    set(TGL_PROGRAM_LIBRARY_PREFIX "lib")
+endif()
+
+set_target_properties(tgl_test_program PROPERTIES PREFIX "${TGL_PROGRAM_LIBRARY_PREFIX}")
+
 # Programs that are wrong, one way each, so the loader's refusals have something to refuse. One
 # source, one variant per target: the interesting part of each is the single line where it differs
 # from a correct Program.
@@ -43,8 +56,10 @@ foreach(variant IN LISTS TGL_BROKEN_PROGRAM_VARIANTS)
     target_compile_definitions(tgl_broken_${variant} PRIVATE TGL_BROKEN_${variant_macro})
     set_target_properties(tgl_broken_${variant} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
 
-    # Beside the good fixture, so one directory holds every Program the loader tests resolve.
+    # Beside the good fixture, so one directory holds every Program the loader tests resolve, and
+    # named the way the Grid resolves names rather than the way the toolchain would prefer.
     set_target_properties(tgl_broken_${variant} PROPERTIES
+        PREFIX "${TGL_PROGRAM_LIBRARY_PREFIX}"
         LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:tgl_test_program>"
         RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:tgl_test_program>"
     )
