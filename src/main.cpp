@@ -1278,6 +1278,9 @@ int main(int argc, char** argv)
             elsewhere.
         */
         std::string program_identifier;
+
+        //! Report every Program in the directory and whether each one loads, then exit.
+        bool list_programs{false};
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -1323,6 +1326,8 @@ int main(int argc, char** argv)
                 list_gpus = true;
             } else if ((argument == "--program") && ((index + 1) < argc)) {
                 program_identifier = argv[++index];
+            } else if (argument == "--list-programs") {
+                list_programs = true;
             } else if (argument == "--width") {
                 record_width = value(record_width);
             } else if (argument == "--height") {
@@ -1339,9 +1344,43 @@ int main(int argc, char** argv)
             nothing for a bare invocation to run, and saying so before a device is opened is cheaper
             and clearer than saying it after the Grid has been built and uploaded.
         */
-        if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !list_gpus && program_identifier.empty()) {
+        if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !list_gpus && !list_programs && program_identifier.empty()) {
             logger.logInfo("Nothing to do. Pass --window to look at the Grid, or one of --record, --benchmark, "
-                           "--verify-acoustics, --verify-scene, --list-gpus, --program <name>.");
+                           "--verify-acoustics, --verify-scene, --list-gpus, --list-programs, --program <name>.");
+            return EXIT_SUCCESS;
+        }
+
+        /*
+            What is in the folder, and which of it the Grid would accept. The same question
+            --list-gpus answers about devices, and it wants answering for the same reason: a Program
+            built against an older ABI is a stale file that looks exactly like a current one, and
+            only loading it tells them apart.
+        */
+        if (list_programs) {
+            const std::filesystem::path directory{ProgramLib::defaultDirectory()};
+
+            std::error_code directory_status;
+            if (!std::filesystem::is_directory(directory, directory_status)) {
+                logger.logInfo("No Program directory at " + directory.string() + ". Programs live in a folder of that name beside the executable.");
+                return EXIT_SUCCESS;
+            }
+
+            const std::vector<ProgramLib::Listing> listings{ProgramLib::list(directory)};
+            if (listings.empty()) {
+                logger.logInfo("No Programs in " + directory.string() + ".");
+                return EXIT_SUCCESS;
+            }
+
+            logger.logInfo("Programs in " + directory.string() + ": " + std::to_string(listings.size()) + ".");
+            for (const ProgramLib::Listing& listing : listings) {
+                if (listing.refusal.empty()) {
+                    logger.logInfo("  " + listing.identifier + " - USABLE, ABI version " + std::to_string(listing.inspection.abi_version) + ", vtable "
+                        + std::to_string(listing.inspection.struct_size) + " bytes. Run with --program " + listing.identifier + ".");
+                } else {
+                    logger.logInfo("  " + listing.identifier + " - UNUSABLE. " + listing.refusal);
+                }
+            }
+
             return EXIT_SUCCESS;
         }
 

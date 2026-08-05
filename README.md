@@ -88,17 +88,29 @@ Program is loaded in that mode, and the picture is rendered for a human rather t
 A Program that wants to show its own internals opens its own window. The Grid knows nothing about how
 a Program works inside and provides it no display.
 
-**A Program is named, never pathed.** `--program <name>` resolves that name against `programs/`
-beside the executable and reports whether the library there is something the Grid could run:
+**A Program is named, never pathed.** Programs live in `programs/` beside the executable — as many
+as you like — and a name selects one. `--list-programs` reports what is there and which of it the
+Grid would accept:
 
 ```text
-Program "quokka" loads. ABI version 1, vtable 48 bytes, from .../programs/quokka.dll.
+Programs in .../programs: 3.
+  quokka - USABLE, ABI version 1, vtable 48 bytes. Run with --program quokka.
+  worm-v2 - USABLE, ABI version 1, vtable 48 bytes. Run with --program worm-v2.
+  old-worm - UNUSABLE. Program "old-worm": was built against ABI version 2 and this Grid speaks
+             version 1. Rebuild the Program against this header.
 ```
+
+A Program built against an older ABI is a stale file that looks exactly like a current one, and only
+loading it tells them apart — which is why the listing loads each one rather than reading its name.
+Nothing in the folder is hidden: a library the Grid could never accept is listed with the reason
+rather than left out.
+
+`--program <name>` asks the same question about one of them, and neither needs a device.
 
 The name may contain letters, digits, underscore and hyphen only. That alphabet has no dot and no
 separator in it, so a name cannot reach out of that directory — which matters because the roster
 will one day come from a configuration file, and a configuration file is something a downloaded
-creature pack can write. It needs no device, so it answers on any machine.
+creature pack can write.
 
 ## Checking it
 
@@ -115,6 +127,7 @@ All three also run over SSH or on a machine with no monitor attached.
 | `--verify-scene` | Do they still agree with the Grid placed at an angle, where transform arithmetic can actually be wrong? |
 | `--benchmark` | What does each GPU pass cost? |
 | `--program <name>` | Is that library something the Grid could run? Needs no device at all. |
+| `--list-programs` | Which Programs are installed, and which of them would load? Also needs no device. |
 
 ```text
 Trace 3.342041 ms | post 0.294431 ms | frame 3.636273 ms.

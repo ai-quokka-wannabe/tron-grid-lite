@@ -320,6 +320,7 @@ sensor interface plugs in, and physics is what makes the senses stop being const
 - [x] `libs/program-abi` — the C99 header, an `INTERFACE` target, vendorable into other trees
 - [x] Load a Program: `LoadLibrary`/`dlopen`, one symbol, version refusal, vtable, lifecycle
 - [x] `--program <name>` — check a Program loads, without a device and without starting a run
+- [x] `--list-programs` — what is installed, and which of it would load
 - [ ] One body with no physics — a transform that changes between ticks
 - [ ] Fill the senses from the tracers that already exist
 - [ ] Physics: gravity, contacts, friction

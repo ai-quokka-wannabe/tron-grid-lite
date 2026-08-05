@@ -100,10 +100,17 @@ That distinction is the whole of the confinement rather than a detail of it: a d
 followed the working directory would let whoever chose where the Grid was launched from choose which
 binary a roster entry named, which moves the question rather than answering it.
 
-`--program <name>` performs every check below and then unloads, so a Program that will not load can
-be diagnosed on its own rather than three seconds into a run. It stops short of `library_init`,
-because that call carries the tick length and a check that invented one would hand a Program a number
-the run would later contradict.
+The directory holds as many Programs as a User cares to install, and the identifier selects one.
+`--list-programs` reports what is in it and which of them the Grid would accept, by loading each
+rather than by reading its name — a Program built against an older ABI is a stale file that looks
+exactly like a current one, and only loading it tells the two apart. Nothing there is hidden: a
+library that could never be accepted is listed with the reason rather than omitted, because a Program
+silently absent from a listing is the one somebody spends longest looking for.
+
+`--program <name>` asks the same question about one of them. Both perform every check below and then
+unload, so a Program that will not load can be diagnosed on its own rather than three seconds into a
+run. Both stop short of `library_init`, because that call carries the tick length and a check that
+invented one would hand a Program a number the run would later contradict.
 
 The Grid loads the resolved file with `LoadLibrary` (Windows) or `dlopen` (Linux) and resolves
 exactly one exported symbol:

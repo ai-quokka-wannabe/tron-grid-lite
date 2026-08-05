@@ -388,6 +388,70 @@ TEST_CASE(inspecting_refuses_exactly_what_loading_refuses)
     }
 }
 
+TEST_CASE(listing_finds_every_program_and_says_which_ones_load)
+{
+    const std::vector<ProgramLib::Listing> listings{ProgramLib::list(fixtureDirectory())};
+
+    const auto find = [&listings](std::string_view identifier) -> const ProgramLib::Listing* {
+        for (const ProgramLib::Listing& listing : listings) {
+            if (listing.identifier == identifier) {
+                return &listing;
+            }
+        }
+        return nullptr;
+    };
+
+    const ProgramLib::Listing* const good{find(GOOD_PROGRAM)};
+    TEST_CHECK(good != nullptr);
+    if (good != nullptr) {
+        TEST_CHECK(good->refusal.empty());
+        TEST_CHECK_EQUAL(good->inspection.abi_version, static_cast<uint32_t>(TGL_ABI_VERSION));
+    }
+
+    // A broken one is present and reported as broken rather than quietly dropped. A listing that
+    // showed only what works would hide the one file its reader is looking for.
+    const ProgramLib::Listing* const broken{find("tgl_broken_small_vtable")};
+    TEST_CHECK(broken != nullptr);
+    if (broken != nullptr) {
+        TEST_CHECK(!broken->refusal.empty());
+        TEST_CHECK(broken->refusal.find("smaller than the") != std::string::npos);
+    }
+
+    // Ordered, so that two runs over one folder agree and a reader can compare them.
+    for (size_t index{1u}; index < listings.size(); ++index) {
+        TEST_CHECK(listings[index - 1u].identifier < listings[index].identifier);
+    }
+}
+
+TEST_CASE(listing_an_empty_directory_finds_nothing_rather_than_failing)
+{
+    const TemporaryDirectory directory{"empty_listing"};
+    TEST_CHECK(ProgramLib::list(directory.path()).empty());
+}
+
+TEST_CASE(a_missing_program_directory_says_so_rather_than_naming_a_file)
+{
+    /*
+        The first thing a new User meets, because nothing creates `programs/`. Without this the
+        refusal names a file inside a folder that does not exist, which sends them looking for the
+        wrong thing entirely.
+    */
+    const std::filesystem::path absent{std::filesystem::temp_directory_path() / "tgl_program_test_absent_directory"};
+    std::error_code ignored;
+    std::filesystem::remove_all(absent, ignored);
+
+    std::string message;
+    try {
+        static_cast<void>(ProgramLib::inspect(absent, GOOD_PROGRAM));
+    } catch (const std::runtime_error& error) {
+        message = error.what();
+    }
+
+    TEST_CHECK(!message.empty());
+    TEST_CHECK(message.find("no Program directory at") != std::string::npos);
+    TEST_CHECK(message.find("no library at") == std::string::npos);
+}
+
 // ---------------------------------------------------------------------------------------------
 // The ten refusals
 // ---------------------------------------------------------------------------------------------
