@@ -21,6 +21,7 @@
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <vector>
 
 /*!
     Bringing a Program library into the process, and refusing everything that is not one.
@@ -115,6 +116,35 @@ namespace ProgramLib
         \throws std::runtime_error naming the identifier and the reason, exactly as `Library` would.
     */
     [[nodiscard]] Inspection inspect(const std::filesystem::path& directory, std::string_view identifier);
+
+    //! One candidate Program found in a directory, and what came of asking about it.
+    struct Listing {
+        std::string identifier;
+
+        //! What it declared, when `refusal` is empty. Meaningless otherwise.
+        Inspection inspection;
+
+        //! Why the Grid would decline it, or empty when it would not.
+        std::string refusal;
+    };
+
+    /*!
+        Every Program library in a directory, inspected, in identifier order.
+
+        A folder holds as many Programs as a User cares to put in it, and "which of these can I ask
+        for?" is the same question `--list-gpus` answers about devices. Answering it before a run
+        rather than during one is the point: a Program built against an older ABI is a stale file
+        that looks exactly like a current one, and the difference is only visible by loading it.
+
+        Nothing in the directory is hidden. A file whose name could never be an identifier is listed
+        with that as its refusal rather than skipped, because a Program silently absent from a listing
+        is the one a User will spend the longest looking for.
+
+        \param directory Directory to walk. Not recursive — a Program is a file in it, not under it.
+        \return One entry per candidate, ordered by identifier so two runs agree.
+        \throws std::runtime_error if the directory cannot be read.
+    */
+    [[nodiscard]] std::vector<Listing> list(const std::filesystem::path& directory);
 
     /*!
         One loaded Program library, and the vtable it exported.

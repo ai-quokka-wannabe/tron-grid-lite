@@ -14,9 +14,11 @@
 
 #include "program_library.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -322,6 +324,19 @@ namespace ProgramLib
         */
             std::error_code status;
             if (!std::filesystem::is_regular_file(path, status)) {
+                /*
+                    The directory's absence is a different problem from the file's, and it is the one
+                    a new User meets first: nothing creates `programs/`, so until somebody does,
+                    every identifier reports a missing file and sends them looking for the wrong
+                    thing entirely.
+                */
+                std::error_code directory_status;
+                if (!std::filesystem::is_directory(directory, directory_status)) {
+                    refuse(identifier,
+                        "there is no Program directory at " + directory.string()
+                            + ". Programs live in a folder of that name beside the executable, and nothing creates it for you.");
+                }
+
                 const std::filesystem::path other{directory / (OTHER_TOOLCHAIN_PREFIX + std::string{identifier} + LIBRARY_SUFFIX)};
 
                 std::error_code other_status;
@@ -395,6 +410,59 @@ namespace ProgramLib
             addresses that are already wrong — and they would look perfectly valid.
         */
         return Inspection{vtable->abi_version, vtable->struct_size};
+    }
+
+    std::vector<Listing> list(const std::filesystem::path& directory)
+    {
+        const std::string prefix{LIBRARY_PREFIX};
+        const std::string suffix{LIBRARY_SUFFIX};
+
+        std::error_code status;
+        std::filesystem::directory_iterator entries{directory, status};
+        if (status) {
+            throw std::runtime_error{"Cannot read the Program directory " + directory.string() + ": " + status.message()};
+        }
+
+        std::vector<Listing> listings;
+        for (const std::filesystem::directory_entry& entry : entries) {
+            std::error_code entry_status;
+            if (!entry.is_regular_file(entry_status)) {
+                continue;
+            }
+
+            const std::string name{entry.path().filename().string()};
+            if ((name.size() <= (prefix.size() + suffix.size())) || (name.compare(0u, prefix.size(), prefix) != 0)
+                || (name.compare(name.size() - suffix.size(), suffix.size(), suffix) != 0)) {
+                continue;
+            }
+
+            const std::string identifier{name.substr(prefix.size(), name.size() - prefix.size() - suffix.size())};
+
+            Listing listing;
+            listing.identifier = identifier;
+
+            /*
+                A file the Grid could never name is listed rather than skipped, with that as its
+                reason. A Program silently absent from a listing is the one somebody spends longest
+                looking for, and "why is my library not here" is answered better by the listing than
+                by the documentation.
+            */
+            try {
+                listing.inspection = inspect(directory, identifier);
+            } catch (const std::runtime_error& error) {
+                listing.refusal = error.what();
+            }
+
+            listings.push_back(std::move(listing));
+        }
+
+        // Ordered, because a directory iterator is not, and two runs of a listing that disagree
+        // about the order of the same folder are two runs somebody has to compare by hand.
+        std::sort(listings.begin(), listings.end(), [](const Listing& a, const Listing& b) {
+            return a.identifier < b.identifier;
+        });
+
+        return listings;
     }
 
     Library::Library(const std::filesystem::path& directory, std::string_view identifier, const TglLibraryInfo& info) :
