@@ -26,7 +26,6 @@ import argparse
 import hashlib
 import io
 import os
-import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,8 +33,34 @@ REPO = os.path.dirname(HERE)
 HEADER = os.path.join(REPO, "libs", "program-abi", "include", "tgl", "tgl_program_abi.h")
 FINGERPRINT = os.path.join(REPO, "libs", "program-abi", "abi_fingerprint.txt")
 
-VERSION_LINE = re.compile(r"^[ \t]*#[ \t]*define[ \t]+TGL_ABI_VERSION[ \t]+.*$", re.MULTILINE)
-VERSION_VALUE = re.compile(r"^[ \t]*#[ \t]*define[ \t]+TGL_ABI_VERSION[ \t]+([0-9]+)u?[ \t]*$", re.MULTILINE)
+VERSION_MACRO = "TGL_ABI_VERSION"
+
+
+def parse_version_define(line):
+    """The value of a `#define TGL_ABI_VERSION <n>` line, or None if this is not one.
+
+    Tokenised rather than matched with a regular expression. The obvious pattern needs runs of
+    optional whitespace either side of a group that can fail, which backtracks quadratically on a
+    line padded with tabs; splitting on whitespace is linear, and easier to read besides.
+    """
+    tokens = line.split()
+
+    # Both `#define X 1u` and `# define X 1u` are legal, and tokenise differently.
+    if tokens[:1] == ["#"]:
+        tokens = tokens[1:]
+    elif tokens[:1] == ["#define"]:
+        tokens = ["define"] + tokens[1:]
+    else:
+        return None
+
+    if len(tokens) != 3 or tokens[0] != "define" or tokens[1] != VERSION_MACRO:
+        return None
+
+    value = tokens[2]
+    if value[-1:] in ("u", "U"):
+        value = value[:-1]
+
+    return int(value) if value.isdigit() else None
 
 
 def strip_comments(text):
@@ -88,18 +113,25 @@ def read_header():
     """The header's declared version, and a hash of the declarations around it."""
     text = io.open(HEADER, encoding="utf-8", newline="").read()
 
-    versions = VERSION_VALUE.findall(text)
+    versions = []
+    kept = []
+    for line in text.splitlines():
+        version = parse_version_define(line)
+        if version is None:
+            kept.append(line)
+        else:
+            versions.append(version)
+
     if len(versions) != 1:
-        sys.stderr.write("TGL_ABI_VERSION is defined %d times in %s; expected exactly one.\n" % (len(versions), HEADER))
+        sys.stderr.write("%s is defined %d times in %s; expected exactly one.\n" % (VERSION_MACRO, len(versions), HEADER))
         raise SystemExit(1)
 
     # The version line goes so that bumping it is not itself a change; comments go so that rewording
     # one is not either; and whitespace is collapsed so that reflowing a declaration or reindenting
     # the file cannot move the hash. Line endings never reach the hash at all, so the answer does not
     # depend on which platform checked the tree out.
-    body = strip_comments(VERSION_LINE.sub("", text))
-    body = " ".join(body.split())
-    return int(versions[0]), hashlib.sha256(body.encode("utf-8")).hexdigest()
+    body = " ".join(strip_comments("\n".join(kept)).split())
+    return versions[0], hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def read_fingerprint():
