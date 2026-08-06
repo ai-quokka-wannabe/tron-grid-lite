@@ -65,12 +65,39 @@ foreach(variant IN LISTS TGL_BROKEN_PROGRAM_VARIANTS)
     )
 endforeach()
 
+# Programs that are correct and that drive a body, so the tick loop can be watched from outside
+# rather than assumed: one asks for something a body can do, one for far more than any body can,
+# one asks for nothing at all, and one declines to rez.
+set(TGL_DRIVER_PROGRAM_VARIANTS
+    steady
+    excessive
+    silent
+    refuses_rez
+)
+
+foreach(variant IN LISTS TGL_DRIVER_PROGRAM_VARIANTS)
+    string(TOUPPER "${variant}" variant_macro)
+    add_library(tgl_driver_${variant} SHARED driver_program.c)
+    target_link_libraries(tgl_driver_${variant} PRIVATE program_abi)
+    target_compile_definitions(tgl_driver_${variant} PRIVATE TGL_DRIVER_${variant_macro})
+    set_target_properties(tgl_driver_${variant} PROPERTIES
+        C_STANDARD 11
+        C_STANDARD_REQUIRED ON
+        PREFIX "${TGL_PROGRAM_LIBRARY_PREFIX}"
+        LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:tgl_test_program>"
+        RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:tgl_test_program>"
+    )
+endforeach()
+
 # One name for "every Program fixture", so that a consumer in another directory depends on the set
 # rather than on a list of target names it would have to be kept in step with.
 add_custom_target(tgl_test_programs)
 add_dependencies(tgl_test_programs tgl_test_program)
 foreach(variant IN LISTS TGL_BROKEN_PROGRAM_VARIANTS)
     add_dependencies(tgl_test_programs tgl_broken_${variant})
+endforeach()
+foreach(variant IN LISTS TGL_DRIVER_PROGRAM_VARIANTS)
+    add_dependencies(tgl_test_programs tgl_driver_${variant})
 endforeach()
 
 add_executable(program_abi_tests program_abi_tests.cpp)

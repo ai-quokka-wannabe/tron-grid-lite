@@ -269,6 +269,12 @@ the one people read. What belongs here is the reasoning, which the header states
 `TglCreatureDesc` describes one body, and `TglEyeDesc` and `TglEarDesc` describe its sensors. All of
 them are handed over once, at rez, and never again.
 
+**The Grid ticks at 32 Hz**, so `dt_seconds` is 0.03125 exactly. The rate was chosen for that
+word rather than for feel: 0.03125 is representable in binary32 and so is a four-substep
+0.0078125, which makes `tick * dt` exact for a hundred and forty-five hours. A recording's
+timestamps are therefore the same numbers coming out as going in, where 25 Hz (0.04) or 50 Hz
+(0.02) would accumulate an error somebody eventually has to explain in a replay.
+
 **`dt_seconds` is a constant the Grid supplies, and the Grid does not measure it.** There is no
 actual value distinct from the nominal one, and the wording is deliberately not "nominal, with the
 actual value repeated each tick". A Grid that timed a tick with a `steady_clock` and handed the
