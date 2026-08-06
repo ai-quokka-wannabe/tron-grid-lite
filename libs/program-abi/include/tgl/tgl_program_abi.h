@@ -80,8 +80,13 @@ extern "C"
     windows-mingw are configured presets, so that pairing is a configuration that exists today.
 
     The rule is about the boundary, not about either codebase. The Grid is built with /EHsc and
-    throws by its own style guide; none of that may reach a Program. A Rust Program must be built
-    with `panic = "abort"`, because the macro cannot reach it.
+    throws by its own style guide; none of that may reach a Program.
+
+    A language whose failures are not C++ exceptions has to arrive at the same place by its own
+    route: nothing may unwind out of one of these functions. Rust reaches it without being asked,
+    since an unwind out of an `extern "C"` function aborts the process rather than crossing — so
+    `panic = "abort"` is worth setting and is not what makes a Rust Program correct. Go, Swift and
+    OCaml each have their own answer, and each has to give one.
 */
 #ifdef __cplusplus
 #define TGL_NOEXCEPT noexcept
@@ -107,6 +112,35 @@ extern "C"
 
 TGL_STATIC_ASSERT(sizeof(void*) == 8u, "The Program ABI is 64-bit only. Every offset after the first pointer moves on a 32-bit build.");
 TGL_STATIC_ASSERT(sizeof(float) == 4u, "The Program ABI requires a 4-byte float.");
+
+/* ================================================================================================
+   What a binding in another language has to agree with
+
+   A Program is a shared library exporting one C symbol, so it can be written in anything that
+   compiles to one. Nothing in this file needs a C compiler to express: every member is a float, a
+   fixed-width integer or a pointer, and there is not a union, a bitfield, an enum, a `bool`, a
+   native `int`, a `size_t` or a packing pragma anywhere in it. That is deliberate and it is the
+   whole reason the interface looks so plain.
+
+   Four things a binding must match, none of which it can see from outside:
+
+   1. **The platform's ordinary C calling convention** — SysV AMD64 on Linux, Microsoft x64 on
+      Windows. Whatever the platform's C compiler does by default, with no `__stdcall`, no
+      `__fastcall` and no vectorcall. There is exactly one such convention per platform here, which
+      is why this is a sentence rather than an annotation on every function.
+   2. **64-bit.** Asserted above rather than assumed. Every offset past the first pointer moves on a
+      32-bit build, and the manifest's offsets would all be wrong.
+   3. **C struct layout, naturally aligned, with no padding anywhere.** The second half is asserted
+      per struct rather than hoped for, which is what makes the published offsets total the size.
+   4. **No unwinding across the boundary**, in either direction. See TGL_NOEXCEPT.
+
+   A language that can consume this header gets the layout checked at compile time by the assertions
+   at the bottom. A language that cannot is declaring these structs a second time with nothing
+   holding the copies together, so the layout is also published as data in
+   `libs/program-abi/abi_layout.txt` — every size and every offset, taken from the compiler. Assert
+   against it in the binding's own tests and the drift that would otherwise arrive as nonsense in a
+   sensor buffer becomes a failing test instead.
+   ================================================================================================ */
 
 /* ================================================================================================
    The body frame

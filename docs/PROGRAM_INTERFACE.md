@@ -878,16 +878,80 @@ Practical advice while the interface is pre-1.0: rebuild your Program whenever t
 
 ## Writing a Program
 
-**Status: `tgl_program_abi.h` does not exist yet — it lands with Phase 6. Everything declared above
-is the design, not a shipped API, and it may still change before the header is written.**
-
-1. Transcribe the vtable and the structs from this document until the header ships. It is intended
-   to be a single self-contained C header with no dependency on any Grid internals.
+1. Vendor [`libs/program-abi/include/tgl/tgl_program_abi.h`](../libs/program-abi/include/tgl/tgl_program_abi.h),
+   or generate a binding from it. It is one self-contained C header depending on nothing but
+   `<stdint.h>` and `<stddef.h>`.
 2. Implement the five vtable functions and export `tglGetProgramVTable`.
-3. Build as a shared library with C-linkage exports, in whichever language you prefer.
-4. Point the Grid's creature roster at the resulting `.dll` or `.so`.
+3. Build a shared library named `<name>.dll` on Windows or `lib<name>.so` on Linux.
+4. Drop it in `programs/` beside the Grid's executable and check it with `--program <name>`.
 
 Nothing else is required, and nothing else is offered.
+
+### Any language that compiles to a shared library
+
+The interface is deliberately plain so that this is true rather than aspirational. Every member is a
+float, a fixed-width integer or a pointer; there is not a union, a bitfield, an enum, a `bool`, a
+native `int`, a `size_t` or a packing pragma anywhere in it. A Program exports **one** symbol, so a
+binding has exactly one name and one signature to get right and everything else is a struct it fills
+in.
+
+| Language | Library | Exported symbol | Layout checked by |
+|----------|---------|-----------------|-------------------|
+| C, C++ | any shared-library target | `#define TGL_PROGRAM_IMPLEMENTATION` before including | the header's own assertions |
+| Rust | `crate-type = ["cdylib"]` | `#[no_mangle] pub extern "C" fn` | `bindgen`, which emits layout tests |
+| Zig | `addSharedLibrary` | `export fn` | `@cImport` of the header — the assertions come too |
+| Go | `-buildmode=c-shared` | `//export tglGetProgramVTable` | the manifest |
+| D, Nim, Odin, Ada, Fortran, Swift, Haskell, OCaml, … | whatever the toolchain calls a shared library | that language's C export | the manifest |
+
+**The manifest is the point of that last column.** C and C++ get sixty-odd `static_assert`s that fail
+the build the moment the header drifts; Zig inherits them through `@cImport`; Rust gets equivalent
+tests out of `bindgen`. Every other binding declares the structs a second time with nothing holding
+the copies together, and one wrong offset compiles perfectly and arrives as nonsense in a sensor
+buffer. That is the worst shape a defect can take here — it looks like the creature is confused
+rather than like the binding is broken.
+
+So the layout is published as data in
+[`libs/program-abi/abi_layout.txt`](../libs/program-abi/abi_layout.txt): every struct's size and
+alignment, every member's offset and size, taken from the compiler rather than computed by hand. A
+binding asserts against it in its own tests and gets back exactly what the assertions give C. A test
+in this repository regenerates it and fails if it no longer describes the header, so it cannot go
+stale silently.
+
+```text
+struct TglSenses 88 8
+member TglSenses tick 0 8
+member TglSenses eyes 8 8
+...
+```
+
+### Four things a binding cannot see from outside
+
+1. **The platform's ordinary C calling convention** — SysV AMD64 on Linux, Microsoft x64 on Windows.
+   Whatever that platform's C compiler does by default; no `__stdcall`, no vectorcall.
+2. **64-bit only.** Asserted in the header rather than assumed, and every offset in the manifest
+   depends on it.
+3. **Nothing may unwind across the boundary**, in either direction. C++ has `noexcept` on every
+   function-pointer type, which makes it a compile error to get wrong. Rust arrives there without
+   being asked, because an unwind out of an `extern "C"` function aborts rather than crossing.
+   Everything else has to give its own answer.
+4. **The filename decoration is the Grid's, not the toolchain's.** One identifier resolves to one
+   filename. Rust's `cdylib` already produces exactly the right names on both platforms; MinGW
+   prefixes `lib` on Windows and has to be told not to.
+
+### Two more rules for a language with a garbage collector
+
+- **The vtable must have static storage duration and must never move.** The Grid holds the pointer
+  for the whole run and reads it after `library_shutdown` has been called. In Go this means the table
+  lives in C memory rather than Go memory, because cgo forbids storing a Go pointer where C can keep
+  it.
+- **Borrowed pointers must be copied, never retained.** Every pointer in `TglSenses` is valid for the
+  duration of one `program_tick` call and invalid afterwards. Wrapping one in a slice, a view or an
+  array object that outlives the call is the same defect as keeping the raw pointer, and it will not
+  fail immediately.
+
+A language with a runtime — Go, Haskell, OCaml, Swift — starts that runtime inside the library, which
+is fine, but `program_tick` runs on the Grid's tick thread and must not block. A garbage collection
+pause inside a tick is a tick the whole Grid waits for.
 
 ---
 

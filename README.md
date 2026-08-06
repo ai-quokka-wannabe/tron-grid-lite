@@ -20,6 +20,12 @@ buffers of senses, and return actions — so the Grid stays **completely agnosti
 Program works inside**. No Program internals live here, and none should: Programs are other
 repositories' business, behind a plain C ABI.
 
+**A Program can be written in any language that compiles to a shared library**, and the interface is
+kept plain so that this is true rather than merely claimed: one exported symbol, and structs of
+nothing but floats, fixed-width integers and pointers — no unions, bitfields, enums or packing. For
+languages that cannot read a C header, the memory layout is published as data so a binding can check
+itself. See [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md) § Writing a Program.
+
 It is a fresh, independent project. It reuses infrastructure and foundation code from the
 author's earlier [TronGrid](https://github.com/MatejGomboc/tron-grid) renderer (same author,
 same licence) but leaves behind the hardcore graphics programme — mesh shaders, hardware ray
