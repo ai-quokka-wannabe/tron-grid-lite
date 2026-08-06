@@ -38,6 +38,7 @@
 #include "instance.hpp"
 #include "postprocess.hpp"
 #include "profiler.hpp"
+#include "roster.hpp"
 #include "program_library.hpp"
 #include "spectator.hpp"
 #include "surface.hpp"
@@ -1281,6 +1282,9 @@ int main(int argc, char** argv)
 
         //! Report every Program in the directory and whether each one loads, then exit.
         bool list_programs{false};
+
+        //! Ticks to run the named Program for. Zero checks it and stops without rezzing anything.
+        uint32_t ticks{0u};
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -1328,6 +1332,8 @@ int main(int argc, char** argv)
                 program_identifier = argv[++index];
             } else if (argument == "--list-programs") {
                 list_programs = true;
+            } else if (argument == "--ticks") {
+                ticks = value(ticks);
             } else if (argument == "--width") {
                 record_width = value(record_width);
             } else if (argument == "--height") {
@@ -1346,7 +1352,7 @@ int main(int argc, char** argv)
         */
         if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !list_gpus && !list_programs && program_identifier.empty()) {
             logger.logInfo("Nothing to do. Pass --window to look at the Grid, or one of --record, --benchmark, "
-                           "--verify-acoustics, --verify-scene, --list-gpus, --list-programs, --program <name>.");
+                           "--verify-acoustics, --verify-scene, --list-gpus, --list-programs, --program <name> [--ticks N].");
             return EXIT_SUCCESS;
         }
 
@@ -1396,6 +1402,29 @@ int main(int argc, char** argv)
         */
         if (!program_identifier.empty()) {
             const std::filesystem::path directory{ProgramLib::defaultDirectory()};
+
+            /*
+                With --ticks the Program is not merely checked but run: rezzed onto a body, given
+                that many turns, and derezzed. The body has no physics and no senses worth the
+                name yet, so what this proves is the round trip — that a library somebody else
+                compiled can move something on the Grid, and that the Grid decides how much of
+                what it asked for it is willing to act on.
+            */
+            if (ticks > 0u) {
+                RosterLib::Roster roster{directory, program_identifier, 1u};
+
+                for (uint32_t index{0u}; index < ticks; ++index) {
+                    roster.tick();
+                }
+
+                const RosterLib::Creature& creature{roster.creatures().front()};
+                logger.logInfo("Program \"" + program_identifier + "\" ran for " + std::to_string(ticks) + " ticks ("
+                    + std::to_string(static_cast<float>(ticks) * RosterLib::TICK_SECONDS) + " s). Creature at (" + std::to_string(creature.pose.position.x) + ", "
+                    + std::to_string(creature.pose.position.y) + ", " + std::to_string(creature.pose.position.z) + "), facing " + std::to_string(creature.pose.yaw)
+                    + " rad, moving at " + std::to_string(creature.forward_speed) + " m/s.");
+                return EXIT_SUCCESS;
+            }
+
             const ProgramLib::Inspection inspection{ProgramLib::inspect(directory, program_identifier)};
 
             logger.logInfo("Program \"" + program_identifier + "\" loads. ABI version " + std::to_string(inspection.abi_version) + ", vtable "

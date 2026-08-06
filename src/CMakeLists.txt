@@ -15,6 +15,7 @@ add_executable(${PROJECT_NAME}
     profiler.cpp
     spectator.cpp
     program_library.cpp
+    roster.cpp
     cinematic.cpp
 )
 

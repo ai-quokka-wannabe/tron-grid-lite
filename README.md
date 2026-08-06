@@ -134,6 +134,7 @@ All three also run over SSH or on a machine with no monitor attached.
 | `--benchmark` | What does each GPU pass cost? |
 | `--program <name>` | Is that library something the Grid could run? Needs no device at all. |
 | `--list-programs` | Which Programs are installed, and which of them would load? Also needs no device. |
+| `--program <name> --ticks N` | Rez that Program onto a body, give it N turns, and say where it ended up. No device either. |
 
 ```text
 Trace 3.342041 ms | post 0.294431 ms | frame 3.636273 ms.

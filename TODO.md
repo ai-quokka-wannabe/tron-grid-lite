@@ -200,13 +200,14 @@ are decisions waiting on the owner, not conclusions.
    channel's audit comment true — *if a name is not a member of this struct, exactly one thread
    touches it* — and keeps the mapped instance array from becoming shared mutable state across three
    parties.
-3. **Tick rate: 25, 32, 50 or 100 Hz.** 32 Hz gives `dt = 0.03125` and a substep of `0.00390625`,
-   both exact in float32, so `tick * dt` is exact for 145 hours. 25 Hz gives 0.04, which is not exact
-   and accumulates a drift somebody eventually has to explain in a recording — and is the only rate
-   implied anywhere in this repository today. 50 Hz is the middle and puts a four-substep tick at the
-   5 ms where published humanoid models sit. The rate must never be sized to what looks smooth
-   through the debug window; that window is the only part a human can perceive, which is exactly why
-   it must not drive the decision.
+3. ~~Tick rate: 25, 32, 50 or 100 Hz.~~ **Decided: 32 Hz.** `dt = 0.03125` is exact in binary32 and
+   so is a four-substep `0.0078125`, which makes `tick * dt` exact for a hundred and forty-five
+   hours — so a recording's timestamps are the same numbers coming out as going in. 25 Hz gives 0.04
+   and 50 Hz gives 0.02, neither representable, both accumulating an error somebody eventually has to
+   explain in a replay. The rate was not sized to what looks smooth through the debug window; that
+   window is the only part a human perceives, which is exactly why it must not drive the decision.
+   It lives in `RosterLib::TICK_SECONDS`, with static assertions holding it against the tick rate and
+   against a four-substep division.
 4. ~~Is world replay claimed at all?~~ **Decided: claimed.** A run is reproducible from
    `(seed, initial state, input log)` on one build and one device. **This makes host physics
    single-threaded permanently**, which is the price and is worth stating as one — parallelism is
@@ -322,7 +323,7 @@ sensor interface plugs in, and physics is what makes the senses stop being const
 - [x] `--program <name>` — check a Program loads, without a device and without starting a run
 - [x] `--list-programs` — what is installed, and which of it would load
 - [x] Publish the ABI layout as data, so a binding in any language can check itself
-- [ ] One body with no physics — a transform that changes between ticks
+- [x] One body with no physics — a transform that changes between ticks
 - [ ] Fill the senses from the tracers that already exist
 - [ ] Physics: gravity, contacts, friction
 - [ ] A remote-operated demo Program with its own telemetry GUI

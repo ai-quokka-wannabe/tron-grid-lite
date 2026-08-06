@@ -33,3 +33,13 @@ target_link_libraries(program_library_tests PRIVATE program_abi testing ${CMAKE_
 target_compile_definitions(program_library_tests PRIVATE TGL_TEST_PROGRAM_DIR="$<TARGET_FILE_DIR:tgl_test_program>")
 add_dependencies(program_library_tests tgl_test_programs)
 add_test(NAME program_library_tests COMMAND program_library_tests)
+
+# A Program driving a body is a complete thing to check and needs no device, which is the whole
+# reason the roster mentions no Vulkan. It compiles the two translation units it needs directly,
+# for the same reason geometry_tests does: extracting a library for one consumer would be an
+# abstraction without a second use case.
+add_executable(roster_tests roster_tests.cpp ../roster.cpp ../program_library.cpp)
+target_link_libraries(roster_tests PRIVATE program_abi math testing ${CMAKE_DL_LIBS})
+target_compile_definitions(roster_tests PRIVATE TGL_TEST_PROGRAM_DIR="$<TARGET_FILE_DIR:tgl_test_program>")
+add_dependencies(roster_tests tgl_test_programs)
+add_test(NAME roster_tests COMMAND roster_tests)
