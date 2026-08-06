@@ -88,6 +88,27 @@ namespace-scope constant (`-Wunused-const-variable`); MSVC alone rejects an unus
 (`C4189`). A change that builds clean under one can and does fail four CI jobs under the other,
 and building the second preset locally costs about a minute against a round trip through CI.
 
+**`windows-mingw` builds on this machine too, and it is the one worth the extra minute.** GCC's
+warning set is the one neither MSVC nor clang-cl approximates, and it is the preset that has actually
+caught things: a Program library named `libfoo.dll` instead of `foo.dll`, found by CI after
+everything local was green. The toolchain came from the Qt Maintenance Tool as **MinGW 13.1.0
+64-bit**; Ninja is already on `PATH` and nothing else from that installer is needed.
+
+Prepend it for the build only rather than putting it on the system `PATH`, so it cannot shadow
+anything, and do not run it from the VS developer shell:
+
+```powershell
+$env:PATH = 'C:\Qt\Tools\mingw1310_64\bin;' + $env:PATH
+cmake --preset windows-mingw
+cmake --build build/windows-mingw --config Debug
+ctest --test-dir build/windows-mingw --build-config Debug
+```
+
+The two Linux presets remain CI-only: they need `slangc` and `spirv-val` at configure time, so the
+whole Vulkan SDK, and WSL on this machine cannot start a distribution that could host one. When a
+change is pure portable C or C++ with no `#ifdef` in it, MinGW's GCC covers the same warnings the
+Linux jobs would.
+
 ## Target Hardware
 
 Any Vulkan 1.3 GPU — **no ray tracing extensions required or used**.
@@ -258,6 +279,23 @@ written as a story is read once, and written as a rule it is read every session.
   refused with `std::abort`. The remembered capability was prose, and the code did the opposite of
   it. Two greps — one for the flag, one for the mechanism — would have replaced an afternoon of
   planning to port something that was never written.
+
+- **A red CI check is not necessarily a failure, and the difference is in the job rather than the
+  log.** `gh pr checks` prints `fail` for a job that was *cancelled*, which is what a job looks like
+  when it never got a runner at all — and the tell is that it records **zero steps** and dies at a
+  round number of minutes. The other shape is a job that starts and then cannot fetch what it needs,
+  which surfaces only as an annotation: `Failed to resolve action download info. Service
+  Unavailable`. Neither is anything in the tree, and an afternoon went into treating one as though it
+  were. Ask for the job's conclusion and its step count before reading a single line of log:
+
+  ```bash
+  gh api "repos/<owner>/<repo>/commits/$(git rev-parse HEAD)/check-runs" \
+      --jq '.check_runs[] | "\(.name): \(.status)/\(.conclusion) \(.started_at)"'
+  gh api "repos/<owner>/<repo>/check-runs/<id>/annotations" --jq '.[].message'
+  ```
+
+  A CodeQL run from GitHub's default setup **cannot be retried** through the API, so when one of those
+  is the casualty the only way to get a fresh verdict is a new commit on the branch.
 
 **Where the bugs actually are**
 
