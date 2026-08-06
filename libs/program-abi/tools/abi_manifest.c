@@ -233,11 +233,11 @@ static size_t readNormalised(const char* path, char* buffer, size_t capacity)
         return (size_t)-1;
     }
 
-    const size_t read = fread(buffer, 1u, capacity, file);
+    const size_t bytes_read = fread(buffer, 1u, capacity, file);
     fclose(file);
 
     size_t length = 0u;
-    for (size_t index = 0u; index < read; ++index) {
+    for (size_t index = 0u; index < bytes_read; ++index) {
         if (buffer[index] != '\r') {
             buffer[length++] = buffer[index];
         }
