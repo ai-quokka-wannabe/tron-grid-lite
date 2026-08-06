@@ -246,7 +246,7 @@ static size_t readNormalised(const char* path, char* buffer, size_t capacity)
     return length;
 }
 
-static int check(const char* path)
+static int checkManifest(const char* path)
 {
     static char expected[MANIFEST_CAPACITY];
     const size_t length = readNormalised(path, expected, MANIFEST_CAPACITY);
@@ -279,7 +279,7 @@ static int check(const char* path)
     return 1;
 }
 
-static int write(const char* path)
+static int writeManifest(const char* path)
 {
     /* Binary, so that the file is LF on every platform and two checkouts agree. */
     FILE* const file = fopen(path, "wb");
@@ -307,11 +307,11 @@ int main(int argc, char** argv)
     }
 
     if ((argc == 3) && (strcmp(argv[1], "--check") == 0)) {
-        return check(argv[2]);
+        return checkManifest(argv[2]);
     }
 
     if ((argc == 3) && (strcmp(argv[1], "--write") == 0)) {
-        return write(argv[2]);
+        return writeManifest(argv[2]);
     }
 
     if (argc == 1) {
