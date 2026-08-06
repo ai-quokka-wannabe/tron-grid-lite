@@ -70,8 +70,8 @@ discrete device.
 
 ```text
 Vulkan devices on this machine: 2.
-  [0] AMD Radeon(TM) Graphics — integrated, Vulkan 1.3.260 — USABLE, score 1100. Run with --gpu 0.
-  [1] NVIDIA GeForce GTX 1650 Ti — discrete, Vulkan 1.4.341 — USABLE, score 10100. Run with --gpu 1.
+  [0] AMD Radeon(TM) Graphics — integrated, Vulkan 1.3.260 — USABLE, score 1000. Run with --gpu 0.
+  [1] NVIDIA GeForce GTX 1650 Ti — discrete, Vulkan 1.4.341 — USABLE, score 10000. Run with --gpu 1.
 ```
 
 Both of those are exercised on every change worth the name. **Pixels are bit-identical on one
