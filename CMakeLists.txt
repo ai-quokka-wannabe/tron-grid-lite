@@ -38,8 +38,23 @@ if(NOT (WIN32 OR (UNIX AND NOT APPLE)))
     message(FATAL_ERROR "Unsupported platform. Only Windows and Linux are supported.")
 endif()
 
-# Vulkan SDK — provides Volk, vulkan-hpp, and validation layers
-find_package(Vulkan REQUIRED)
+# The Vulkan SDK, for its headers and nothing else.
+#
+# Volk resolves every entry point at run time and VK_NO_PROTOTYPES is defined for every target that
+# touches Vulkan, so this project links no Vulkan library at all — deliberately, and it is a rule in
+# .claude/CLAUDE.md. find_package(Vulkan REQUIRED) nonetheless insists on locating libvulkan, which
+# is a dependency this build does not have; it went unnoticed for as long as every SDK happened to
+# ship one where CMake looks. SDK 1.4.357.0 does not, on Linux, and the configure step failed on a
+# library nothing would have linked.
+#
+# Asking for the headers says what is actually needed, and says it in one place.
+find_path(TGL_VULKAN_INCLUDE_DIR
+    NAMES vulkan/vulkan.h
+    HINTS $ENV{VULKAN_SDK}/include
+    REQUIRED
+)
+
+message(STATUS "Vulkan headers: ${TGL_VULKAN_INCLUDE_DIR}")
 
 enable_testing()
 

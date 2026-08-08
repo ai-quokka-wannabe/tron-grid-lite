@@ -153,7 +153,7 @@ same fixed camera path `--record` does so that two runs compare. It writes nothi
 
 ## Requirements
 
-- **Vulkan SDK** 1.4.335.0+ ([LunarG](https://vulkan.lunarg.com/)) — the version CI builds against.
+- **Vulkan SDK** 1.4.357.0+ ([LunarG](https://vulkan.lunarg.com/)) — the version CI builds against.
   The real constraint is that `slangc` and `spirv-val` must be present in the SDK's `bin` directory,
   because CMake requires both at configure time
 - **C++20** compiler (MSVC, GCC, or Clang)
