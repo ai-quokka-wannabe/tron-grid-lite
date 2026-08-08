@@ -181,6 +181,16 @@ float3 radiance(float3 primary_origin, float3 primary_direction)
 {
     float3 accumulated = float3(0.0, 0.0, 0.0);
 
+    /*
+        Deliberately uninitialised, and it must stay that way. This is a bounded stack: stack_size
+        only increments after a store at that index and only decrements before a read of it, so
+        every read is of an element already written. Slang's flow analysis cannot see that and
+        reports E41035, which the build disables by id for this reason alone.
+
+        Initialising it is not free. Zeroing the array measured +6% of trace time on an RTX 4090
+        and +29% on an Intel integrated part, which is thirty stores every call, per instance, per
+        ray - and the weakest device is the one this project is meant to run on.
+    */
     RayTask stack[MAX_TASKS];
     uint stack_size = 0;
 

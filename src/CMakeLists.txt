@@ -90,6 +90,16 @@ function(add_slang_shader name source)
             -emit-spirv-directly
             -fvk-use-entrypoint-name
             -warnings-as-errors all
+            # E41035, possible use of uninitialized variable, is disabled and only this one is.
+            # Slang 2026 reports it against both traversal stacks, and in both the array is a
+            # bounded stack whose invariant the analysis cannot see: the size only ever
+            # increments after a store at that index and only decrements before a read of it, so
+            # every read is of an element already written. Satisfying it means initialising the
+            # whole array, which measured +6% on an RTX 4090 and +29% on an Intel integrated
+            # part - thirty stores per traceGeometry call, per instance, per ray. Paying that on
+            # the weakest device the project targets, to silence a false positive, is the wrong
+            # trade. Every other warning stays fatal.
+            -warnings-disable 41035
             -I ${CMAKE_CURRENT_SOURCE_DIR}
             ${entry_args}
             -o ${SHADER_OUTPUT_DIR}/${name}.spv
