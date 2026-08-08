@@ -104,10 +104,14 @@ cmake --build build/windows-mingw --config Debug
 ctest --test-dir build/windows-mingw --build-config Debug
 ```
 
-The two Linux presets remain CI-only: they need `slangc` and `spirv-val` at configure time, so the
-whole Vulkan SDK, and WSL on this machine cannot start a distribution that could host one. When a
-change is pure portable C or C++ with no `#ifdef` in it, MinGW's GCC covers the same warnings the
-Linux jobs would.
+**The two Linux presets are CI-only, and the reason is one dependency rather than the platform.**
+WSL runs Ubuntu 24.04 here with gcc 13.3, cmake, ninja and `libxcb1-dev` already present; what is
+missing is the Vulkan SDK, because `slangc` and `spirv-val` are demanded at configure time and
+neither ships with the distribution. Installing it would complete the set of five locally, which
+is worth knowing whenever CI is unreliable.
+
+Until then, a change that is pure portable C or C++ with no `#ifdef` in it is covered by MinGW's
+GCC, which is the same compiler family and the same warning set the Linux jobs use.
 
 ## Target Hardware
 
@@ -119,19 +123,39 @@ rather than remembered.
 
 | Machine | # | Device | Type | Vulkan | Cadence |
 |---------|---|--------|------|--------|---------|
-| daily | 0 | Intel RaptorLake-S Mobile Graphics | integrated | 1.4.323 | every change |
-| daily | 1 | NVIDIA GeForce RTX 4090 Laptop | discrete | 1.4.341 | every change |
-| weekly | 0 | AMD Radeon(TM) Graphics | integrated | 1.3.260 | about weekly |
-| weekly | 1 | NVIDIA GeForce GTX 1650 Ti | discrete | 1.4.341 | about weekly |
+| daily | 0 | Intel RaptorLake-S Mobile Graphics | integrated | 1.4.323 | every change — the device under test |
+| daily | 1 | NVIDIA GeForce RTX 4090 Laptop | discrete | 1.4.341 | every change — speed, and where an RT dependency would hide |
+| weekly | 0 | AMD Radeon(TM) Graphics | integrated | 1.3.260 | about weekly — the third vendor |
+| weekly | 1 | NVIDIA GeForce GTX 1650 Ti | discrete | 1.4.341 | about weekly — discrete, no RT, older generation |
 
 Three vendors is the part worth having. NVIDIA and AMD share more lineage than either shares with
 Intel, so an Intel integrated part is the least like anything this renderer was developed against —
 and it is the cheapest of the four to run, being in the daily machine.
 
-**The GTX 1650 Ti is the one that guards a specific claim.** It exposes no ray-tracing extension at
-all, so while it was the daily machine nothing could accidentally depend on one. The daily machine is
-now an RTX 4090, which has them, and the guarantee is therefore weekly rather than continuous. Only
-the code refusing to enable them keeps that true in between.
+**The Intel part is the device under test, and paradoxically that is because it is the weakest
+thing here.** It exposes no ray-tracing extension at all, it is integrated, and it is the slowest of
+the four — so it guards both claims this project makes about hardware, and it does so on the daily
+machine rather than weekly. Measured rather than assumed:
+
+| Device | Ray-tracing extensions exposed |
+|--------|-------------------------------|
+| Intel RaptorLake-S Mobile Graphics | none |
+| NVIDIA GeForce RTX 4090 Laptop | `acceleration_structure`, `ray_query`, `ray_tracing_pipeline`, `ray_tracing_position_fetch`, `NV_ray_tracing` |
+| NVIDIA GeForce GTX 1650 Ti | none |
+
+**Having one device that does expose them is worth as much as the ones that do not.** An accidental
+dependency on a ray-tracing extension would run perfectly on the 4090 and fail on everything else, so
+the 4090 is where such a mistake would hide and the Intel part is where it would surface. Run the
+Intel one when the question is "does this still work at all"; run the 4090 when the question is "how
+fast", and never the other way round.
+
+To re-take that inventory on new hardware, note that `vulkaninfo` emits one block per device headed
+`GPUn:` and a naive grep attributes extensions to whichever device it happens to reach first — which
+produced a confidently backwards answer here before the blocks were split properly:
+
+```bash
+"$VULKAN_SDK/Bin/vulkaninfoSDK.exe" > info.txt   # then split on /^GPU[0-9]+:$/ before searching
+```
 
 Device scoring always picks the discrete one, so
 `--gpu <index>` exists to force the other, and `--list-gpus` reports every device with the reason
