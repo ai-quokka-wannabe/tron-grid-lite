@@ -163,8 +163,9 @@ same fixed camera path `--record` does so that two runs compare. It writes nothi
 ### Target Hardware
 
 Any Vulkan 1.3 GPU. **No ray tracing extensions required** — ray tracing is done in plain
-compute shaders. The reference development machine is a GTX 1650 Ti laptop, which exposes no
-Vulkan ray tracing extensions at all; if it runs well there, it runs well anywhere.
+compute shaders. Development happens across four devices and three vendors — NVIDIA, AMD and
+Intel — and one of them is a GTX 1650 Ti laptop that exposes no Vulkan ray tracing extension at
+all. If it runs well there, it runs well anywhere.
 
 ## Building
 

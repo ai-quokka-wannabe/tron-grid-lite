@@ -113,14 +113,27 @@ Linux jobs would.
 
 Any Vulkan 1.3 GPU — **no ray tracing extensions required or used**.
 
-The reference machine has two, and **both are exercised**, which is the point of having them:
+**Two machines, four devices, three vendors.** The daily machine is the first pair; the second is
+still available and is exercised about weekly, which is what keeps the modest-hardware claim honest
+rather than remembered.
 
-| # | Device | Type | Vulkan |
-|---|--------|------|--------|
-| 0 | AMD Radeon(TM) Graphics | integrated | 1.3.260 |
-| 1 | NVIDIA GeForce GTX 1650 Ti | discrete | 1.4.341 |
+| Machine | # | Device | Type | Vulkan | Cadence |
+|---------|---|--------|------|--------|---------|
+| daily | 0 | Intel RaptorLake-S Mobile Graphics | integrated | 1.4.323 | every change |
+| daily | 1 | NVIDIA GeForce RTX 4090 Laptop | discrete | 1.4.341 | every change |
+| weekly | 0 | AMD Radeon(TM) Graphics | integrated | 1.3.260 | about weekly |
+| weekly | 1 | NVIDIA GeForce GTX 1650 Ti | discrete | 1.4.341 | about weekly |
 
-Neither exposes a ray-tracing extension. Device scoring always picks the discrete one, so
+Three vendors is the part worth having. NVIDIA and AMD share more lineage than either shares with
+Intel, so an Intel integrated part is the least like anything this renderer was developed against —
+and it is the cheapest of the four to run, being in the daily machine.
+
+**The GTX 1650 Ti is the one that guards a specific claim.** It exposes no ray-tracing extension at
+all, so while it was the daily machine nothing could accidentally depend on one. The daily machine is
+now an RTX 4090, which has them, and the guarantee is therefore weekly rather than continuous. Only
+the code refusing to enable them keeps that true in between.
+
+Device scoring always picks the discrete one, so
 `--gpu <index>` exists to force the other, and `--list-gpus` reports every device with the reason
 any unusable one is unusable. **Verify on both before claiming anything about correctness**: this
 repository has already shipped one piece of reasoning whose only evidence was that it worked on the
@@ -149,17 +162,35 @@ build/windows-msvc/src/Release/TronGridLite.exe --record --frames 12 --width 640
 # sha256 of frame_00000.ppm .. frame_00011.ppm concatenated in name order
 ```
 
-| Device | Digest |
-|--------|--------|
-| NVIDIA GeForce GTX 1650 Ti | `68B384D91F70FFEF79AD16E30FA355F92B1937DB7BE3DA2713E6F84663E0501E` |
-| AMD Radeon(TM) Graphics | `E5CB839D9906AAD1629FA34E73103DB8D45DD57D83FF1656833CD41761B3A87C` |
+| Vendor | Devices measured | Digest |
+|--------|------------------|--------|
+| NVIDIA | GeForce GTX 1650 Ti (Turing), GeForce RTX 4090 Laptop (Ada Lovelace) | `68B384D91F70FFEF79AD16E30FA355F92B1937DB7BE3DA2713E6F84663E0501E` |
+| AMD | Radeon(TM) Graphics, integrated | `E5CB839D9906AAD1629FA34E73103DB8D45DD57D83FF1656833CD41761B3A87C` |
+| Intel | RaptorLake-S Mobile Graphics, integrated | `CCB8075A9B719CD3D41A9E62D5774E915653E1756405E7BF37129B029474C763` |
 
-**Two digests rather than one, and that is the honest answer rather than a defeat.** Determinism is
-per device. The two GPUs disagree on about 16% of bytes with a worst difference of 224 of 255 — which
-sounds alarming and is not: this is a world of mirrors, so a ray passing one side of an edge instead
-of the other lands on a neon tube instead of on black, and one contracted multiply-add decides which.
-The figure is worth keeping precisely because it is stable: measure it before and after a change, and
-if the *cross-vendor* disagreement moves, something has become genuinely less deterministic.
+**Determinism is per vendor rather than per device, and that is measured rather than assumed.** Two
+NVIDIA cards two architecture generations apart — Turing and Ada Lovelace, different machines,
+different drivers — produce output that is **identical to the last byte**. This file previously said
+determinism was per device, which was the cautious reading of a sample of one card per vendor, and it
+was wrong in a way that mattered: it implied a recorded digest was worthless to anybody else, when in
+fact any NVIDIA machine can check against the one above.
+
+What varies is the vendor's shader compiler, which is where the freedom IEEE-754 leaves — contraction
+of multiply-adds and the transcendentals — actually gets spent.
+
+| Comparison | Bytes differing | Worst delta |
+|------------|-----------------|-------------|
+| NVIDIA vs AMD | 16.38% | 224 of 255 |
+| NVIDIA vs Intel | 2.97% | 199 of 255 |
+
+Alarming figures that are not: this is a world of mirrors, so a ray passing one side of an edge
+instead of the other lands on a neon tube instead of on black, and a single contracted multiply-add
+decides which. They are worth keeping precisely because they are stable — measure before and after a
+change, and if a *cross-vendor* figure moves, something has become genuinely less deterministic.
+
+**Do not read the NVIDIA result as a promise.** It is two cards, one vendor, and a driver pairing
+nobody controls. A third NVIDIA card disagreeing would be a fact about that driver rather than a
+regression, and the way to tell is to re-run an unchanged binary before believing anything.
 
 **What the digest cannot see.** It is a check on the picture, and the picture is produced by a
 single-threaded path. A lock inversion, a lost wakeup, or a `join()` waiting behind
