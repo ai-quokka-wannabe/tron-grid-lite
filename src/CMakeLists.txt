@@ -25,7 +25,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # SYSTEM so that warnings from the Vulkan SDK's own headers cannot fail this build under /WX and
 # -Werror. A future SDK release is not something this repository can fix.
-target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${Vulkan_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${TGL_VULKAN_INCLUDE_DIR})
 
 # Vulkan-specific definitions — scoped to this target only.
 # VULKAN_HPP_NO_STRUCT_CONSTRUCTORS is defined here rather than per-header so that every
