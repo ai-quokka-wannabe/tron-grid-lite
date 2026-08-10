@@ -18,6 +18,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <stdexcept>
 
 namespace MathLib
 {
@@ -26,14 +27,10 @@ namespace MathLib
         4x4 column-major matrix.
 
         Storage is a single flat std::array<float, 16> in column-major order
-        (`m[col * 4 + row]`). Flat (rather than nested
-        `std::array<std::array<float, 4>, 4>`) so that `data()` returns a
-        pointer into one 16-element array, making indexed access through the
-        returned pointer well-defined for the entire range [0, 16) per the C++
-        standard's array-bounds rules. Element access uses `operator()(col,
-        row)` to read or write a single element by column-major coordinates.
+        (`m[col * 4 + row]`). Element access uses `operator()(col, row)` to
+        read or write a single element by column-major coordinates.
 
-        Layout (column-major, matches Vulkan/SPIR-V uniform-buffer expectations):
+        Layout (column-major):
 
             (0, 0)  (1, 0)  (2, 0)  (3, 0)
             (0, 1)  (1, 1)  (2, 1)  (3, 1)
@@ -114,18 +111,6 @@ namespace MathLib
             return result;
         }
 
-        //! Returns the transposed matrix.
-        [[nodiscard]] constexpr Mat4 transposed() const
-        {
-            Mat4 result{};
-            for (uint32_t col{0}; col < 4; ++col) {
-                for (uint32_t row{0}; row < 4; ++row) {
-                    result(col, row) = (*this)(row, col);
-                }
-            }
-            return result;
-        }
-
         //! Multiplies this matrix by a Vec4.
         [[nodiscard]] constexpr Vec4 operator*(const Vec4& v) const
         {
@@ -151,6 +136,9 @@ namespace MathLib
         }
 
         //! Returns the inverse of this matrix (cofactor expansion, Cramer's rule).
+        //! Throws std::runtime_error if the matrix is singular: a transform that collapses space
+        //! has no inverse, and the caller caches this as an instance's world-to-geometry
+        //! transform — a silent fallback would place geometry wrongly with no diagnostic.
         [[nodiscard]] Mat4 inversed() const
         {
             float a00{(*this)(0, 0)};
@@ -185,7 +173,7 @@ namespace MathLib
 
             float det{b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06};
             if (std::abs(det) < 1e-10f) {
-                return identity(); // Singular matrix — return identity as safe fallback.
+                throw std::runtime_error("Mat4::inversed: matrix is singular");
             }
             float inv_det{1.0f / det};
 
@@ -207,14 +195,6 @@ namespace MathLib
             result(3, 2) = (-a30 * b03 + a31 * b01 - a32 * b00) * inv_det;
             result(3, 3) = (a20 * b03 - a21 * b01 + a22 * b00) * inv_det;
             return result;
-        }
-
-        //! Returns a pointer to the raw float data (16 floats, column-major).
-        //! Indexing through the returned pointer is well-defined for indices [0, 16) —
-        //! the underlying storage is a single std::array<float, 16>.
-        [[nodiscard]] constexpr const float* data() const
-        {
-            return m.data();
         }
 
         [[nodiscard]] constexpr bool operator==(const Mat4& other) const = default;

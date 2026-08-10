@@ -14,7 +14,6 @@
 
 #include "testing/testing.hpp"
 #include <math/matrix.hpp>
-#include <math/projection.hpp>
 #include <math/quaternion.hpp>
 #include <math/vector.hpp>
 #include <cmath>
@@ -47,53 +46,6 @@ static bool approxMat4(const MathLib::Mat4& a, const MathLib::Mat4& b, float eps
     return true;
 }
 
-// ── Vec2 ──
-
-TEST_CASE(vec2_default_zero)
-{
-    MathLib::Vec2 v;
-    TEST_CHECK(v.x == 0.0f && v.y == 0.0f);
-}
-
-TEST_CASE(vec2_dot)
-{
-    MathLib::Vec2 a{1.0f, 2.0f};
-    MathLib::Vec2 b{3.0f, 4.0f};
-    TEST_CHECK(approx(a.dot(b), 11.0f));
-}
-
-TEST_CASE(vec2_length)
-{
-    MathLib::Vec2 v{3.0f, 4.0f};
-    TEST_CHECK(approx(v.length(), 5.0f));
-}
-
-TEST_CASE(vec2_normalised)
-{
-    MathLib::Vec2 v{3.0f, 4.0f};
-    MathLib::Vec2 n{v.normalised()};
-    TEST_CHECK(approx(n.length(), 1.0f));
-}
-
-TEST_CASE(vec2_normalised_zero)
-{
-    MathLib::Vec2 v{0.0f, 0.0f};
-    MathLib::Vec2 n{v.normalised()};
-    TEST_CHECK(n.x == 0.0f && n.y == 0.0f);
-}
-
-TEST_CASE(vec2_arithmetic)
-{
-    MathLib::Vec2 a{1.0f, 2.0f};
-    MathLib::Vec2 b{3.0f, 4.0f};
-    MathLib::Vec2 sum{a + b};
-    MathLib::Vec2 diff{a - b};
-    MathLib::Vec2 scaled{a * 2.0f};
-    TEST_CHECK((sum == MathLib::Vec2{4.0f, 6.0f}));
-    TEST_CHECK((diff == MathLib::Vec2{-2.0f, -2.0f}));
-    TEST_CHECK((scaled == MathLib::Vec2{2.0f, 4.0f}));
-}
-
 // ── Vec3 ──
 
 TEST_CASE(vec3_default_zero)
@@ -106,7 +58,7 @@ TEST_CASE(vec3_dot)
 {
     MathLib::Vec3 a{1.0f, 2.0f, 3.0f};
     MathLib::Vec3 b{4.0f, 5.0f, 6.0f};
-    TEST_CHECK(approx(a.dot(b), 32.0f));
+    TEST_CHECK_CLOSE(a.dot(b), 32.0f, 1e-5f);
 }
 
 TEST_CASE(vec3_cross)
@@ -129,15 +81,15 @@ TEST_CASE(vec3_cross_anticommutative)
 TEST_CASE(vec3_length)
 {
     MathLib::Vec3 v{1.0f, 2.0f, 2.0f};
-    TEST_CHECK(approx(v.length(), 3.0f));
+    TEST_CHECK_CLOSE(v.length(), 3.0f, 1e-5f);
 }
 
 TEST_CASE(vec3_normalised)
 {
     MathLib::Vec3 v{0.0f, 3.0f, 4.0f};
     MathLib::Vec3 n{v.normalised()};
-    TEST_CHECK(approx(n.length(), 1.0f));
-    TEST_CHECK(approx(n.x, 0.0f));
+    TEST_CHECK_CLOSE(n.length(), 1.0f, 1e-5f);
+    TEST_CHECK_CLOSE(n.x, 0.0f, 1e-5f);
 }
 
 TEST_CASE(vec3_normalised_zero)
@@ -170,6 +122,12 @@ TEST_CASE(vec3_compound_assignment)
 
 // ── Vec4 ──
 
+TEST_CASE(vec4_default_zero)
+{
+    MathLib::Vec4 v;
+    TEST_CHECK((v.x == 0.0f) && (v.y == 0.0f) && (v.z == 0.0f) && (v.w == 0.0f));
+}
+
 TEST_CASE(vec4_from_vec3)
 {
     MathLib::Vec3 v{1.0f, 2.0f, 3.0f};
@@ -187,7 +145,17 @@ TEST_CASE(vec4_dot)
 {
     MathLib::Vec4 a{1.0f, 2.0f, 3.0f, 4.0f};
     MathLib::Vec4 b{5.0f, 6.0f, 7.0f, 8.0f};
-    TEST_CHECK(approx(a.dot(b), 70.0f));
+    TEST_CHECK_CLOSE(a.dot(b), 70.0f, 1e-5f);
+}
+
+TEST_CASE(vec4_arithmetic)
+{
+    MathLib::Vec4 a{1.0f, 2.0f, 3.0f, 4.0f};
+    MathLib::Vec4 b{5.0f, 6.0f, 7.0f, 8.0f};
+    TEST_CHECK(((a + b) == MathLib::Vec4{6.0f, 8.0f, 10.0f, 12.0f}));
+    TEST_CHECK(((a - b) == MathLib::Vec4{-4.0f, -4.0f, -4.0f, -4.0f}));
+    TEST_CHECK(((a * 2.0f) == MathLib::Vec4{2.0f, 4.0f, 6.0f, 8.0f}));
+    TEST_CHECK(((-a) == MathLib::Vec4{-1.0f, -2.0f, -3.0f, -4.0f}));
 }
 
 // ── Mat4 ──
@@ -238,13 +206,26 @@ TEST_CASE(mat4_rotate_z_90)
     TEST_CHECK(approxVec4(result, {0.0f, 1.0f, 0.0f, 1.0f}, 1e-4f));
 }
 
-TEST_CASE(mat4_transpose)
+TEST_CASE(mat4_rotate_x_90)
 {
-    MathLib::Mat4 m{MathLib::Mat4::identity()};
-    m(3, 0) = 5.0f; // Translation X in column-major
-    MathLib::Mat4 t{m.transposed()};
-    TEST_CHECK(approx(t(0, 3), 5.0f));
-    TEST_CHECK(approx(t(3, 0), 0.0f));
+    MathLib::Mat4 r{MathLib::Mat4::rotate({1.0f, 0.0f, 0.0f}, MathLib::PI / 2.0f)};
+    MathLib::Vec4 v{0.0f, 1.0f, 0.0f, 1.0f};
+    MathLib::Vec4 result{r * v};
+    TEST_CHECK(approxVec4(result, {0.0f, 0.0f, 1.0f, 1.0f}, 1e-4f));
+}
+
+TEST_CASE(mat4_rotate_y_90)
+{
+    MathLib::Mat4 r{MathLib::Mat4::rotate({0.0f, 1.0f, 0.0f}, MathLib::PI / 2.0f)};
+    MathLib::Vec4 v{1.0f, 0.0f, 0.0f, 1.0f};
+    MathLib::Vec4 result{r * v};
+    TEST_CHECK(approxVec4(result, {0.0f, 0.0f, -1.0f, 1.0f}, 1e-4f));
+}
+
+TEST_CASE(mat4_rotate_360_identity)
+{
+    MathLib::Mat4 r{MathLib::Mat4::rotate({0.0f, 1.0f, 0.0f}, 2.0f * MathLib::PI)};
+    TEST_CHECK(approxMat4(r, MathLib::Mat4::identity(), 1e-4f));
 }
 
 TEST_CASE(mat4_multiply_associative)
@@ -257,15 +238,47 @@ TEST_CASE(mat4_multiply_associative)
     TEST_CHECK(approxMat4(ab_c, a_bc));
 }
 
-TEST_CASE(mat4_data_pointer)
+/*
+    Mat4::inversed() is sixteen hand-transcribed cofactor expressions called by production code
+    (libs/bvh/src/bvh.cpp caches it as every instance's world-to-geometry transform), and the cases
+    below are the whole of its coverage. A sign or index error in any one of them produces a
+    silently wrong inverse.
+*/
+TEST_CASE(mat4_inversed_round_trips)
 {
-    MathLib::Mat4 id{MathLib::Mat4::identity()};
-    const float* ptr{id.data()};
-    TEST_CHECK(approx(ptr[0], 1.0f)); // m[0][0]
-    TEST_CHECK(approx(ptr[5], 1.0f)); // m[1][1]
-    TEST_CHECK(approx(ptr[10], 1.0f)); // m[2][2]
-    TEST_CHECK(approx(ptr[15], 1.0f)); // m[3][3]
-    TEST_CHECK(approx(ptr[1], 0.0f)); // m[0][1]
+    const MathLib::Mat4 composite{
+        MathLib::Mat4::translate({3.0f, -4.0f, 5.0f}) * MathLib::Mat4::rotate({0.3f, 0.9f, 0.2f}, 0.7f) * MathLib::Mat4::scale({2.0f, 0.5f, 3.0f})};
+
+    const MathLib::Mat4 identity{composite * composite.inversed()};
+
+    for (uint32_t row{0}; row < 4; ++row) {
+        for (uint32_t column{0}; column < 4; ++column) {
+            const float expected{(row == column) ? 1.0f : 0.0f};
+            TEST_CHECK_CLOSE(identity(row, column), expected, 1e-4f);
+        }
+    }
+}
+
+//! A point taken through a transform and back must arrive where it started.
+TEST_CASE(mat4_inversed_undoes_a_transform)
+{
+    const MathLib::Mat4 composite{
+        MathLib::Mat4::translate({-7.0f, 2.5f, 11.0f}) * MathLib::Mat4::rotate({0.0f, 1.0f, 0.0f}, MathLib::PI / 3.0f) * MathLib::Mat4::scale({1.5f, 1.5f, 1.5f})};
+    const MathLib::Mat4 inverse{composite.inversed()};
+
+    for (const MathLib::Vec3& point : {MathLib::Vec3{1.0f, 2.0f, 3.0f}, MathLib::Vec3{-4.0f, 0.5f, 6.0f}, MathLib::Vec3{0.0f, 0.0f, 0.0f}}) {
+        const MathLib::Vec4 transformed{composite * MathLib::Vec4{point.x, point.y, point.z, 1.0f}};
+        const MathLib::Vec4 restored{inverse * transformed};
+        TEST_CHECK(approxVec3({restored.x, restored.y, restored.z}, point, 1e-3f));
+    }
+}
+
+//! A singular matrix has no inverse, and pretending otherwise would place geometry wrongly with no
+//! diagnostic — the failure must be loud.
+TEST_CASE(mat4_inversed_throws_on_singular)
+{
+    const MathLib::Mat4 flattened{MathLib::Mat4::scale({1.0f, 0.0f, 1.0f})};
+    TEST_CHECK_THROWS(flattened.inversed());
 }
 
 // ── Quat ──
@@ -279,10 +292,10 @@ TEST_CASE(quat_identity)
 TEST_CASE(quat_from_axis_angle_identity)
 {
     MathLib::Quat q{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, 0.0f)};
-    TEST_CHECK(approx(q.w, 1.0f));
-    TEST_CHECK(approx(q.x, 0.0f));
-    TEST_CHECK(approx(q.y, 0.0f));
-    TEST_CHECK(approx(q.z, 0.0f));
+    TEST_CHECK_CLOSE(q.w, 1.0f, 1e-5f);
+    TEST_CHECK_CLOSE(q.x, 0.0f, 1e-5f);
+    TEST_CHECK_CLOSE(q.y, 0.0f, 1e-5f);
+    TEST_CHECK_CLOSE(q.z, 0.0f, 1e-5f);
 }
 
 TEST_CASE(quat_rotate_vec3)
@@ -293,15 +306,20 @@ TEST_CASE(quat_rotate_vec3)
     TEST_CHECK(approxVec3(result, {0.0f, 1.0f, 0.0f}, 1e-4f));
 }
 
-TEST_CASE(quat_to_mat4_matches_rotate)
+TEST_CASE(quat_rotate_around_x)
 {
-    MathLib::Vec3 axis{0.0f, 1.0f, 0.0f};
-    float angle{MathLib::PI / 3.0f};
+    MathLib::Quat q{MathLib::Quat::fromAxisAngle({1.0f, 0.0f, 0.0f}, MathLib::PI / 2.0f)};
+    MathLib::Vec3 v{0.0f, 1.0f, 0.0f};
+    MathLib::Vec3 result{q.rotate(v)};
+    TEST_CHECK(approxVec3(result, {0.0f, 0.0f, 1.0f}, 1e-4f));
+}
 
-    MathLib::Mat4 from_quat{MathLib::Quat::fromAxisAngle(axis, angle).toMat4()};
-    MathLib::Mat4 from_mat{MathLib::Mat4::rotate(axis, angle)};
-
-    TEST_CHECK(approxMat4(from_quat, from_mat, 1e-4f));
+TEST_CASE(quat_rotate_around_y)
+{
+    MathLib::Quat q{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, MathLib::PI / 2.0f)};
+    MathLib::Vec3 v{1.0f, 0.0f, 0.0f};
+    MathLib::Vec3 result{q.rotate(v)};
+    TEST_CHECK(approxVec3(result, {0.0f, 0.0f, -1.0f}, 1e-4f));
 }
 
 TEST_CASE(quat_multiply_combines_rotations)
@@ -333,46 +351,19 @@ TEST_CASE(quat_multiply_does_not_commute)
     TEST_CHECK(approxVec3((pitch * yaw).rotate(forward), {-1.0f, 0.0f, 0.0f}, 1e-4f));
 }
 
-/*
-    Mat4::inversed() is sixteen hand-transcribed cofactor expressions called by production code
-    (src/components.hpp), and the cases below are the whole of its coverage. A sign or index error in
-    any one of them produces a silently wrong inverse.
-*/
-TEST_CASE(mat4_inversed_round_trips)
+TEST_CASE(quat_length)
 {
-    const MathLib::Mat4 composite{
-        MathLib::Mat4::translate({3.0f, -4.0f, 5.0f}) * MathLib::Mat4::rotate({0.3f, 0.9f, 0.2f}, 0.7f) * MathLib::Mat4::scale({2.0f, 0.5f, 3.0f})};
-
-    const MathLib::Mat4 identity{composite * composite.inversed()};
-
-    for (int row{0}; row < 4; ++row) {
-        for (int column{0}; column < 4; ++column) {
-            const float expected{(row == column) ? 1.0f : 0.0f};
-            TEST_CHECK(std::abs(identity(row, column) - expected) < 1e-4f);
-        }
-    }
-}
-
-//! A point taken through a transform and back must arrive where it started.
-TEST_CASE(mat4_inversed_undoes_a_transform)
-{
-    const MathLib::Mat4 composite{
-        MathLib::Mat4::translate({-7.0f, 2.5f, 11.0f}) * MathLib::Mat4::rotate({0.0f, 1.0f, 0.0f}, MathLib::PI / 3.0f) * MathLib::Mat4::scale({1.5f, 1.5f, 1.5f})};
-    const MathLib::Mat4 inverse{composite.inversed()};
-
-    for (const MathLib::Vec3& point : {MathLib::Vec3{1.0f, 2.0f, 3.0f}, MathLib::Vec3{-4.0f, 0.5f, 6.0f}, MathLib::Vec3{0.0f, 0.0f, 0.0f}}) {
-        const MathLib::Vec4 transformed{composite * MathLib::Vec4{point.x, point.y, point.z, 1.0f}};
-        const MathLib::Vec4 restored{inverse * transformed};
-        TEST_CHECK(approxVec3({restored.x, restored.y, restored.z}, point, 1e-3f));
-    }
+    MathLib::Quat q{1.0f, 2.0f, 3.0f, 4.0f};
+    float expected{std::sqrt(1.0f + 4.0f + 9.0f + 16.0f)};
+    TEST_CHECK_CLOSE(q.length(), expected, 1e-5f);
 }
 
 TEST_CASE(quat_normalised)
 {
     MathLib::Quat q{2.0f, 0.0f, 0.0f, 0.0f};
     MathLib::Quat n{q.normalised()};
-    TEST_CHECK(approx(n.length(), 1.0f));
-    TEST_CHECK(approx(n.w, 1.0f));
+    TEST_CHECK_CLOSE(n.length(), 1.0f, 1e-5f);
+    TEST_CHECK_CLOSE(n.w, 1.0f, 1e-5f);
 }
 
 TEST_CASE(quat_normalised_zero)
@@ -380,310 +371,6 @@ TEST_CASE(quat_normalised_zero)
     MathLib::Quat q{0.0f, 0.0f, 0.0f, 0.0f};
     MathLib::Quat n{q.normalised()};
     TEST_CHECK(n == MathLib::Quat::identity());
-}
-
-TEST_CASE(quat_slerp_endpoints)
-{
-    MathLib::Quat a{MathLib::Quat::identity()};
-
-    MathLib::Quat b{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, MathLib::PI / 2.0f)};
-
-    MathLib::Quat at0{MathLib::Quat::slerp(a, b, 0.0f)};
-    MathLib::Quat at1{MathLib::Quat::slerp(a, b, 1.0f)};
-
-    TEST_CHECK(approx(at0.w, a.w) && approx(at0.x, a.x) && approx(at0.y, a.y) && approx(at0.z, a.z));
-    TEST_CHECK(approx(at1.w, b.w, 1e-4f) && approx(at1.x, b.x, 1e-4f) && approx(at1.y, b.y, 1e-4f) && approx(at1.z, b.z, 1e-4f));
-}
-
-TEST_CASE(quat_slerp_midpoint)
-{
-    MathLib::Quat a{MathLib::Quat::identity()};
-    MathLib::Quat b{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, MathLib::PI / 2.0f)};
-    MathLib::Quat mid{MathLib::Quat::slerp(a, b, 0.5f)};
-    // Midpoint should be a 45-degree rotation around Y
-    MathLib::Quat expected{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, MathLib::PI / 4.0f)};
-    TEST_CHECK(approx(mid.w, expected.w, 1e-4f) && approx(mid.y, expected.y, 1e-4f));
-}
-
-// ── Projection ──
-
-TEST_CASE(perspective_near_plane_maps_to_zero)
-{
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    // A point on the near plane (z = -near in view space, right-handed)
-    MathLib::Vec4 near_point{0.0f, 0.0f, -0.1f, 1.0f};
-    MathLib::Vec4 clip{proj * near_point};
-    float ndc_z{clip.z / clip.w};
-    TEST_CHECK(approx(ndc_z, 0.0f, 1e-4f));
-}
-
-TEST_CASE(perspective_far_plane_maps_to_one)
-{
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    // A point on the far plane (z = -far in view space)
-    MathLib::Vec4 far_point{0.0f, 0.0f, -100.0f, 1.0f};
-    MathLib::Vec4 clip{proj * far_point};
-    float ndc_z{clip.z / clip.w};
-    TEST_CHECK(approx(ndc_z, 1.0f, 1e-4f));
-}
-
-TEST_CASE(perspective_preserves_y)
-{
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    // Y-flip is handled by slangc -fvk-invert-y, not the projection matrix.
-    // A point above centre in view space should have positive Y in clip space.
-    MathLib::Vec4 above{0.0f, 1.0f, -1.0f, 1.0f};
-    MathLib::Vec4 clip{proj * above};
-    TEST_CHECK(clip.y > 0.0f);
-}
-
-// ── View matrices ──
-
-TEST_CASE(look_at_identity_position)
-{
-    MathLib::Mat4 view{MathLib::lookAt({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f})};
-    // Origin should remain at origin in view space
-    MathLib::Vec4 origin{0.0f, 0.0f, 0.0f, 1.0f};
-    MathLib::Vec4 result{view * origin};
-    TEST_CHECK(approxVec4(result, {0.0f, 0.0f, 0.0f, 1.0f}, 1e-4f));
-}
-
-TEST_CASE(look_at_target_along_negative_z)
-{
-    MathLib::Mat4 view{MathLib::lookAt({0.0f, 0.0f, 5.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f})};
-    // The target (origin) should be at z = -5 in view space
-    MathLib::Vec4 target{0.0f, 0.0f, 0.0f, 1.0f};
-    MathLib::Vec4 result{view * target};
-    TEST_CHECK(approx(result.z, -5.0f, 1e-4f));
-}
-
-TEST_CASE(view_from_quaternion_matches_look_at)
-{
-    MathLib::Vec3 eye{0.0f, 0.0f, 5.0f};
-    MathLib::Vec3 target{0.0f, 0.0f, 0.0f};
-    MathLib::Mat4 from_look_at{MathLib::lookAt(eye, target, {0.0f, 1.0f, 0.0f})};
-    // Identity quaternion looks along -Z, which matches lookAt from (0,0,5) to (0,0,0)
-    MathLib::Mat4 from_quat{MathLib::viewFromQuaternion(eye, MathLib::Quat::identity())};
-    TEST_CHECK(approxMat4(from_look_at, from_quat, 1e-4f));
-}
-
-TEST_CASE(view_from_spherical_at_zero_elevation)
-{
-    MathLib::Vec3 target{0.0f, 0.0f, 0.0f};
-    MathLib::Mat4 view{MathLib::viewFromSpherical(target, 0.0f, 0.0f, 5.0f)};
-    // At azimuth=0, elevation=0, radius=5: camera at (5, 0, 0) looking at origin
-    MathLib::Vec4 origin{0.0f, 0.0f, 0.0f, 1.0f};
-    MathLib::Vec4 result{view * origin};
-    // Origin should be at z = -5 in view space (5 units in front)
-    TEST_CHECK(approx(result.z, -5.0f, 1e-4f));
-}
-
-// ── Additional Vec2 coverage ──
-
-TEST_CASE(vec2_negate)
-{
-    MathLib::Vec2 v{3.0f, -4.0f};
-    TEST_CHECK((-v == MathLib::Vec2{-3.0f, 4.0f}));
-}
-
-TEST_CASE(vec2_compound_assignment)
-{
-    MathLib::Vec2 v{1.0f, 2.0f};
-    v += MathLib::Vec2{3.0f, 4.0f};
-    TEST_CHECK((v == MathLib::Vec2{4.0f, 6.0f}));
-    v -= MathLib::Vec2{1.0f, 1.0f};
-    TEST_CHECK((v == MathLib::Vec2{3.0f, 5.0f}));
-    v *= 2.0f;
-    TEST_CHECK((v == MathLib::Vec2{6.0f, 10.0f}));
-}
-
-// ── Additional Vec4 coverage ──
-
-TEST_CASE(vec4_default_zero)
-{
-    MathLib::Vec4 v;
-    TEST_CHECK((v.x == 0.0f) && (v.y == 0.0f) && (v.z == 0.0f) && (v.w == 0.0f));
-}
-
-TEST_CASE(vec4_arithmetic)
-{
-    MathLib::Vec4 a{1.0f, 2.0f, 3.0f, 4.0f};
-    MathLib::Vec4 b{5.0f, 6.0f, 7.0f, 8.0f};
-    TEST_CHECK(((a + b) == MathLib::Vec4{6.0f, 8.0f, 10.0f, 12.0f}));
-    TEST_CHECK(((a - b) == MathLib::Vec4{-4.0f, -4.0f, -4.0f, -4.0f}));
-    TEST_CHECK(((a * 2.0f) == MathLib::Vec4{2.0f, 4.0f, 6.0f, 8.0f}));
-    TEST_CHECK(((-a) == MathLib::Vec4{-1.0f, -2.0f, -3.0f, -4.0f}));
-}
-
-// ── Additional Mat4 coverage ──
-
-TEST_CASE(mat4_rotate_x_90)
-{
-    MathLib::Mat4 r{MathLib::Mat4::rotate({1.0f, 0.0f, 0.0f}, MathLib::PI / 2.0f)};
-    MathLib::Vec4 v{0.0f, 1.0f, 0.0f, 1.0f};
-    MathLib::Vec4 result{r * v};
-    TEST_CHECK(approxVec4(result, {0.0f, 0.0f, 1.0f, 1.0f}, 1e-4f));
-}
-
-TEST_CASE(mat4_rotate_y_90)
-{
-    MathLib::Mat4 r{MathLib::Mat4::rotate({0.0f, 1.0f, 0.0f}, MathLib::PI / 2.0f)};
-    MathLib::Vec4 v{1.0f, 0.0f, 0.0f, 1.0f};
-    MathLib::Vec4 result{r * v};
-    TEST_CHECK(approxVec4(result, {0.0f, 0.0f, -1.0f, 1.0f}, 1e-4f));
-}
-
-TEST_CASE(mat4_rotate_360_identity)
-{
-    MathLib::Mat4 r{MathLib::Mat4::rotate({0.0f, 1.0f, 0.0f}, 2.0f * MathLib::PI)};
-    TEST_CHECK(approxMat4(r, MathLib::Mat4::identity(), 1e-4f));
-}
-
-// ── Additional Quat coverage ──
-
-TEST_CASE(quat_rotate_around_x)
-{
-    MathLib::Quat q{MathLib::Quat::fromAxisAngle({1.0f, 0.0f, 0.0f}, MathLib::PI / 2.0f)};
-    MathLib::Vec3 v{0.0f, 1.0f, 0.0f};
-    MathLib::Vec3 result{q.rotate(v)};
-    TEST_CHECK(approxVec3(result, {0.0f, 0.0f, 1.0f}, 1e-4f));
-}
-
-TEST_CASE(quat_rotate_around_y)
-{
-    MathLib::Quat q{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, MathLib::PI / 2.0f)};
-    MathLib::Vec3 v{1.0f, 0.0f, 0.0f};
-    MathLib::Vec3 result{q.rotate(v)};
-    TEST_CHECK(approxVec3(result, {0.0f, 0.0f, -1.0f}, 1e-4f));
-}
-
-TEST_CASE(quat_length)
-{
-    MathLib::Quat q{1.0f, 2.0f, 3.0f, 4.0f};
-    float expected{std::sqrt(1.0f + 4.0f + 9.0f + 16.0f)};
-    TEST_CHECK(approx(q.length(), expected));
-}
-
-TEST_CASE(quat_slerp_short_path)
-{
-    // Two quaternions that represent the same rotation but with opposite signs.
-    // Slerp should take the short path (negate one).
-
-    MathLib::Quat a{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, 0.1f)};
-    MathLib::Quat b{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, 0.2f)};
-    MathLib::Quat neg_b{-b.w, -b.x, -b.y, -b.z};
-    // Slerp with negated b should produce the same result as slerp with b
-    // (the short path logic adjusts internally)
-    MathLib::Quat result_pos{MathLib::Quat::slerp(a, b, 0.5f)};
-    MathLib::Quat result_neg{MathLib::Quat::slerp(a, neg_b, 0.5f)};
-    // Both should rotate a vector the same way
-    MathLib::Vec3 v{1.0f, 0.0f, 0.0f};
-    TEST_CHECK(approxVec3(result_pos.rotate(v), result_neg.rotate(v), 1e-4f));
-}
-
-// ── Additional Projection coverage ──
-
-TEST_CASE(perspective_centre_maps_to_origin)
-{
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    // A point at the centre of the view (on the -Z axis) should map to (0, 0) in NDC
-    MathLib::Vec4 centre{0.0f, 0.0f, -1.0f, 1.0f};
-    MathLib::Vec4 clip{proj * centre};
-    float ndc_x{clip.x / clip.w};
-    float ndc_y{clip.y / clip.w};
-    TEST_CHECK(approx(ndc_x, 0.0f, 1e-4f));
-    TEST_CHECK(approx(ndc_y, 0.0f, 1e-4f));
-}
-
-TEST_CASE(perspective_aspect_ratio)
-{
-    MathLib::Mat4 proj_wide{MathLib::perspective(MathLib::PI / 2.0f, 2.0f, 0.1f, 100.0f)};
-    MathLib::Mat4 proj_tall{MathLib::perspective(MathLib::PI / 2.0f, 0.5f, 0.1f, 100.0f)};
-    // A point at (1, 0, -1) should have different NDC X for different aspect ratios
-    MathLib::Vec4 point{1.0f, 0.0f, -1.0f, 1.0f};
-    MathLib::Vec4 clip_wide{proj_wide * point};
-    MathLib::Vec4 clip_tall{proj_tall * point};
-    float ndc_x_wide{clip_wide.x / clip_wide.w};
-    float ndc_x_tall{clip_tall.x / clip_tall.w};
-    // Wide aspect should compress X more (smaller NDC X)
-    TEST_CHECK(std::fabs(ndc_x_wide) < std::fabs(ndc_x_tall));
-}
-
-// ── Additional View coverage ──
-
-TEST_CASE(view_from_spherical_elevated)
-{
-    MathLib::Vec3 target{0.0f, 0.0f, 0.0f};
-    // Camera directly above, looking down
-    MathLib::Mat4 view{MathLib::viewFromSpherical(target, 0.0f, MathLib::PI / 2.0f, 10.0f)};
-    MathLib::Vec4 origin{0.0f, 0.0f, 0.0f, 1.0f};
-    MathLib::Vec4 result{view * origin};
-    // Origin should be at z = -10 in view space (10 units in front of camera)
-    TEST_CHECK(approx(result.z, -10.0f, 1e-3f));
-}
-
-TEST_CASE(view_from_quaternion_rotated)
-{
-    MathLib::Vec3 position{0.0f, 0.0f, 5.0f};
-    // Rotate 180 degrees around Y — camera at (0,0,5) now looks along +Z (away from origin)
-    MathLib::Quat orientation{MathLib::Quat::fromAxisAngle({0.0f, 1.0f, 0.0f}, MathLib::PI)};
-    MathLib::Mat4 view{MathLib::viewFromQuaternion(position, orientation)};
-    MathLib::Vec4 origin{0.0f, 0.0f, 0.0f, 1.0f};
-    MathLib::Vec4 result{view * origin};
-    // Origin should now be BEHIND the camera (positive Z in view space)
-    TEST_CHECK(result.z > 0.0f);
-}
-
-// ── Frustum culling ──
-
-TEST_CASE(frustum_point_in_front_is_visible)
-{
-    MathLib::Mat4 view{MathLib::lookAt({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f})};
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    MathLib::Mat4 vp{proj * view};
-    MathLib::Frustum frustum{MathLib::extractFrustum(vp)};
-    // Point directly in front of camera — should be visible
-    TEST_CHECK(MathLib::isInsideFrustum(frustum, {0.0f, 0.0f, -5.0f}, 0.5f));
-}
-
-TEST_CASE(frustum_point_behind_is_culled)
-{
-    MathLib::Mat4 view{MathLib::lookAt({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f})};
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    MathLib::Mat4 vp{proj * view};
-    MathLib::Frustum frustum{MathLib::extractFrustum(vp)};
-    // Point behind camera — should be culled
-    TEST_CHECK(!MathLib::isInsideFrustum(frustum, {0.0f, 0.0f, 5.0f}, 0.5f));
-}
-
-TEST_CASE(frustum_point_far_left_is_culled)
-{
-    MathLib::Mat4 view{MathLib::lookAt({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f})};
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    MathLib::Mat4 vp{proj * view};
-    MathLib::Frustum frustum{MathLib::extractFrustum(vp)};
-    // Point far to the left — should be culled
-    TEST_CHECK(!MathLib::isInsideFrustum(frustum, {-50.0f, 0.0f, -5.0f}, 0.5f));
-}
-
-TEST_CASE(frustum_point_beyond_far_plane_is_culled)
-{
-    MathLib::Mat4 view{MathLib::lookAt({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f})};
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    MathLib::Mat4 vp{proj * view};
-    MathLib::Frustum frustum{MathLib::extractFrustum(vp)};
-    // Point beyond far plane — should be culled
-    TEST_CHECK(!MathLib::isInsideFrustum(frustum, {0.0f, 0.0f, -200.0f}, 0.5f));
-}
-
-TEST_CASE(frustum_large_sphere_partially_visible)
-{
-    MathLib::Mat4 view{MathLib::lookAt({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f}, {0.0f, 1.0f, 0.0f})};
-    MathLib::Mat4 proj{MathLib::perspective(MathLib::PI / 2.0f, 1.0f, 0.1f, 100.0f)};
-    MathLib::Mat4 vp{proj * view};
-    MathLib::Frustum frustum{MathLib::extractFrustum(vp)};
-    // Large sphere centred behind camera but large enough to intersect frustum
-    TEST_CHECK(MathLib::isInsideFrustum(frustum, {0.0f, 0.0f, 5.0f}, 10.0f));
 }
 
 int main()

@@ -425,6 +425,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **The rasteriser's share of MathLib, none of which this renderer calls.** The tracer builds rays
+  from the camera's basis vectors and field of view directly, and the BVH is the culling — so
+  `projection.hpp` in its entirety (`perspective`, `lookAt`, `viewFromQuaternion`,
+  `viewFromSpherical`, `Plane`, `Frustum`, `extractFrustum`, `isInsideFrustum`) had no caller
+  outside MathLib's own tests, along with `Quat::slerp`, `Quat::toMat4`, `Mat4::transposed`,
+  `Mat4::data()` and the whole of `Vec2`. Inherited from the ancestor renderer and kept by
+  momentum; a library's tests are not a user. Deleting `toMat4` also decouples quaternion.hpp from
+  matrix.hpp entirely. `Mat4::scale` stays despite being test-only, because a non-uniform scale is
+  what makes the `inversed()` round-trip test strong. MathLib shrinks by roughly a third.
 - The swapchain's storage-write path: a format search preferring storage-capable formats, a
   two-part capability probe, two warnings, a conditional usage flag, an accessor and a member — all
   serving a "write straight into the swapchain image" strategy the renderer abandoned when it
@@ -462,6 +471,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Mat4::inversed()` no longer answers a singular matrix with the identity, silently.** Its one
+  production caller caches the result as an instance's world-to-geometry transform, so the old
+  fallback would have placed geometry wrongly with no diagnostic at all — the failure mode this
+  repository trusts least. A singular matrix now throws `std::runtime_error`, pinned by a test
+  that was watched fail against the old fallback first.
 - **Device scoring rewarded compute on the graphics family instead of requiring it**, which was a
   real selection bug rather than a cosmetic one. This renderer is nothing but compute dispatches, and
   the constructor aborts on a device that cannot dispatch them — but scoring gave such a device 10,000

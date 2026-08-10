@@ -14,15 +14,13 @@
 
 #pragma once
 
-#include "math/matrix.hpp"
 #include "math/vector.hpp"
-#include <algorithm>
 #include <cmath>
 
 namespace MathLib
 {
 
-    //! Quaternion for 3D rotations — no gimbal lock, smooth interpolation via slerp.
+    //! Quaternion for 3D rotations — no gimbal lock.
     struct Quat {
         float w{1.0f}; //!< Scalar (real) part. Default is identity rotation.
         float x{0.0f}; //!< X component of the vector (imaginary) part.
@@ -91,72 +89,6 @@ namespace MathLib
             Vec3 qv{x, y, z};
             Vec3 t = qv.cross(v) * 2.0f;
             return v + t * w + qv.cross(t);
-        }
-
-        //! Converts this quaternion to a 4x4 rotation matrix.
-        [[nodiscard]] Mat4 toMat4() const
-        {
-            float xx = x * x;
-            float yy = y * y;
-            float zz = z * z;
-            float xy = x * y;
-            float xz = x * z;
-            float yz = y * z;
-            float wx = w * x;
-            float wy = w * y;
-            float wz = w * z;
-
-            Mat4 result{};
-            result(0, 0) = 1.0f - 2.0f * (yy + zz);
-            result(0, 1) = 2.0f * (xy + wz);
-            result(0, 2) = 2.0f * (xz - wy);
-
-            result(1, 0) = 2.0f * (xy - wz);
-            result(1, 1) = 1.0f - 2.0f * (xx + zz);
-            result(1, 2) = 2.0f * (yz + wx);
-
-            result(2, 0) = 2.0f * (xz + wy);
-            result(2, 1) = 2.0f * (yz - wx);
-            result(2, 2) = 1.0f - 2.0f * (xx + yy);
-
-            result(3, 3) = 1.0f;
-            return result;
-        }
-
-        //! Spherical linear interpolation between two quaternions.
-        [[nodiscard]] static Quat slerp(const Quat& a, const Quat& b, float t)
-        {
-            float cos_theta = a.dot(b);
-
-            // If the dot product is negative, negate one quaternion to take the short path.
-            Quat b_adj = b;
-            if (cos_theta < 0.0f) {
-                cos_theta = -cos_theta;
-                b_adj = {-b.w, -b.x, -b.y, -b.z};
-            }
-
-            // If quaternions are very close, use linear interpolation to avoid division by zero.
-            if (cos_theta > 0.9995f) {
-                return Quat{
-                    a.w + t * (b_adj.w - a.w),
-                    a.x + t * (b_adj.x - a.x),
-                    a.y + t * (b_adj.y - a.y),
-                    a.z + t * (b_adj.z - a.z),
-                }
-                    .normalised();
-            }
-
-            float theta{std::acos(std::min(cos_theta, 1.0f))};
-            float sin_theta = std::sin(theta);
-            float wa = std::sin((1.0f - t) * theta) / sin_theta;
-            float wb = std::sin(t * theta) / sin_theta;
-
-            return {
-                wa * a.w + wb * b_adj.w,
-                wa * a.x + wb * b_adj.x,
-                wa * a.y + wb * b_adj.y,
-                wa * a.z + wb * b_adj.z,
-            };
         }
 
         [[nodiscard]] constexpr bool operator==(const Quat& other) const = default;
