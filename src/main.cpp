@@ -39,6 +39,7 @@
 #include "postprocess.hpp"
 #include "profiler.hpp"
 #include "roster.hpp"
+#include "senses.hpp"
 #include "program_library.hpp"
 #include "spectator.hpp"
 #include "surface.hpp"
@@ -383,6 +384,50 @@ namespace
     {
         const MathLib::Vec3 column{0.7f, 5.0f, 0.7f};
         return generateBox(plantOnFloor(-2.0f, -12.0f, column, floor_config), column);
+    }
+
+    // The Grid: a mirror floor under a low terraced relief, with neon tubes along its grid lines.
+    constexpr GridFloorConfig GRID_FLOOR_CONFIG{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
+
+    /*
+        Thin tubes, sitting almost on the floor.
+
+        A rasteriser would need them wide and lifted, because a strip narrower than a pixel breaks
+        into dashes and a coplanar strip fights the depth buffer. The tracer has neither problem: it
+        samples geometry analytically and has no depth buffer at all, so the tubes can be the slender
+        lines the aesthetic actually wants.
+
+        The lift clears the steepest terrace gradient across the tube's half width; at 0.01 m the
+        outer edge of a strip dipped below the floor on riser cells.
+    */
+    constexpr NeonTubeConfig NEON_TUBE_CONFIG{.half_width = 0.025f, .surface_offset = 0.02f};
+
+    /*!
+        Every triangle of the Grid, materials assigned, ready for `BvhLib::build`.
+
+        One assembly for every consumer: the renderer uploads what this returns, and the headless
+        Program run gathers hearing from it — so a creature necessarily hears the very Grid the User
+        would see, rather than a second copy maintained in step.
+    */
+    [[nodiscard]] std::vector<BvhLib::Triangle> buildGridTriangles()
+    {
+        const Mesh floor{generateGridFloor(GRID_FLOOR_CONFIG)};
+        const NeonGrid neon{generateGridFloorNeon(GRID_FLOOR_CONFIG, NEON_TUBE_CONFIG)};
+
+        const Mesh pillars{makePillars(GRID_FLOOR_CONFIG)};
+        const Mesh glass{makeGlassSlabs(GRID_FLOOR_CONFIG)};
+        const Mesh glowing_column{makeGlowingColumn(GRID_FLOOR_CONFIG)};
+
+        std::vector<BvhLib::Triangle> world_triangles;
+        world_triangles.reserve(floor.triangleCount() + neon.primary.triangleCount() + neon.accent.triangleCount() + pillars.triangleCount() + glass.triangleCount()
+            + glowing_column.triangleCount());
+        appendTriangles(world_triangles, floor, MATERIAL_FLOOR);
+        appendTriangles(world_triangles, neon.primary, MATERIAL_NEON_PRIMARY);
+        appendTriangles(world_triangles, neon.accent, MATERIAL_NEON_ACCENT);
+        appendTriangles(world_triangles, pillars, MATERIAL_PILLAR);
+        appendTriangles(world_triangles, glass, MATERIAL_GLASS);
+        appendTriangles(world_triangles, glowing_column, MATERIAL_GLOWING_GLASS);
+        return world_triangles;
     }
 
     /*!
@@ -1422,16 +1467,25 @@ int main(int argc, char** argv)
 
             /*
                 With --ticks the Program is not merely checked but run: rezzed onto a body, given
-                that many turns, and derezzed. The body has no physics and no senses worth the
-                name yet, so what this proves is the round trip — that a library somebody else
-                compiled can move something on the Grid, and that the Grid decides how much of
-                what it asked for it is willing to act on.
+                that many turns, and derezzed. The body has no physics yet, but it hears: its ears
+                gather the Grid's hum through the same hierarchy the renderer traces, on the host,
+                which is why this mode still needs no device. What it proves is the round trip —
+                that a library somebody else compiled can perceive something of the Grid and move
+                on it, and that the Grid decides how much of what it asked for it is willing to
+                act on.
             */
             if (ticks > 0u) {
+                const BvhLib::Bvh grid_hierarchy{BvhLib::build(buildGridTriangles())};
+
+                BvhLib::Scene scene{};
+                scene.instances.push_back(BvhLib::makeInstance(grid_hierarchy, 0u, MathLib::Mat4::identity()));
+                scene.geometries.push_back(grid_hierarchy);
+
+                GridSensesSource senses_source{scene, Acoustics::makeAcousticSourceStrengths()};
                 RosterLib::Roster roster{directory, program_identifier, 1u};
 
                 for (uint32_t index{0u}; index < ticks; ++index) {
-                    roster.tick();
+                    roster.tick(senses_source);
                 }
 
                 const RosterLib::Creature& creature{roster.creatures().front()};
@@ -1484,37 +1538,10 @@ int main(int argc, char** argv)
             swapchain = std::make_unique<Swapchain>(device, *surface, window->width(), window->height(), logger);
         }
 
-        // The Grid: a mirror floor under a low terraced relief, with neon tubes along its grid lines.
-        const GridFloorConfig floor_config{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
+        // The one assembly of the Grid, shared with the headless Program run — see buildGridTriangles.
+        const GridFloorConfig& floor_config{GRID_FLOOR_CONFIG};
 
-        /*
-            Thin tubes, sitting almost on the floor.
-
-            A rasteriser would need them wide and lifted, because a strip narrower than a pixel
-            breaks into dashes and a coplanar strip fights the depth buffer. The tracer has neither
-            problem: it samples geometry analytically and has no depth buffer at all, so the tubes
-            can be the slender lines the aesthetic actually wants.
-        */
-        // The lift clears the steepest terrace gradient across the tube's half width; at 0.01 m
-        // the outer edge of a strip dipped below the floor on riser cells.
-        const NeonTubeConfig tube_config{.half_width = 0.025f, .surface_offset = 0.02f};
-
-        const Mesh floor{generateGridFloor(floor_config)};
-        const NeonGrid neon{generateGridFloorNeon(floor_config, tube_config)};
-
-        const Mesh pillars{makePillars(floor_config)};
-        const Mesh glass{makeGlassSlabs(floor_config)};
-        const Mesh glowing_column{makeGlowingColumn(floor_config)};
-
-        std::vector<BvhLib::Triangle> world_triangles;
-        world_triangles.reserve(floor.triangleCount() + neon.primary.triangleCount() + neon.accent.triangleCount() + pillars.triangleCount() + glass.triangleCount()
-            + glowing_column.triangleCount());
-        appendTriangles(world_triangles, floor, MATERIAL_FLOOR);
-        appendTriangles(world_triangles, neon.primary, MATERIAL_NEON_PRIMARY);
-        appendTriangles(world_triangles, neon.accent, MATERIAL_NEON_ACCENT);
-        appendTriangles(world_triangles, pillars, MATERIAL_PILLAR);
-        appendTriangles(world_triangles, glass, MATERIAL_GLASS);
-        appendTriangles(world_triangles, glowing_column, MATERIAL_GLOWING_GLASS);
+        std::vector<BvhLib::Triangle> world_triangles{buildGridTriangles()};
 
         const std::chrono::steady_clock::time_point build_start{std::chrono::steady_clock::now()};
         const BvhLib::Bvh bvh{BvhLib::build(std::move(world_triangles))};
