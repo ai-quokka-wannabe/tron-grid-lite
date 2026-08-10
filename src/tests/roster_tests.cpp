@@ -39,6 +39,13 @@ namespace
         return std::filesystem::path{TGL_TEST_PROGRAM_DIR};
     }
 
+    //! The source for ticks that test everything but the traced senses.
+    [[nodiscard]] RosterLib::NullSensesSource& nullSenses()
+    {
+        static RosterLib::NullSensesSource source;
+        return source;
+    }
+
     //! Bounds of the body every creature currently gets, repeated here so a drifting bound is caught
     //! rather than absorbed. The roster owns the real ones; this is the other side of that fact.
     constexpr float MAX_FORWARD_SPEED{1.0f};
@@ -169,6 +176,61 @@ TEST_CASE(a_positive_yaw_turns_to_the_creatures_left)
     TEST_CHECK(near(quarter_left.z, 0.0f));
 }
 
+TEST_CASE(a_body_point_is_carried_by_the_pose)
+{
+    // At rest the body frame is the world frame shifted: a sensor's position is an offset.
+    const RosterLib::Pose at_rest{.position = MathLib::Vec3{5.0f, 1.0f, -3.0f}, .yaw = 0.0f};
+    const MathLib::Vec3 carried{RosterLib::worldFromBody(at_rest, MathLib::Vec3{0.0f, 0.5f, -0.2f})};
+    TEST_CHECK(near(carried.x, 5.0f));
+    TEST_CHECK(near(carried.y, 1.5f));
+    TEST_CHECK(near(carried.z, -3.2f));
+
+    /*
+        A quarter turn left must carry a forward-mounted sensor to where the body now faces —
+        the same promise forwardFor makes, checked through the general transform: a point 0.2 m
+        ahead on the body ends up 0.2 m along -X in the world.
+    */
+    const RosterLib::Pose turned{.position = MathLib::Vec3{}, .yaw = 1.5707964f};
+    const MathLib::Vec3 ahead{RosterLib::worldFromBody(turned, MathLib::Vec3{0.0f, 0.0f, -0.2f})};
+    TEST_CHECK(near(ahead.x, -0.2f));
+    TEST_CHECK(near(ahead.y, 0.0f));
+    TEST_CHECK(near(ahead.z, 0.0f));
+}
+
+TEST_CASE(the_senses_source_is_asked_once_per_creature_per_tick)
+{
+    /*
+        The seam itself: the roster must consult the source after the kinematic senses are set and
+        once for every creature it ticks, because a source that is skipped produces a creature that
+        is deaf without anything failing.
+    */
+    class CountingSource final : public RosterLib::SensesSource {
+    public:
+        void fill(const RosterLib::Creature& creature, TglSenses& senses) override
+        {
+            ++calls;
+            saw_dt = (senses.dt_seconds == RosterLib::TICK_SECONDS);
+            saw_ears_declared = (creature.body.ear_count == 2u) && (creature.body.ears != nullptr);
+        }
+
+        uint32_t calls{0u};
+        bool saw_dt{false};
+        bool saw_ears_declared{false};
+    };
+
+    CountingSource source;
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 3u};
+    roster.tick(source);
+    roster.tick(source);
+
+    TEST_CHECK_EQUAL(source.calls, 6u);
+    TEST_CHECK(source.saw_dt);
+
+    // The first body now declares two ears, whose descriptors must survive past the rez call —
+    // the roster's copy carries pointers, and this is where they are proven still valid.
+    TEST_CHECK(source.saw_ears_declared);
+}
+
 // ---------------------------------------------------------------------------------------------
 // A Program driving a body
 // ---------------------------------------------------------------------------------------------
@@ -184,7 +246,7 @@ TEST_CASE(a_steady_program_moves_its_body_exactly_where_it_asked)
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u};
 
     for (uint32_t index{0u}; index < RosterLib::TICKS_PER_SECOND; ++index) {
-        roster.tick();
+        roster.tick(nullSenses());
     }
 
     const RosterLib::Creature& creature{roster.creatures().front()};
@@ -204,7 +266,7 @@ TEST_CASE(a_program_asking_for_more_than_its_body_has_gets_the_body)
         and nothing that is not a number reaches it.
     */
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u};
-    roster.tick();
+    roster.tick(nullSenses());
 
     const RosterLib::Creature& creature{roster.creatures().front()};
 
@@ -234,7 +296,7 @@ TEST_CASE(a_turning_body_moves_along_the_arc_it_is_on_rather_than_the_one_it_has
         green.
     */
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u};
-    roster.tick();
+    roster.tick(nullSenses());
 
     const RosterLib::Creature& creature{roster.creatures().front()};
 
@@ -250,7 +312,7 @@ TEST_CASE(a_program_that_writes_nothing_leaves_its_body_still)
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_silent", 1u};
 
     for (uint32_t index{0u}; index < 10u; ++index) {
-        roster.tick();
+        roster.tick(nullSenses());
     }
 
     const RosterLib::Creature& creature{roster.creatures().front()};
@@ -269,7 +331,7 @@ TEST_CASE(proprioception_reports_what_the_body_did_rather_than_what_was_asked)
         request back would make a body indistinguishable from a faster one.
     */
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u};
-    roster.tick();
+    roster.tick(nullSenses());
 
     TEST_CHECK(near(roster.creatures().front().forward_speed, MAX_FORWARD_SPEED));
     TEST_CHECK(!near(roster.creatures().front().forward_speed, 10.0f));
@@ -282,7 +344,7 @@ TEST_CASE(a_program_that_declines_to_rez_stops_the_roster)
     std::string message;
     try {
         RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_refuses_rez", 1u};
-        roster.tick();
+        roster.tick(nullSenses());
     } catch (const std::runtime_error& error) {
         message = error.what();
     }
@@ -294,7 +356,7 @@ TEST_CASE(a_program_that_declines_to_rez_stops_the_roster)
 TEST_CASE(every_creature_in_a_roster_gets_its_own_turn_and_its_own_seed)
 {
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 3u};
-    roster.tick();
+    roster.tick(nullSenses());
 
     const std::vector<RosterLib::Creature>& creatures{roster.creatures()};
     TEST_CHECK_EQUAL(creatures.size(), static_cast<size_t>(3u));

@@ -73,6 +73,10 @@ namespace RosterLib
     //! The direction a body faces at a given yaw, in world space. Unit length.
     [[nodiscard]] MathLib::Vec3 forwardFor(float yaw) noexcept;
 
+    //! A body-frame point carried into world space by a pose: rotated by the yaw, then translated.
+    //! This is how a sensor's position on the body becomes the place it senses from.
+    [[nodiscard]] MathLib::Vec3 worldFromBody(const Pose& pose, const MathLib::Vec3& body_point) noexcept;
+
     /*!
         Replaces non-finite values with zero and then clamps to the body's bounds.
 
@@ -94,6 +98,46 @@ namespace RosterLib
         \param desc The body, which carries the bounds.
     */
     void sanitiseAndClamp(TglActions& actions, const TglCreatureDesc& desc) noexcept;
+
+    struct Creature;
+
+    /*!
+        Fills the senses only the tracers can answer: eyes, ears and irradiance.
+
+        An interface rather than a member, because what stands behind it differs by run mode: the
+        real one holds the Grid's geometry, the GPU-free tests hold a stub, and the roster's own
+        promise — no Vulkan — is kept by never knowing which it was handed.
+
+        Everything a fill wires into `senses` is storage the source owns, borrowed for the one
+        `program_tick` call exactly as the ABI specifies, and overwritten by the next fill. A source
+        is called once per creature per tick, in roster order, on the tick thread.
+    */
+    class SensesSource {
+    public:
+        virtual ~SensesSource() = default;
+
+        SensesSource(const SensesSource&) = delete;
+        SensesSource& operator=(const SensesSource&) = delete;
+        SensesSource(SensesSource&&) = delete;
+        SensesSource& operator=(SensesSource&&) = delete;
+
+        //! Fills eyes, ears and irradiance for one creature. The kinematic senses are already set.
+        virtual void fill(const Creature& creature, TglSenses& senses) = 0;
+
+    protected:
+        SensesSource() = default;
+    };
+
+    //! A source for runs with nothing to sense: every traced sense stays at its zeroed default,
+    //! which the ABI defines as a body with no eyes, no ears and no thermoreception.
+    class NullSensesSource final : public SensesSource {
+    public:
+        NullSensesSource() = default;
+
+        void fill(const Creature&, TglSenses&) override
+        {
+        }
+    };
 
     //! One creature: the body the Grid moves, and the Program handle that drives it.
     struct Creature {
@@ -143,12 +187,15 @@ namespace RosterLib
         /*!
             Gives every creature one turn, in roster order.
 
-            Senses are assembled, the Program is called, its actions are sanitised and clamped, and
-            the body is moved. Nothing here consults another creature's state, so roster order is not
-            yet load-bearing — and the moment it would be, that is a change worth arguing about
-            rather than discovering.
+            Senses are assembled — the kinematic ones here, the traced ones by `senses_source` — the
+            Program is called, its actions are sanitised and clamped, and the body is moved. Nothing
+            here consults another creature's state, so roster order is not yet load-bearing — and
+            the moment it would be, that is a change worth arguing about rather than discovering.
+
+            \param senses_source Fills eyes, ears and irradiance per creature. Storage it wires in
+                   is valid for that creature's `program_tick` call only.
         */
-        void tick();
+        void tick(SensesSource& senses_source);
 
         [[nodiscard]] const std::vector<Creature>& creatures() const noexcept;
 

@@ -16,6 +16,7 @@ add_executable(${PROJECT_NAME}
     spectator.cpp
     program_library.cpp
     roster.cpp
+    senses.cpp
     cinematic.cpp
 )
 

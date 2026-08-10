@@ -14,6 +14,9 @@
 
 #include "roster.hpp"
 
+#include "acoustics.hpp"
+
+#include <array>
 #include <cmath>
 #include <stdexcept>
 #include <string>
@@ -21,7 +24,52 @@
 namespace
 {
 
-    //! The body every creature gets until glTF bodies arrive. One rigid piece, no sensors yet.
+    /*!
+        The first body's audiogram, and the storage its descriptors borrow for the whole run.
+
+        Static rather than per-creature, because every creature currently is this one body, and the
+        descriptor copy the roster keeps carries pointers that must outlive every tick.
+
+        Four bands, edged so that each contains exactly one harmonic of the Grid's 3 kHz hum — which
+        is what makes `GatherConfig`'s unit spectrum the correct resolution of that hum into these
+        bands, with nothing to compute. A preset body with a real audiogram computes its own; this
+        body's hearing was chosen to make the arithmetic legible while the loop is being trusted.
+
+        Air absorption is zero, which the gather documents as a legitimate specification: below a
+        few kilohertz air is very nearly transparent across the 20 m range cap, and a non-zero row
+        here would be a number invented rather than evaluated from ISO 9613-1.
+    */
+    constexpr std::array<float, Acoustics::BAND_COUNT + 1u> FIRST_BODY_BAND_EDGES_HZ{2000.0f, 4500.0f, 7500.0f, 10500.0f, 13500.0f};
+    constexpr std::array<float, Acoustics::BAND_COUNT> FIRST_BODY_AIR_ABSORPTION_DB_PER_KM{0.0f, 0.0f, 0.0f, 0.0f};
+
+    /*!
+        Two ears, twenty centimetres ahead of and behind the body origin along its own -Z.
+
+        Two rather than one because the path-length difference between them is the entire physical
+        basis the ABI offers for localisation, and an ear pair that shared a position would collapse
+        it. The bin count and width are the gather's own, asserted by initialisation: a body asking
+        for different ones would need a resampling stage nothing requires yet.
+    */
+    constexpr std::array<TglEarDesc, 2u> FIRST_BODY_EARS{
+        TglEarDesc{
+            .band_edges_hz = FIRST_BODY_BAND_EDGES_HZ.data(),
+            .air_absorption_db_per_km = FIRST_BODY_AIR_ABSORPTION_DB_PER_KM.data(),
+            .position = {0.0f, 0.0f, -0.2f},
+            .band_count = Acoustics::BAND_COUNT,
+            .bin_count = Acoustics::BIN_COUNT,
+            .bin_seconds = Acoustics::BIN_SECONDS,
+        },
+        TglEarDesc{
+            .band_edges_hz = FIRST_BODY_BAND_EDGES_HZ.data(),
+            .air_absorption_db_per_km = FIRST_BODY_AIR_ABSORPTION_DB_PER_KM.data(),
+            .position = {0.0f, 0.0f, 0.2f},
+            .band_count = Acoustics::BAND_COUNT,
+            .bin_count = Acoustics::BIN_COUNT,
+            .bin_seconds = Acoustics::BIN_SECONDS,
+        },
+    };
+
+    //! The body every creature gets until glTF bodies arrive. One rigid piece; ears, no eyes yet.
     [[nodiscard]] TglCreatureDesc firstBody(uint64_t creature_id) noexcept
     {
         TglCreatureDesc desc{};
@@ -35,9 +83,9 @@ namespace
         desc.random_seed = 0x9E3779B97F4A7C15ull ^ (creature_id * 0x1000193ull);
 
         desc.eyes = nullptr;
-        desc.ears = nullptr;
+        desc.ears = FIRST_BODY_EARS.data();
         desc.eye_count = 0u;
-        desc.ear_count = 0u;
+        desc.ear_count = static_cast<uint32_t>(FIRST_BODY_EARS.size());
         desc.irradiance_sample_count = 0u;
         desc.max_contact_count = 0u;
 
@@ -88,6 +136,18 @@ namespace RosterLib
             positive desired_turn_rate.
         */
         return MathLib::Vec3{-std::sin(yaw), 0.0f, -std::cos(yaw)};
+    }
+
+    MathLib::Vec3 worldFromBody(const Pose& pose, const MathLib::Vec3& body_point) noexcept
+    {
+        /*
+            The same rotation forwardFor applies to -Z, applied to an arbitrary point: a right-handed
+            yaw about +Y carries (x, z) to (x cos + z sin, z cos - x sin). At yaw zero this is the
+            identity, so a sensor's body position is simply an offset from where the body stands.
+        */
+        const float sin_yaw{std::sin(pose.yaw)};
+        const float cos_yaw{std::cos(pose.yaw)};
+        return pose.position + MathLib::Vec3{(body_point.x * cos_yaw) + (body_point.z * sin_yaw), body_point.y, (body_point.z * cos_yaw) - (body_point.x * sin_yaw)};
     }
 
     void sanitiseAndClamp(TglActions& actions, const TglCreatureDesc& desc) noexcept
@@ -152,14 +212,14 @@ namespace RosterLib
         }
     }
 
-    void Roster::tick()
+    void Roster::tick(SensesSource& senses_source)
     {
         for (Creature& creature : m_creatures) {
             TglSenses senses{};
             senses.tick = m_tick;
             senses.dt_seconds = TICK_SECONDS;
 
-            // What the actuators reported last tick. The rest stays zero until the tracers fill it.
+            // What the actuators reported last tick.
             senses.body_forward_speed = creature.forward_speed;
             senses.body_vertical_speed = creature.vertical_speed;
             senses.body_turn_rate = creature.turn_rate;
@@ -174,6 +234,9 @@ namespace RosterLib
 
             // This one is already true. The body really is turning at the rate it was given.
             senses.angular_velocity[1] = creature.turn_rate;
+
+            // The traced senses: eyes, ears, irradiance. Contacts wait for physics.
+            senses_source.fill(creature, senses);
 
             TglActions actions{};
             m_library.vtable().program_tick(creature.program, &senses, &actions);

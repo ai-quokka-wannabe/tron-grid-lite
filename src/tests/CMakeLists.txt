@@ -39,7 +39,14 @@ add_test(NAME program_library_tests COMMAND program_library_tests)
 # for the same reason geometry_tests does: extracting a library for one consumer would be an
 # abstraction without a second use case.
 add_executable(roster_tests roster_tests.cpp ../roster.cpp ../program_library.cpp)
-target_link_libraries(roster_tests PRIVATE program_abi math testing ${CMAKE_DL_LIBS})
+target_link_libraries(roster_tests PRIVATE program_abi math bvh testing ${CMAKE_DL_LIBS})
 target_compile_definitions(roster_tests PRIVATE TGL_TEST_PROGRAM_DIR="$<TARGET_FILE_DIR:tgl_test_program>")
 add_dependencies(roster_tests tgl_test_programs)
 add_test(NAME roster_tests COMMAND roster_tests)
+
+# A creature hearing the Grid is likewise a complete thing to check with no device: the senses seam
+# takes a Creature rather than a Roster, so no Program library is needed either — the tests build
+# the creature by hand and hold the source to the ABI's own promises about what it wires in.
+add_executable(senses_tests senses_tests.cpp ../senses.cpp ../roster.cpp ../program_library.cpp ../acoustics.cpp)
+target_link_libraries(senses_tests PRIVATE program_abi math bvh testing ${CMAKE_DL_LIBS})
+add_test(NAME senses_tests COMMAND senses_tests)

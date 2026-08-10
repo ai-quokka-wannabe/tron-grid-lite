@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A creature hears the Grid.** The first traced sense crosses the ABI: the roster gained a senses
+  seam — a `SensesSource` the run mode hands in, so the tick loop stays free of Vulkan and of the
+  Grid alike — and `GridSensesSource` fills `TglEarView`s from `Acoustics::gather`, the same host
+  gather the verification modes hold the device to. The first body grew two ears, twenty
+  centimetres ahead of and behind its origin, with band edges chosen so each band holds one
+  harmonic of the Grid's hum; the `--program --ticks` run now assembles the very Grid the renderer
+  draws (one `buildGridTriangles` for both consumers) and gathers hearing from it, still with no
+  device. A stationary ear is answered from the previous solve — the gather is pure, so the cached
+  answer *is* the right one, keyed exactly on the ear's world position — and the keyed skip the
+  acoustics header obliged "whatever eventually drives solves" to perform now exists, pinned by a
+  test that watched a stale cache fail to notice a moved creature. Eyes and irradiance are radiance
+  questions and arrive with the device pass; a body declaring them today is refused loudly rather
+  than left silently unseeing. Senses storage honours the ABI's promises the hard way: 16-byte
+  aligned energy, repeated counts asserted against the descriptor, and everything borrowed for one
+  `program_tick` only.
+
 - **TestingLib hardened at its two crash-or-silence edges, and taught three things every suite
   wanted.** Two of the changes are fixes by this repository's own rules. A test body throwing
   anything that is not a `std::exception` used to escape `runAll`, propagate out of `main` and
