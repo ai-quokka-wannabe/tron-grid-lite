@@ -212,6 +212,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Whitted walk moved into a `grid_optics` module, licensed by byte-identity.** `trace.slang`
+  promised from its first line that "the same kernel will serve creature sensors", and the eye
+  pass is now due — so `Material`, Fresnel and the whole of `radiance` moved into a module both
+  pipelines import, with the scene buffers as parameters exactly as `grid_bvh` takes them, so the
+  module imposes no binding numbers on anybody. What remains in `trace.slang` is the camera, the
+  pixel grid and one `radiance` call per pixel; a creature eye will be the same call per sample,
+  from its own pipeline, and the two cannot drift because there is one walk. The reference render
+  was re-recorded on the RTX 4090 after the move: `68B384D9…E0501E`, identical to the last byte —
+  the same licence that covered the `grid_bvh` extraction before it.
+
 - **BvhLib's host `Hit` and traversal now agree with their shader twins exactly.** The review of
   this library found no defect — it is the best-checked code in the repository — so its round is
   alignment: `Hit` loses the barycentric pair nothing read and the shader's own `Hit` never had;

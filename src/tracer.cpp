@@ -77,7 +77,7 @@ namespace
     // The shader declares each of these structures too, and reads the buffers as flat arrays of
     // them. A silent disagreement here is an out-of-bounds read on the GPU rather than a compile
     // error, so the sizes are pinned on this side as well.
-    static_assert(sizeof(Material) == 32u, "trace.slang declares Material as 32 bytes.");
+    static_assert(sizeof(Material) == 32u, "grid_optics.slang declares Material as 32 bytes.");
     static_assert(sizeof(BvhLib::Node) == 32u, "grid_bvh.slang declares Node as 32 bytes.");
     static_assert(sizeof(BvhLib::Triangle) == 48u, "grid_bvh.slang declares Triangle as 48 bytes.");
 
