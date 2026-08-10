@@ -144,7 +144,7 @@ TEST_CASE(bvh_single_triangle_is_one_leaf_and_is_hit)
 
     const BvhLib::Hit hit{BvhLib::intersect(bvh, MathLib::Vec3{0.0f, 0.0f, 0.0f}, MathLib::Vec3{0.0f, 0.0f, -1.0f}, 1000.0f)};
     TEST_CHECK(hit.valid);
-    TEST_CHECK(std::abs(hit.distance - 5.0f) < 1e-4f);
+    TEST_CHECK_CLOSE(hit.distance, 5.0f, 1e-4f);
     TEST_CHECK_EQUAL(bvh.triangles[hit.triangle].material, 3u);
 }
 
@@ -334,7 +334,7 @@ TEST_CASE(bvh_handles_a_flat_sheet_of_coplanar_triangles)
     // Straight down onto the middle of the sheet.
     const BvhLib::Hit hit{BvhLib::intersect(bvh, MathLib::Vec3{32.5f, 10.0f, 32.5f}, MathLib::Vec3{0.0f, -1.0f, 0.0f}, 100.0f)};
     TEST_CHECK(hit.valid);
-    TEST_CHECK(std::abs(hit.distance - 10.0f) < 1e-3f);
+    TEST_CHECK_CLOSE(hit.distance, 10.0f, 1e-3f);
 
     // Just past the edge of the sheet, which must miss.
     const BvhLib::Hit miss{BvhLib::intersect(bvh, MathLib::Vec3{-5.0f, 10.0f, 32.5f}, MathLib::Vec3{0.0f, -1.0f, 0.0f}, 100.0f)};
@@ -406,7 +406,7 @@ TEST_CASE(bvh_handles_triangles_whose_centroids_all_coincide)
 
     const BvhLib::Hit hit{BvhLib::intersect(bvh, MathLib::Vec3{0.2f, 0.2f, 5.0f}, MathLib::Vec3{0.0f, 0.0f, -1.0f}, 100.0f)};
     TEST_CHECK(hit.valid);
-    TEST_CHECK(std::abs(hit.distance - 5.0f) < 1e-3f);
+    TEST_CHECK_CLOSE(hit.distance, 5.0f, 1e-3f);
 }
 
 TEST_CASE(bvh_material_indices_survive_the_reordering)
@@ -508,13 +508,34 @@ TEST_CASE(the_nearest_instance_wins_and_names_itself)
 
     TEST_CHECK(hit.valid);
     TEST_CHECK_EQUAL(hit.instance, 1u);
-    TEST_CHECK(std::fabs(hit.distance - 5.0f) < 1e-4f);
+    TEST_CHECK_CLOSE(hit.distance, 5.0f, 1e-4f);
 
     // And from the other side the far one becomes the near one, so the answer must swap.
     const BvhLib::Hit behind{BvhLib::intersectScene(scene, MathLib::Vec3{0.0f, 0.0f, -40.0f}, MathLib::Vec3{0.0f, 0.0f, 1.0f}, 100.0f)};
     TEST_CHECK(behind.valid);
     TEST_CHECK_EQUAL(behind.instance, 0u);
-    TEST_CHECK(std::fabs(behind.distance - 20.0f) < 1e-4f);
+    TEST_CHECK_CLOSE(behind.distance, 20.0f, 1e-4f);
+}
+
+TEST_CASE(an_instance_naming_a_missing_geometry_is_skipped_not_crashed)
+{
+    /*
+        The skip exists in intersectScene and is otherwise exercised only through flatten's
+        node-count-zero spelling of it. Phase 6 is when instances start being added and removed at
+        runtime, which is exactly when a stale geometry index becomes possible.
+    */
+    BvhLib::Bvh geometry{BvhLib::build({makeTriangle(MathLib::Vec3{-1.0f, -1.0f, -5.0f}, MathLib::Vec3{1.0f, -1.0f, -5.0f}, MathLib::Vec3{0.0f, 1.0f, -5.0f})})};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 5u, MathLib::Mat4::identity()));
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, MathLib::Mat4::identity()));
+    scene.geometries.push_back(std::move(geometry));
+
+    // The dangling instance contributes nothing; the valid one still answers.
+    const BvhLib::Hit hit{BvhLib::intersectScene(scene, MathLib::Vec3{0.0f, 0.0f, 0.0f}, MathLib::Vec3{0.0f, 0.0f, -1.0f}, 100.0f)};
+    TEST_CHECK(hit.valid);
+    TEST_CHECK_EQUAL(hit.instance, 1u);
+    TEST_CHECK_CLOSE(hit.distance, 5.0f, 1e-4f);
 }
 
 TEST_CASE(scene_traversal_agrees_with_brute_force_over_transformed_geometry)
@@ -656,8 +677,6 @@ namespace
 
         nearest.distance = distance;
         nearest.triangle = index;
-        nearest.barycentric_u = u;
-        nearest.barycentric_v = v;
         nearest.valid = true;
     }
 
@@ -813,8 +832,8 @@ TEST_CASE(flatten_names_each_geometry_range_and_keeps_instance_order)
     // The rows are the matrix, read the way the shader reads it. A transposed row here is the exact
     // failure the row form exists to make impossible, so it is worth one comparison.
     const MathLib::Mat4& to_instance{scene.instances[1].to_instance};
-    TEST_CHECK(std::fabs(flat.instances[1].to_instance_row0.w - to_instance(3u, 0u)) < 1e-6f);
-    TEST_CHECK(std::fabs(flat.instances[1].to_instance_row0.w + 10.0f) < 1e-4f);
+    TEST_CHECK_CLOSE(flat.instances[1].to_instance_row0.w, to_instance(3u, 0u), 1e-6f);
+    TEST_CHECK_CLOSE(flat.instances[1].to_instance_row0.w, -10.0f, 1e-4f);
 }
 
 TEST_CASE(flat_form_traversal_agrees_with_the_scene_it_came_from)

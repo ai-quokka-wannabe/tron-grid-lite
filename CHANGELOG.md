@@ -196,6 +196,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BvhLib's host `Hit` and traversal now agree with their shader twins exactly.** The review of
+  this library found no defect — it is the best-checked code in the repository — so its round is
+  alignment: `Hit` loses the barycentric pair nothing read and the shader's own `Hit` never had;
+  the host traversal gains the stack-push size guard the shader and the tests' flat twin both
+  carry, so all three walks are uniform and a malformed tree drops a child instead of overflowing
+  an array; and `Triangle::geometricNormal()` gains its one true caller, replacing the hand-spelt
+  cross product in the acoustic gather. The `intersectScene` skip for an instance naming a missing
+  geometry — the case Phase 6's runtime rezzing makes real — is now pinned directly by a test that
+  was watched crash on "vector subscript out of range" with the skip removed. Both verification
+  modes re-run against the changed host reference on real hardware and still agree.
+
 - **A library's include subdirectory is always its target name.** `signals` now publishes
   `signals/signal.hpp` and `logging` publishes `logging/logger.hpp`, joining the four libraries
   that already matched — so a header is exactly where its target name says it is, and the

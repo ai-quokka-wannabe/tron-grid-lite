@@ -397,8 +397,6 @@ namespace BvhLib
 
             nearest.distance = distance;
             nearest.triangle = index;
-            nearest.barycentric_u = u;
-            nearest.barycentric_v = v;
             nearest.valid = true;
         }
 
@@ -499,7 +497,10 @@ namespace BvhLib
                 // After the swap the nearer box is in left_distance, so a finite value there means
                 // at least one child was hit and the nearer one is the right place to go next.
                 if (left_distance < MISS) {
-                    if (right_distance < MISS) {
+                    // The size guard matches the shader's, and the builder's depth cap means neither
+                    // can fire on a well-formed tree. On a malformed one, dropping the far child is a
+                    // wrong answer where overflowing the array is undefined behaviour.
+                    if ((right_distance < MISS) && (stack_size < MAX_DEPTH)) {
                         stack[stack_size] = far_child;
                         ++stack_size;
                     }
@@ -535,8 +536,8 @@ namespace BvhLib
         instance.geometry = geometry_index;
 
         if (geometry.nodes.empty()) {
-            // An empty geometry has no bounds to transform. Leaving them equal makes the rejection
-            // test below reject everything, which is the right answer for geometry that is not there.
+            // An empty geometry has no bounds to transform. The degenerate point box rejects almost
+            // every ray, and one that does pass it walks an empty hierarchy and finds nothing.
             return instance;
         }
 

@@ -163,7 +163,7 @@ namespace Acoustics
                 // frame and the ray is not. Exact for a rigid placement; under a non-uniform scale
                 // the inverse-transpose would be needed instead. `acoustics.slang` does the same
                 // thing with the same three rows, and this is the line it is held to.
-                const MathLib::Vec4 rotated{instance.to_world * MathLib::Vec4::fromVec3(triangle.edge1.cross(triangle.edge2), 0.0f)};
+                const MathLib::Vec4 rotated{instance.to_world * MathLib::Vec4::fromVec3(triangle.geometricNormal(), 0.0f)};
                 const MathLib::Vec3 face_normal{MathLib::Vec3{rotated.x, rotated.y, rotated.z}.normalised()};
 
                 // Reflect about the face the ray actually arrived at, whichever side that is: a
