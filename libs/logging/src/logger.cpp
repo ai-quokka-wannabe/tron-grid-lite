@@ -38,6 +38,17 @@ namespace LoggingLib
         return "[UNKNOWN]";
     }
 
+    //! Write one message to its stream: Warning and above to stderr, everything else to stdout.
+    static void writeMessage(const LogMessage& msg)
+    {
+        std::string_view prefix{severityPrefix(msg.severity)};
+        if (msg.severity >= Severity::Warning) {
+            std::cerr << prefix << " " << msg.text << "\n";
+        } else {
+            std::cout << prefix << " " << msg.text << "\n";
+        }
+    }
+
     Logger::Logger() :
         m_worker([this](std::stop_token token) {
             workerLoop(token);
@@ -86,24 +97,38 @@ namespace LoggingLib
 
         // Written directly to stderr rather than queued: this must be visible before the process
         // dies, and there may be no worker left to drain a queue by then.
-        std::cerr << "[FATAL] " << message << "\n";
+        std::cerr << severityPrefix(Severity::Fatal) << " " << message << "\n";
         std::cerr.flush();
     }
 
     void Logger::flush()
     {
         /*
-            Waits for the worker to empty the queue rather than draining it here, because two
-            threads writing the same stream would interleave mid-line.
+            Waits until every message enqueued before this call has been written, rather than until
+            the queue is empty: emptiness only proves the worker has taken a message, not that it
+            has finished writing it, and a fatal line written after an emptiness check races the
+            worker's last write mid-line — observed in practice as "[ERROR] [FATAL] ..." on one
+            line. The counters close that window, because the worker increments m_written only
+            after a message's stream write has completed.
 
-            This guarantees nothing is left unconsumed; it does not synchronise with the worker's
-            final write, which may still be in flight for a few microseconds after the queue reports
-            empty. Closing that window would need a second condition variable for a pre-abort path
-            that is already about to lose the process, which is not a trade this repository makes.
+            The wait must not be unconditional. The worker's catch-all means it can have died —
+            std::bad_alloc under memory pressure — leaving the count short forever, and an
+            unconditional wait would turn logFatal into a hang on the very path whose job is to end
+            the process. A dead worker writes nothing more, so whatever is still queued is written
+            here instead, with no interleaving left to fear.
         */
-        while (!m_queue.empty()) {
+        const std::size_t target{m_enqueued.load(std::memory_order_acquire)};
+        while ((m_written.load(std::memory_order_acquire) < target) && !m_worker_exited.load(std::memory_order_acquire)) {
             m_cv.notify_one();
             std::this_thread::yield();
+        }
+
+        if (m_worker_exited.load(std::memory_order_acquire)) {
+            std::queue<LogMessage> remainder{m_queue.drain()};
+            while (!remainder.empty()) {
+                writeMessage(remainder.front());
+                remainder.pop();
+            }
         }
 
         std::cout.flush();
@@ -121,6 +146,7 @@ namespace LoggingLib
         {
             std::lock_guard<std::mutex> lock{m_mutex};
             m_queue.emit({severity, std::string(message)});
+            m_enqueued.fetch_add(1, std::memory_order_release);
         }
         m_cv.notify_one();
     }
@@ -147,6 +173,10 @@ namespace LoggingLib
         // NOLINTNEXTLINE(bugprone-empty-catch) — reporting is exactly what has just failed.
         catch (...) {
         }
+
+        // Last statement on this thread, so a true flag means no further write can happen —
+        // which is what licenses flush() to write the remainder itself.
+        m_worker_exited.store(true, std::memory_order_release);
     }
 
     void Logger::drainUntilStopped(std::stop_token stop_token)
@@ -161,35 +191,20 @@ namespace LoggingLib
             }
             // Lock released before draining — no lock ordering issue with Signal's mutex
 
-            /*
-                One message per lock rather than Signal::drain(), deliberately: flush() reads the
-                queue's emptiness as its proxy for "everything written", and a batch swap would
-                report empty while a whole batch sat unwritten in this loop's hands — widening
-                flush's documented in-flight window from one message to a batch.
-            */
-            LogMessage msg{};
-            while (m_queue.consume(msg)) {
-                std::string_view prefix{severityPrefix(msg.severity)};
-                if (msg.severity >= Severity::Warning) {
-                    std::cerr << prefix << " " << msg.text << "\n";
-                } else {
-                    std::cout << prefix << " " << msg.text << "\n";
-                }
-            }
+            writeAll(m_queue.drain());
         }
 
-        // Final drain — catch messages emitted between last check and stop. A batch swap is safe
-        // here where it is not above: stop has been requested, so nothing can call flush() against
-        // a queue that reports empty while the batch is still being written.
-        std::queue<LogMessage> batch{m_queue.drain()};
+        // Final drain — catch messages emitted between the last check and stop.
+        writeAll(m_queue.drain());
+    }
+
+    void Logger::writeAll(std::queue<LogMessage> batch)
+    {
         while (!batch.empty()) {
-            const LogMessage& msg{batch.front()};
-            std::string_view prefix{severityPrefix(msg.severity)};
-            if (msg.severity >= Severity::Warning) {
-                std::cerr << prefix << " " << msg.text << "\n";
-            } else {
-                std::cout << prefix << " " << msg.text << "\n";
-            }
+            writeMessage(batch.front());
+            // Incremented only after the write above has completed, because flush() reads this
+            // count as "safe to write the fatal line without racing the worker mid-line".
+            m_written.fetch_add(1, std::memory_order_release);
             batch.pop();
         }
     }

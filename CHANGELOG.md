@@ -471,6 +471,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`Logger::flush()` could hang the fatal path, and could let the fatal line garble the last
+  write.** Both defects lived in the same line: flush waited for the queue to become *empty*,
+  unconditionally. If the worker thread had died — its catch-all exists precisely because
+  allocating a message can throw — the queue never drained and `logFatal` spun forever, a hang on
+  the one path whose job is to end the process; demonstrated by killing a 15-second timeout before
+  the fix and watching the same probe finish in milliseconds after it. And emptiness only proved a
+  message had been *taken*, not *written*, so the synchronous fatal line raced the worker's last
+  write — observed in practice as `[ERROR] [FATAL] ...` interleaved on one line. flush() now waits
+  until every message enqueued before the call has actually been written (a pair of counters; the
+  worker increments after each completed write), bails out if the worker has exited, and writes any
+  remainder itself — a dead worker writes nothing more, so nothing is left to interleave with. The
+  logger's tests previously asserted nothing about output at all; they now capture both streams and
+  pin severity routing, per-thread ordering, prefix text, the synchronous fatal write,
+  fatal-after-context ordering, and message counts under concurrent producers. With emptiness no
+  longer being flush's proxy, the worker loop adopted `Signal::drain()` — the reason it could not
+  was this proxy, and the comment that said so is gone with it.
 - **`Mat4::inversed()` no longer answers a singular matrix with the identity, silently.** Its one
   production caller caches the result as an instance's world-to-geometry transform, so the old
   fallback would have placed geometry wrongly with no diagnostic at all — the failure mode this
