@@ -12,7 +12,7 @@
     GNU General Public License for more details.
 */
 
-#include "log/logger.hpp"
+#include "logging/logger.hpp"
 #include <iostream>
 #include <queue>
 #include <thread>

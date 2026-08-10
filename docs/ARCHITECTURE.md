@@ -101,10 +101,9 @@ Rules:
 - **Each library is self-contained** — its own `CMakeLists.txt`, its own `include/` directory holding exactly one
   subdirectory, and its own `tests/` directory linking against `testing`.
 
-  That subdirectory is what consumers spell in an `#include`, and it is **not always the target name**: `signals`
-  publishes `signal/`, and `logging` publishes `log/`. The other four match. Worth knowing before hunting for a header
-  that is not where the target name suggests, and worth deciding deliberately rather than by accident when the next
-  library is added.
+  That subdirectory is what consumers spell in an `#include`, and it is **always the target name**: `signals`
+  publishes `signals/`, `logging` publishes `logging/`, and so on for all six. A header is exactly where its target
+  name says it is, and the next library added holds to the same rule.
 - **Plain CMake target names** — `testing`, `signals`, `logging`, `math`, `bvh`, `window`.
 - **Static libraries only**, except `math` and `signals`, which are header-only `INTERFACE` targets.
 - **`testing` is the foundation brick** — every other library's tests link against it. No third-party test framework.

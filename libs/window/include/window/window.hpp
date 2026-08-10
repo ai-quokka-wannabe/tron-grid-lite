@@ -15,7 +15,7 @@
 #pragma once
 
 #include "window_event.hpp"
-#include <log/logger.hpp>
+#include <logging/logger.hpp>
 #include <cstdint>
 #include <memory>
 #include <queue>

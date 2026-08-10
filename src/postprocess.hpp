@@ -21,7 +21,7 @@
 #endif
 #include <vulkan/vulkan_raii.hpp>
 #include "memory_arena.hpp"
-#include <log/logger.hpp>
+#include <logging/logger.hpp>
 #include <cstdint>
 #include <string>
 #include <vector>

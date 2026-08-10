@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <signal/signal.hpp>
+#include <signals/signal.hpp>
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>

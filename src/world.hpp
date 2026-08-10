@@ -17,7 +17,7 @@
 #include "memory_arena.hpp"
 #include "vulkan_helpers.hpp"
 #include <bvh/bvh.hpp>
-#include <log/logger.hpp>
+#include <logging/logger.hpp>
 #include <cstdint>
 
 class Device; // forward declaration

@@ -13,7 +13,7 @@
 */
 
 #include "testing/testing.hpp"
-#include "signal/signal.hpp"
+#include "signals/signal.hpp"
 #include <memory>
 #include <queue>
 #include <thread>
