@@ -67,6 +67,7 @@ set(SHADER_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
 # rather than a slow build. Three shaders take about a second between them.
 set(SLANG_SHARED_MODULES
     ${CMAKE_CURRENT_SOURCE_DIR}/grid_bvh.slang
+    ${CMAKE_CURRENT_SOURCE_DIR}/grid_optics.slang
 )
 
 #[[
