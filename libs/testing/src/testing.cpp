@@ -78,6 +78,19 @@ namespace TestingLib
         silenceAssertionDialogs();
 
         const std::vector<TestCase>& cases{registry()};
+
+        /*
+            The floor below every other check: test cases register themselves through static
+            registrar objects, so a suite whose registration has silently broken — a linker
+            discarding unreferenced translation units is the classic way — reports the same
+            "0 failed" as a healthy one. Nothing to run is a failure, not a pass.
+        */
+        if (cases.empty()) {
+            std::cout << "  FAIL  no tests are registered\n";
+            std::cout << "\n0 passed, 0 failed, 0 total\n";
+            return true;
+        }
+
         std::size_t passed{0};
         std::size_t failed{0};
 
@@ -93,6 +106,12 @@ namespace TestingLib
             } catch (const std::exception& e) {
                 std::cout << "  FAIL  " << tc.name << " (unhandled exception)\n";
                 std::cout << "        " << e.what() << "\n";
+                ++failed;
+            } catch (...) {
+                // Without this, anything that is not a std::exception escapes runAll, propagates
+                // out of main and reaches std::terminate — remaining tests skipped, no summary,
+                // and an abnormal exit in place of a meaningful one.
+                std::cout << "  FAIL  " << tc.name << " (unknown exception)\n";
                 ++failed;
             }
         }
@@ -126,6 +145,29 @@ namespace TestingLib
         msg += lhs_val;
         msg += " != ";
         msg += rhs_val;
+        msg += ")";
+        throw CheckFailure(msg);
+    }
+
+    [[noreturn]] void checkCloseFailed(std::string_view lhs_expr, std::string_view rhs_expr, std::string_view lhs_val, std::string_view rhs_val,
+        std::string_view diff_val, std::string_view tolerance_val, std::source_location loc)
+    {
+        std::string msg;
+        msg += loc.file_name();
+        msg += ":";
+        msg += std::to_string(loc.line());
+        msg += ": check close failed: ";
+        msg += lhs_expr;
+        msg += " ~ ";
+        msg += rhs_expr;
+        msg += " (";
+        msg += lhs_val;
+        msg += " vs ";
+        msg += rhs_val;
+        msg += ", difference ";
+        msg += diff_val;
+        msg += " not below tolerance ";
+        msg += tolerance_val;
         msg += ")";
         throw CheckFailure(msg);
     }

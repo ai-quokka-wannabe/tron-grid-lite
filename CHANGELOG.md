@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **TestingLib hardened at its two crash-or-silence edges, and taught three things every suite
+  wanted.** Two of the changes are fixes by this repository's own rules. A test body throwing
+  anything that is not a `std::exception` used to escape `runAll`, propagate out of `main` and
+  reach `std::terminate` — remaining tests skipped, no summary, an abort in place of an exit code;
+  a `catch (...)` now records it as an ordinary failure. And an empty suite used to report
+  "0 failed" and pass, indistinguishable from registration having silently broken; nothing to run
+  is now a failure — the did-anything-arrive floor, added to the component every other check
+  stands on. Each fix is pinned by its own ctest binary (`testing_empty_suite_test`,
+  `testing_foreign_exception_test`), which was built first and watched fail against the old
+  runner: the empty suite exited green over nothing, and the foreign throw ended in
+  "abort() has been called".
+
+  The additions: `TEST_CHECK_CLOSE(a, b, tolerance)`, which fails showing both values, their
+  difference and the tolerance at `max_digits10` — four suites hand-roll
+  `TEST_CHECK(std::abs(a - b) < eps)` today, whose failure message contains no values at all, and
+  they can migrate as they are touched. A NaN anywhere fails it, pinned by a self-test that
+  distinguishes `!(difference < tolerance)` from the NaN-blind `difference >= tolerance`.
+  `TEST_CHECK_EQUAL` now compares mixed-sign integer pairs by value via `std::cmp_equal`, so
+  `checkEqual(-1, ~0u)` fails instead of passing and a `size()` checks against a plain literal
+  without a warning-silencing cast. And float diagnostics print at `max_digits10` rather than
+  `std::to_string`'s fixed six decimals, which could not express the very difference a tight
+  tolerance measures.
+
 - **`Signal::drain()`, a batch dequeue: every pending message out in one lock acquisition.** The
   render loop and the logger's final drain both consumed one message per lock; both now swap the
   whole queue out and process it unlocked, which also bounds a drain even if producers outpace the
