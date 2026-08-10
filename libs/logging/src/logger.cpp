@@ -14,6 +14,7 @@
 
 #include "log/logger.hpp"
 #include <iostream>
+#include <queue>
 #include <thread>
 
 namespace LoggingLib
@@ -160,7 +161,12 @@ namespace LoggingLib
             }
             // Lock released before draining — no lock ordering issue with Signal's mutex
 
-            // Drain all pending messages.
+            /*
+                One message per lock rather than Signal::drain(), deliberately: flush() reads the
+                queue's emptiness as its proxy for "everything written", and a batch swap would
+                report empty while a whole batch sat unwritten in this loop's hands — widening
+                flush's documented in-flight window from one message to a batch.
+            */
             LogMessage msg{};
             while (m_queue.consume(msg)) {
                 std::string_view prefix{severityPrefix(msg.severity)};
@@ -172,15 +178,19 @@ namespace LoggingLib
             }
         }
 
-        // Final drain — catch messages emitted between last check and stop
-        LogMessage msg;
-        while (m_queue.consume(msg)) {
+        // Final drain — catch messages emitted between last check and stop. A batch swap is safe
+        // here where it is not above: stop has been requested, so nothing can call flush() against
+        // a queue that reports empty while the batch is still being written.
+        std::queue<LogMessage> batch{m_queue.drain()};
+        while (!batch.empty()) {
+            const LogMessage& msg{batch.front()};
             std::string_view prefix{severityPrefix(msg.severity)};
             if (msg.severity >= Severity::Warning) {
                 std::cerr << prefix << " " << msg.text << "\n";
             } else {
                 std::cout << prefix << " " << msg.text << "\n";
             }
+            batch.pop();
         }
     }
 

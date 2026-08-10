@@ -62,6 +62,25 @@ namespace SignalsLib
             return true;
         }
 
+        /*!
+            Thread-safe bulk dequeue: removes and returns every pending message in one lock acquisition.
+
+            Equivalent to a `consume()` loop, with two differences a caller must want rather than merely tolerate. Messages
+            emitted while the caller processes the batch wait for the next drain instead of extending this one, so a drain is
+            bounded even if producers outpace the consumer. And `empty()` reports true from the moment of the swap, while the
+            batch may still be unprocessed in the caller's hands — so a thread using emptiness as a proxy for "everything
+            processed", as `Logger::flush` does, must stay with the `consume()` loop.
+        */
+        [[nodiscard]] std::queue<T> drain()
+        {
+            std::queue<T> all;
+            {
+                std::lock_guard<std::mutex> lock(m_mutex);
+                all.swap(m_pending);
+            }
+            return all;
+        }
+
         //! Returns true if the queue is empty.
         [[nodiscard]] bool empty() const
         {

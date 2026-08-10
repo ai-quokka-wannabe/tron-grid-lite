@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`Signal::drain()`, a batch dequeue: every pending message out in one lock acquisition.** The
+  render loop and the logger's final drain both consumed one message per lock; both now swap the
+  whole queue out and process it unlocked, which also bounds a drain even if producers outpace the
+  consumer. The logger's worker loop deliberately keeps the `consume()` loop, because `flush()`
+  reads the queue's emptiness as its proxy for "everything written" and a batch swap would report
+  empty while a whole batch sat unwritten — the reason is written at the call site. The idea came
+  from asking whether `Signal` should grow Qt-style blocking delivery; it should not (the
+  architecture document's "no blocking `waitAndConsume`" reasoning still holds), but Qt delivering
+  posted events as a swapped batch is the half of that design worth taking. Tests now also cover
+  the per-producer FIFO guarantee under concurrent producers, which was documented as load-bearing
+  for replay and asserted nowhere.
+
 - **`--window`, and with it a command-line-first program.** The Grid no longer creates a window, a
   surface or a swapchain unless the User asks to see it. `Device` accepts a null surface: no present
   queue is sought, `VK_KHR_swapchain` is neither required nor enabled, and a compute-only card with no

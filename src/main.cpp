@@ -67,6 +67,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <queue>
 #include <string>
 #include <thread>
 #include <vector>
@@ -967,9 +968,12 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
 
     while (!stopping) {
         // Drain everything queued since the last frame. Input is integrated rather than sampled, so
-        // no event may be dropped, however many arrived during one frame.
-        RenderEvent message{};
-        while (channel.queue.consume(message)) {
+        // no event may be dropped, however many arrived during one frame. One batch swap rather
+        // than a lock per message; anything the event thread emits while this loop runs is next
+        // frame's batch.
+        std::queue<RenderEvent> batch{channel.queue.drain()};
+        while (!batch.empty()) {
+            const RenderEvent& message{batch.front()};
             switch (message.type) {
             case RenderEvent::Type::Resize:
                 surface_width = message.width;
@@ -985,6 +989,7 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
                 stopping = true;
                 break;
             }
+            batch.pop();
         }
 
         if (stopping) {
