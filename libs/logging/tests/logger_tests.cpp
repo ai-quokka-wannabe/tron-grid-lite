@@ -13,7 +13,7 @@
 */
 
 #include "testing/testing.hpp"
-#include "log/logger.hpp"
+#include "logging/logger.hpp"
 #include <cstddef>
 #include <iostream>
 #include <sstream>

@@ -245,13 +245,13 @@ two forms above exist to avoid.
 All `#include` directives are flush — no blank lines between groups. Order:
 
 1. Same-module headers (`"device.hpp"`)
-2. Project library headers (`<log/logger.hpp>`, `<window/window.hpp>`)
+2. Project library headers (`<logging/logger.hpp>`, `<window/window.hpp>`)
 3. Standard library headers (`<vector>`, `<string>`)
 
 ```cpp
 #include "device.hpp"
 #include "instance.hpp"
-#include <log/logger.hpp>
+#include <logging/logger.hpp>
 #include <window/window.hpp>
 #include <cstdint>
 #include <string>
@@ -333,7 +333,7 @@ Non-RAII types are never stored as members.
 
 RAII everywhere. Use `vk::raii` for Vulkan objects, `std::unique_ptr` for single-owner heap
 objects, and `std::shared_ptr` / `std::weak_ptr` only for signal ownership (see
-`libs/signals/include/signal/signal.hpp`).
+`libs/signals/include/signals/signal.hpp`).
 
 ### Doxygen Comments
 

@@ -24,7 +24,7 @@
 #include "memory_arena.hpp"
 #include "vulkan_helpers.hpp"
 #include "world.hpp"
-#include <log/logger.hpp>
+#include <logging/logger.hpp>
 #include <math/vector.hpp>
 #include <cstdint>
 #include <string>

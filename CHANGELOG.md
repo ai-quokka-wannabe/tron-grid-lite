@@ -196,6 +196,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A library's include subdirectory is always its target name.** `signals` now publishes
+  `signals/signal.hpp` and `logging` publishes `logging/logger.hpp`, joining the four libraries
+  that already matched — so a header is exactly where its target name says it is, and the
+  ARCHITECTURE.md paragraph that existed to warn about the two exceptions now states the rule
+  instead. Every `#include` in the tree and both STYLE.md examples spell the new paths; CMake
+  needed no changes, since both libraries publish `include/` wholesale.
 - **The three-row transform layout is now a decision rather than an avoidance.** A `float4x4` was
   tried and it *works*: Slang reads one from a std430 buffer in agreement with `MathLib::Mat4`'s
   column-major storage, giving numbers identical to the row form at the identity and at an angle. The

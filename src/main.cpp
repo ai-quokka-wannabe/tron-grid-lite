@@ -47,9 +47,9 @@
 #include "vulkan_helpers.hpp"
 #include "world.hpp"
 #include <bvh/bvh.hpp>
-#include <log/logger.hpp>
+#include <logging/logger.hpp>
 #include <math/vector.hpp>
-#include <signal/signal.hpp>
+#include <signals/signal.hpp>
 #include <window/window.hpp>
 #include <window/window_event.hpp>
 #include <algorithm>
