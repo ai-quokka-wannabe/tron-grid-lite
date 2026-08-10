@@ -151,12 +151,10 @@ namespace BvhLib
     */
     [[nodiscard]] Bvh build(std::vector<Triangle> triangles);
 
-    //! What a ray struck, if anything.
+    //! What a ray struck, if anything. Field for field what the shader's own Hit carries.
     struct Hit {
         float distance{0.0f}; //!< Distance along the ray direction, in the direction's own units.
         uint32_t triangle{0u}; //!< Index into Bvh::triangles.
-        float barycentric_u{0.0f}; //!< Barycentric coordinate along edge1.
-        float barycentric_v{0.0f}; //!< Barycentric coordinate along edge2.
         bool valid{false}; //!< False when the ray struck nothing.
 
         /*!
