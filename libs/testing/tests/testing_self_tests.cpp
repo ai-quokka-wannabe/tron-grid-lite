@@ -13,6 +13,8 @@
 */
 
 #include "testing/testing.hpp"
+#include <cstddef>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -34,6 +36,22 @@ TEST_CASE(check_throws_catches_exception)
 {
     TEST_CHECK_THROWS(throw std::runtime_error("expected"));
     TEST_CHECK_THROWS(throw 42);
+}
+
+TEST_CASE(check_equal_mixed_signedness_compares_by_value)
+{
+    // No cast: mixed-sign integer pairs go through std::cmp_equal, so this neither warns under
+    // /W4 and -Wall nor converts either side.
+    TEST_CHECK_EQUAL(std::size_t{3}, 3);
+    TEST_CHECK_EQUAL(3, std::size_t{3});
+    TEST_CHECK_EQUAL(-5, -5);
+}
+
+TEST_CASE(check_close_within_tolerance)
+{
+    TEST_CHECK_CLOSE(1.0f, 1.0001f, 1e-3f);
+    TEST_CHECK_CLOSE(2.0, 2.0, 1e-12);
+    TEST_CHECK_CLOSE(-3.5f, -3.5f, 1e-6f);
 }
 
 /*
@@ -96,6 +114,55 @@ TEST_CASE(the_check_throws_macro_actually_fails_when_nothing_throws)
 
     if (!threw) {
         reportUnenforced("TEST_CHECK_THROWS on a non-throwing expression did not fail");
+    }
+}
+
+TEST_CASE(the_check_equal_macro_actually_fails_across_signedness)
+{
+    /*
+        The discriminating case for std::cmp_equal: under the arithmetic conversions -1 becomes
+        UINT_MAX and `-1 == static_cast<unsigned>(-1)` is true, so a naive == here would pass the
+        one comparison the by-value semantics exist to fail.
+    */
+    bool threw{false};
+    try {
+        TEST_CHECK_EQUAL(-1, static_cast<unsigned int>(-1));
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+
+    if (!threw) {
+        reportUnenforced("TEST_CHECK_EQUAL(-1, UINT_MAX) did not fail");
+    }
+}
+
+TEST_CASE(the_check_close_macro_actually_fails_when_apart)
+{
+    bool threw{false};
+    try {
+        TEST_CHECK_CLOSE(1.0f, 2.0f, 1e-3f);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+
+    if (!threw) {
+        reportUnenforced("TEST_CHECK_CLOSE(1.0f, 2.0f, 1e-3f) did not fail");
+    }
+}
+
+TEST_CASE(the_check_close_macro_actually_fails_on_nan)
+{
+    // NaN compares false against everything, so `difference >= tolerance` would wave it through;
+    // this pins the `!(difference < tolerance)` formulation.
+    bool threw{false};
+    try {
+        TEST_CHECK_CLOSE(std::numeric_limits<float>::quiet_NaN(), 0.0f, 1e-3f);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+
+    if (!threw) {
+        reportUnenforced("TEST_CHECK_CLOSE on NaN did not fail");
     }
 }
 
