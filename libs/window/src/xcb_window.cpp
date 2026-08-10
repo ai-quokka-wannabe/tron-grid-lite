@@ -44,7 +44,6 @@ namespace WindowLib
 
         if (xcb_connection_has_error(m_connection)) {
             throw std::runtime_error{"Failed to connect to X server."};
-            return;
         }
 
         // Get the screen. Guard against pathological xcb_connect responses where
@@ -58,7 +57,6 @@ namespace WindowLib
         }
         if ((iter.rem == 0) || (iter.data == nullptr)) {
             throw std::runtime_error{"X server reported no usable screen (screen_num=" + std::to_string(screen_num) + ")."};
-            return;
         }
         m_screen = iter.data;
 
@@ -272,6 +270,10 @@ namespace WindowLib
                 xcb_free_cursor(m_connection, m_invisible_cursor);
                 m_invisible_cursor = 0;
                 xcb_flush(m_connection);
+                // Another client holding a grab (a screen locker, a drag in progress) is the usual
+                // cause. Without this line the degradation is silent: the User toggles capture,
+                // nothing happens, and nothing says why.
+                m_logger.logWarning("Pointer grab failed; cursor capture unavailable.");
                 return;
             }
 

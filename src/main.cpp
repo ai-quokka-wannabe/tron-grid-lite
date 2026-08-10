@@ -982,7 +982,19 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
                 break;
 
             case RenderEvent::Type::Input:
-                spectator.processEvent(message.input);
+                if (message.input.type == WindowLib::WindowEvent::Type::Expose) {
+                    /*
+                        The platform says the window's contents need drawing — uncovered, remapped,
+                        freshly shown. The camera has not moved, so the idle gate would judge the
+                        picture current and sleep over a window showing stale or undefined pixels;
+                        on a non-composited X server nothing else would ever repaint it. Wrongly
+                        deciding a frame is needed costs one redundant frame, which is the cheap
+                        side of that comparison (see ViewState above).
+                    */
+                    has_presented = false;
+                } else {
+                    spectator.processEvent(message.input);
+                }
                 break;
 
             case RenderEvent::Type::Stop:

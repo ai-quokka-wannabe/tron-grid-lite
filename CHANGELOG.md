@@ -471,6 +471,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An uncovered window could sit showing stale pixels until the camera moved.** The platforms push
+  an `Expose` event when the window's contents need drawing — uncovered, remapped, freshly shown —
+  but the render loop forwarded it into the spectator, which ignores it, and the idle gate then
+  judged the unchanged `ViewState` current and went back to sleep. On a non-composited X server
+  nothing else ever repaints. An `Expose` now clears `has_presented`, forcing exactly one frame:
+  wrongly deciding a frame is needed costs one redundant frame, which the `ViewState` comment
+  already names as the cheap side of that comparison. Alongside it, WindowLib's base-class contract
+  finally has tests — the immediate-callback-plus-retained-queue behaviour the renderer's threading
+  depends on was asserted nowhere; a stub window now pins delivery, FIFO order, callback reset and
+  the close flag, each watched fail against a deliberately broken `pushEvent`.
+- **A failed X11 pointer grab is no longer silent.** Another client holding the grab — a screen
+  locker, a drag in progress — made `setCursorCaptured` degrade correctly but invisibly: the User
+  toggles capture, nothing happens, nothing says why. It now logs a warning, which is also the
+  first real use of the logger the window has carried since its construction. Two unreachable
+  `return` statements after `throw`s in the XCB constructor went in the same pass.
 - **`Logger::flush()` could hang the fatal path, and could let the fatal line garble the last
   write.** Both defects lived in the same line: flush waited for the queue to become *empty*,
   unconditionally. If the worker thread had died — its catch-all exists precisely because
