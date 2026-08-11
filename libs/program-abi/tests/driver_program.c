@@ -73,6 +73,12 @@ static void programTick(TglProgram* program, const TglSenses* senses, TglActions
        and the physics step owes it the exact one. Half speed, an eighth of a turn per second. */
     actions->desired_forward_speed = 0.5f;
     actions->desired_turn_rate = 0.78539816f;
+#elif defined(TGL_DRIVER_CALLING)
+    /* Stands still and calls at three quarters strength every tick — a train of calls, which is
+       what an echolocating animal does and the only thing the Grid's one-shot vocalisation can
+       produce. Stationary so a test observes the staging delay in the voice alone: the first
+       tick acts on the zeroed default, and the first call sounds on the second. */
+    actions->vocalisation_strength = 0.75f;
 #elif defined(TGL_DRIVER_SILENT)
     /* Writes nothing at all, which is legitimate: the Grid zeroes the actions before every call, so
        a Program with nothing to say coasts to a stop rather than repeating itself. */

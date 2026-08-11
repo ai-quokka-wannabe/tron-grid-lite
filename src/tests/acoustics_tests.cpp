@@ -377,6 +377,333 @@ TEST_CASE(a_material_index_past_the_table_is_silent_and_still_reflects)
     TEST_CHECK(silent.total() == 0.0f);
 }
 
+// ---------------------------------------------------------------------------------------------
+// The call delivery: the point-source half of hearing, held to its own arithmetic
+// ---------------------------------------------------------------------------------------------
+
+namespace
+{
+
+    //! Wraps loose triangles as a one-instance scene at the identity — or an empty scene, which is
+    //! a legitimate Grid whose air still carries a call.
+    [[nodiscard]] BvhLib::Scene sceneAround(std::vector<BvhLib::Triangle> triangles)
+    {
+        BvhLib::Scene scene{};
+        if (!triangles.empty()) {
+            BvhLib::Bvh hierarchy{BvhLib::build(std::move(triangles))};
+            scene.instances.push_back(BvhLib::makeInstance(hierarchy, 0u, MathLib::Mat4::identity()));
+            scene.geometries.push_back(std::move(hierarchy));
+        }
+        return scene;
+    }
+
+    //! Appends a vertical axis-aligned quad in the plane x = `x`, as two triangles.
+    void appendVerticalQuadX(std::vector<BvhLib::Triangle>& out, float x, float y_min, float y_max, float z_min, float z_max, uint32_t material)
+    {
+        const MathLib::Vec3 a{x, y_min, z_min};
+        const MathLib::Vec3 b{x, y_max, z_min};
+        const MathLib::Vec3 c{x, y_max, z_max};
+        const MathLib::Vec3 d{x, y_min, z_max};
+
+        out.push_back(BvhLib::Triangle{.v0 = a, .material = material, .edge1 = b - a, .padding0 = 0u, .edge2 = c - a, .padding1 = 0u});
+        out.push_back(BvhLib::Triangle{.v0 = a, .material = material, .edge1 = c - a, .padding0 = 0u, .edge2 = d - a, .padding1 = 0u});
+    }
+
+    /*
+        The call geometry every delivery test shares, chosen so each expected bin sits well clear
+        of a boundary:
+
+        - Source at (0, 1, 0), ear at (3.6, 1, 0). Direct path 3.6 m, bin 10 (3.6 / 0.343 = 10.5).
+        - Floor image below y = 0: path sqrt(3.6² + 2²) = 4.118 m, bin 12 (12.007).
+        - Wall at x = 5 heard from (0.2, 1, 0): out and back 9.8 m, bin 28 (28.57).
+    */
+    constexpr MathLib::Vec3 CALL_SOURCE{0.0f, 1.0f, 0.0f};
+    constexpr MathLib::Vec3 CALL_EAR{3.6f, 1.0f, 0.0f};
+
+    //! Energy of the unit-strength direct arrival: spreading alone, over 3.6 metres.
+    constexpr float DIRECT_ENERGY{1.0f / (3.6f * 3.6f)};
+
+    //! A flat unit spectrum and transparent air, so only geometry is under test.
+    [[nodiscard]] Acoustics::CallConfig plainCallConfig()
+    {
+        return Acoustics::CallConfig{};
+    }
+
+} // namespace
+
+TEST_CASE(a_call_is_heard_directly_at_the_distance_the_air_dictates)
+{
+    // A wide silent floor beneath: real geometry near the path, none of it in the way.
+    std::vector<BvhLib::Triangle> triangles;
+    appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_FLOOR);
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(scene, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+
+    const uint32_t direct_bin{binOf(3.6f)};
+    TEST_CHECK(direct_bin == 10u); // 3.6 / 0.343 = 10.5
+
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        TEST_CHECK_CLOSE(response.at(band, direct_bin), DIRECT_ENERGY, 1e-7f);
+    }
+
+    // One arrival and nothing else: no reflectors were declared, so no image may appear.
+    for (uint32_t bin{0u}; bin < Acoustics::BIN_COUNT; ++bin) {
+        if (bin != direct_bin) {
+            TEST_CHECK(energyInBin(response, bin) == 0.0f);
+        }
+    }
+}
+
+TEST_CASE(a_call_within_arms_reach_arrives_at_full_strength_in_bin_zero)
+{
+    /*
+        The spreading floor, from the caller's side: closer than the one-metre reference nothing is
+        amplified, so a creature's own call reaches its own ears at exactly the strength it called
+        with. The scene is empty on purpose — the direct path needs air, not triangles.
+    */
+    const BvhLib::Scene empty{sceneAround({})};
+    const MathLib::Vec3 own_ear{0.2f, 1.0f, 0.0f};
+
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(empty, Acoustics::Reflectors{}, CALL_SOURCE, 0.75f, own_ear, plainCallConfig())};
+
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        TEST_CHECK(response.at(band, 0u) == 0.75f);
+    }
+    for (uint32_t bin{1u}; bin < Acoustics::BIN_COUNT; ++bin) {
+        TEST_CHECK(energyInBin(response, bin) == 0.0f);
+    }
+}
+
+TEST_CASE(an_echo_returns_from_the_level_below_and_adds_to_the_direct_path)
+{
+    // The analytic image-source case: one flat level, one call, two arrivals — both computable by
+    // hand, in separate bins, with nothing else anywhere.
+    std::vector<BvhLib::Triangle> triangles;
+    appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_FLOOR);
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+
+    const Acoustics::Reflectors reflectors{.level_heights = {0.0f}, .faces = {}};
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+
+    const float echo_path{std::sqrt((3.6f * 3.6f) + 4.0f)}; // The image at y = -1, seen from y = +1.
+    const uint32_t direct_bin{binOf(3.6f)};
+    const uint32_t echo_bin{binOf(echo_path)};
+    TEST_CHECK(echo_bin == 12u); // 4.118 / 0.343 = 12.007
+
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        TEST_CHECK_CLOSE(response.at(band, direct_bin), DIRECT_ENERGY, 1e-7f);
+        TEST_CHECK_CLOSE(response.at(band, echo_bin), 1.0f / (echo_path * echo_path), 1e-7f);
+    }
+
+    for (uint32_t bin{0u}; bin < Acoustics::BIN_COUNT; ++bin) {
+        if ((bin != direct_bin) && (bin != echo_bin)) {
+            TEST_CHECK(energyInBin(response, bin) == 0.0f);
+        }
+    }
+}
+
+TEST_CASE(a_wall_face_answers_a_call_with_the_echo_a_creature_could_range)
+{
+    /*
+        Echolocation in one scene: an emitter and an ear a fifth of a metre apart, a vertical wall
+        five metres ahead, and the out-and-back path of 9.8 metres arriving in the bin the speed of
+        sound dictates. This is exactly what the terraced floor's tilted risers cannot do — a
+        22.6 degree facet deflects the call skyward — and exactly what any genuinely vertical face
+        on the Grid does for free.
+    */
+    std::vector<BvhLib::Triangle> triangles;
+    appendVerticalQuadX(triangles, 5.0f, 0.0f, 4.0f, -3.0f, 3.0f, MATERIAL_PILLAR);
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+
+    // The wall as a reflector: origin at its low corner, edges wound so the normal faces -X, back
+    // towards the caller.
+    const Acoustics::RectFace wall{.origin = MathLib::Vec3{5.0f, 0.0f, -3.0f}, .edge_u = MathLib::Vec3{0.0f, 0.0f, 6.0f}, .edge_v = MathLib::Vec3{0.0f, 4.0f, 0.0f}};
+    const Acoustics::Reflectors reflectors{.level_heights = {}, .faces = {wall}};
+
+    const MathLib::Vec3 ear{0.2f, 1.0f, 0.0f};
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, ear, plainCallConfig())};
+
+    const uint32_t echo_bin{binOf(9.8f)};
+    TEST_CHECK(echo_bin == 28u); // 9.8 / 0.343 = 28.6
+
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        TEST_CHECK(response.at(band, 0u) == 1.0f); // Its own call, at the spreading floor.
+        TEST_CHECK_CLOSE(response.at(band, echo_bin), 1.0f / (9.8f * 9.8f), 1e-7f);
+    }
+
+    for (uint32_t bin{1u}; bin < Acoustics::BIN_COUNT; ++bin) {
+        if (bin != echo_bin) {
+            TEST_CHECK(energyInBin(response, bin) == 0.0f);
+        }
+    }
+}
+
+TEST_CASE(a_candidate_level_with_no_geometry_beneath_it_never_arrives)
+{
+    // The same call over an empty world: the enumeration proposes the level, and the validation
+    // ray — finding nothing at the reflection point — is the plausibility test that disposes.
+    const BvhLib::Scene empty{sceneAround({})};
+    const Acoustics::Reflectors reflectors{.level_heights = {0.0f}, .faces = {}};
+
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(empty, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+
+    TEST_CHECK(energyInBin(response, binOf(3.6f)) > 0.0f); // The air still carries the direct path.
+    TEST_CHECK(energyInBin(response, 12u) == 0.0f); // The echo's bin stays empty: nothing stood there.
+}
+
+TEST_CASE(a_wall_standing_where_the_floor_should_answer_does_not_answer_for_it)
+{
+    /*
+        The alignment guard: real geometry stands exactly at the reflection point, and the path to
+        it is clear, but the surface is a vertical wall where the mirror plane is horizontal. A
+        hit is not a mirror unless it lies in the mirror's own plane — without this check a wall
+        standing on a terrace would return echoes computed with the terrace's arithmetic.
+    */
+    std::vector<BvhLib::Triangle> triangles;
+    appendVerticalQuadX(triangles, 1.8f, -1.0f, 0.6f, -1.0f, 1.0f, MATERIAL_PILLAR); // Through (1.8, 0, 0).
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+
+    const Acoustics::Reflectors reflectors{.level_heights = {0.0f}, .faces = {}};
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+
+    // The direct path passes above the wall's top edge; the level's candidate strikes the wall at
+    // the reflection point and is refused for its orientation.
+    TEST_CHECK(energyInBin(response, binOf(3.6f)) > 0.0f);
+    TEST_CHECK(energyInBin(response, 12u) == 0.0f);
+}
+
+TEST_CASE(an_occluded_direct_path_dims_to_nothing_while_the_floor_still_answers)
+{
+    /*
+        The bistatic property in one scene: a wall stands between caller and listener, high enough
+        to blot out the whole occlusion probe, while the bounce off the floor passes under it. A
+        creature behind a barrier is quiet but not gone — its echo arrives without its voice.
+    */
+    std::vector<BvhLib::Triangle> triangles;
+    appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_FLOOR);
+    appendVerticalQuadX(triangles, 1.8f, 0.5f, 4.0f, -3.0f, 3.0f, MATERIAL_GLASS);
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+
+    const Acoustics::Reflectors reflectors{.level_heights = {0.0f}, .faces = {}};
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+
+    TEST_CHECK(energyInBin(response, binOf(3.6f)) == 0.0f); // Every probe sample is blocked.
+    TEST_CHECK(energyInBin(response, 12u) > 0.0f); // The floor image ducks under the wall.
+}
+
+TEST_CASE(a_grazing_occluder_dims_the_call_by_the_fraction_of_the_probe_it_blocks)
+{
+    /*
+        The graded shadow, at its exact value. A curtain wall hangs with its bottom edge at the
+        source's own height, so of the probe's six sphere samples the three above centre are
+        blocked and the three below pass under: the fraction is one half, not one and not zero.
+        This is the difference between a thin post dimming a call and a thin post silencing it —
+        and it is occlusion sampling, never to be described as diffraction.
+    */
+    std::vector<BvhLib::Triangle> triangles;
+    appendVerticalQuadX(triangles, 1.8f, 1.0f, 4.0f, -3.0f, 3.0f, MATERIAL_GLASS);
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(scene, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+
+    // The half is exact — three samples of six — and the tolerance only covers the square root in
+    // the path arithmetic.
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        TEST_CHECK_CLOSE(response.at(band, binOf(3.6f)), 0.5f * DIRECT_ENERGY, 1e-7f);
+    }
+}
+
+TEST_CASE(a_call_beyond_the_acoustic_horizon_is_never_heard)
+{
+    const BvhLib::Scene empty{sceneAround({})};
+    const MathLib::Vec3 far_ear{25.0f, 1.0f, 0.0f}; // Past the 20 m total-path cap.
+
+    const Acoustics::ImpulseResponse response{Acoustics::deliverCall(empty, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, far_ear, plainCallConfig())};
+    TEST_CHECK(response.total() == 0.0f);
+}
+
+TEST_CASE(a_silent_or_meaningless_call_is_no_call)
+{
+    const BvhLib::Scene empty{sceneAround({})};
+
+    TEST_CHECK(Acoustics::deliverCall(empty, Acoustics::Reflectors{}, CALL_SOURCE, 0.0f, CALL_EAR, plainCallConfig()).total() == 0.0f);
+    TEST_CHECK(Acoustics::deliverCall(empty, Acoustics::Reflectors{}, CALL_SOURCE, -5.0f, CALL_EAR, plainCallConfig()).total() == 0.0f);
+}
+
+TEST_CASE(air_absorption_thins_a_call_by_band_and_by_distance)
+{
+    const BvhLib::Scene empty{sceneAround({})};
+
+    Acoustics::CallConfig config{plainCallConfig()};
+    config.air_absorption_db_per_km = {{0.0f, 100.0f, 1000.0f, 10000.0f}};
+
+    const Acoustics::ImpulseResponse near_response{Acoustics::deliverCall(empty, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, CALL_EAR, config)};
+    const MathLib::Vec3 far_ear{10.0f, 1.0f, 0.0f};
+    const Acoustics::ImpulseResponse far_response{Acoustics::deliverCall(empty, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, far_ear, config)};
+
+    const uint32_t near_bin{binOf(3.6f)};
+    const uint32_t far_bin{binOf(10.0f)};
+
+    // Opaque bands are quieter than transparent ones at the same distance.
+    TEST_CHECK(near_response.at(1u, near_bin) < near_response.at(0u, near_bin));
+    TEST_CHECK(near_response.at(2u, near_bin) < near_response.at(1u, near_bin));
+    TEST_CHECK(near_response.at(3u, near_bin) < near_response.at(2u, near_bin));
+
+    // And the loss grows with the metres crossed: the far ear loses a larger fraction.
+    const float near_ratio{near_response.at(1u, near_bin) / near_response.at(0u, near_bin)};
+    const float far_ratio{far_response.at(1u, far_bin) / far_response.at(0u, far_bin)};
+    TEST_CHECK(far_ratio < near_ratio);
+}
+
+TEST_CASE(a_delivery_is_bit_identical_between_runs)
+{
+    std::vector<BvhLib::Triangle> triangles;
+    appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_FLOOR);
+    appendVerticalQuadX(triangles, 5.0f, 0.0f, 4.0f, -3.0f, 3.0f, MATERIAL_PILLAR);
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+
+    const Acoustics::RectFace wall{.origin = MathLib::Vec3{5.0f, 0.0f, -3.0f}, .edge_u = MathLib::Vec3{0.0f, 0.0f, 6.0f}, .edge_v = MathLib::Vec3{0.0f, 4.0f, 0.0f}};
+    const Acoustics::Reflectors reflectors{.level_heights = {0.0f}, .faces = {wall}};
+
+    const Acoustics::ImpulseResponse first{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+    const Acoustics::ImpulseResponse second{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+
+    TEST_CHECK(first.bins == second.bins);
+}
+
+TEST_CASE(outward_box_faces_face_outward_and_omit_the_bottom)
+{
+    const MathLib::Vec3 centre{1.0f, 2.0f, 3.0f};
+    const MathLib::Vec3 half_extents{0.5f, 1.0f, 2.0f};
+    const std::array<Acoustics::RectFace, 5u> faces{Acoustics::outwardBoxFaces(centre, half_extents)};
+
+    uint32_t tops{0u};
+    for (const Acoustics::RectFace& face : faces) {
+        const MathLib::Vec3 cross{face.edge_u.cross(face.edge_v)};
+        const MathLib::Vec3 normal{cross.normalised()};
+
+        // The winding is the statement of which side reflects: every normal points away from the
+        // centre, and none points down.
+        const MathLib::Vec3 face_centre{face.origin + ((face.edge_u + face.edge_v) * 0.5f)};
+        TEST_CHECK(normal.dot(face_centre - centre) > 0.0f);
+        TEST_CHECK(normal.y > -0.5f);
+
+        if (normal.y > 0.5f) {
+            ++tops;
+        }
+
+        // Every corner of every face lies on the box's surface.
+        for (const MathLib::Vec3& corner : {face.origin, face.origin + face.edge_u, face.origin + face.edge_v, face.origin + face.edge_u + face.edge_v}) {
+            TEST_CHECK(std::fabs(corner.x - centre.x) <= half_extents.x + 1e-6f);
+            TEST_CHECK(std::fabs(corner.y - centre.y) <= half_extents.y + 1e-6f);
+            TEST_CHECK(std::fabs(corner.z - centre.z) <= half_extents.z + 1e-6f);
+        }
+    }
+
+    TEST_CHECK(tops == 1u); // Exactly one top, no bottom.
+}
+
 int main()
 {
     return static_cast<int>(TestingLib::runAll());

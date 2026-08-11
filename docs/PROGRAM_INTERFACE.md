@@ -471,6 +471,20 @@ incomplete.
 already, which is why the vocalisation action and the hearing sense arrive together rather than in
 two separate breaking changes — see [Actions](#actions).
 
+**And the delivery is built.** A call staged this tick sounds on the next, like every other action,
+and that tick's ear views carry its whole response on top of the hum: every ear on the roster
+receives it — the caller's own first and loudest, which is the only readback the voice has or
+needs — with the direct arrival graded by an occlusion probe rather than cut by a single ray (a
+thin post dims a call; it does not silence it; and the grading is occlusion sampling, never
+diffraction), and one validated first-order image per terrace level and per outward box face, each
+constructed by mirror arithmetic and then confirmed with rays through the same hierarchy every
+other sense reads. What the enumeration cannot reach, nothing pretends to deliver: the terrace
+risers are tilted as built, so a call bounced off one deflects rather than returns, and
+echolocation on the Grid is **bistatic** — creatures hear each other's calls and their echoes, and
+a caller hears its own echo only off surfaces that genuinely face it, such as a box wall.
+[ACOUSTICS.md](ACOUSTICS.md) § The Terraced Floor carries the riser geometry and the one generator
+change that would make monostatic ranging real.
+
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
 time bin per ear, and stops.** Anything that names a source, separates streams, reports "a wall is
 three metres to your left", or performs auditory scene analysis of any kind belongs in a Program
@@ -494,39 +508,28 @@ following would be a far gentler first problem for a Program than interpreting a
 
 An action is physical intent, expressed in the body frame, and nothing more.
 
-```c
-/*! What the creature attempts to do this tick. The Grid zeroes this before each call. */
-typedef struct TglActions
-{
-    /*! Desired forward speed in metres per second. Negative reverses. Clamped by the Grid. */
-    float desired_forward_speed;
+`TglActions` is declared in
+[the header](../libs/program-abi/include/tgl/tgl_program_abi.h), like everything else in the
+interface: a desired forward speed, a desired turn rate, and the loudness of one call. This
+document deliberately does not restate the struct — the header is the specification, and the one
+listing this section used to carry proved the rule by drifting: it still showed the vertical
+actuator after the header had retired it. The decisions behind the fields:
 
-    /*! Desired turn rate about the body's up axis in radians per second.
-        Positive is anticlockwise seen from above. Clamped by the Grid. */
-    float desired_turn_rate;
+**There is deliberately no vertical intent.** Height is physics' business — gravity, the floor and
+whatever the body ran off — and on a Grid with no water and nothing climbable a vertical actuator
+clamped to zero for every plausible body was a field the Grid read and nothing could act on.
+`TglSenses::body_vertical_speed` still reports what gravity is doing.
 
-    /*! Desired vertical speed in metres per second, body frame. Clamped by the Grid. */
-    float desired_vertical_speed;
-
-    /* -- Vocalisation -- */
-
-    /*! Loudness of a call emitted this tick, relative to a primary neon tube. Zero is silent.
-        Clamped by the Grid to what this body can produce.
-
-        A **call**, not a channel: the Grid emits it as a single burst from the creature's own
-        position and it is over. There is no field for its duration, spectrum or waveform, because
-        there is no waveform anywhere on the Grid — the body's descriptor carries what its voice
-        sounds like, and this says only whether it used it and how hard. Setting it every tick
-        produces a train of calls, which is what an echolocating animal does; it does not produce a
-        continuous tone, and nothing on the Grid can. */
-    float vocalisation_strength;
-} TglActions;
-```
+**A call is a call, not a channel.** The Grid emits it as a single burst from the creature's own
+position and it is over. There is no field for its duration, spectrum or waveform, because there
+is no waveform anywhere on the Grid — what the voice sounds like is a fact about the body,
+authored on the Grid's side as the ears are, and the action says only whether it was used and how
+hard. Setting it every tick produces a train of calls, which is what an echolocating animal does;
+it does not produce a continuous tone, and nothing on the Grid can.
 
 The Grid **clamps** every field to the body's physical limits and then feeds the result to the
 physics step as intent, not as a teleport. A Program asking for one hundred metres per second gets
-whatever its body can actually manage. Non-finite values (`NaN`, infinities) are treated as zero
-and logged.
+whatever its body can actually manage. Non-finite values (`NaN`, infinities) are treated as zero.
 
 The limits themselves are a property of the body, fixed when the Program is rezzed, and they are not
 negotiable by anything a Program returns. This document promises clamping in every action field and

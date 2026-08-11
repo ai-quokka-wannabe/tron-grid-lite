@@ -4,10 +4,13 @@ What changes when the sense is sound rather than light, and the concrete shape o
 the code that exists today.
 
 The gather exists on both sides — `Acoustics::gather` on the host, `acoustics.slang` on the device,
-held to each other by `--verify-acoustics` — and everything this document proposes beyond it is a
-design proposal. Every performance figure below is a **budget** derived from the visual tracer's
-measured throughput or quoted from somebody else's published work: `GpuPass` has no acoustic
-enumerator, so the profiler has never timed one.
+held to each other by `--verify-acoustics` — and the point-source delivery exists as
+`Acoustics::deliverCall`, host-only and deliberately so: a call is a few dozen enumerated
+candidates per ear, which is not a workload a device improves, and the ears are filled on the host
+regardless. Everything this document proposes beyond those two is a design proposal. Every
+performance figure below is a **budget** derived from the visual tracer's measured throughput or
+quoted from somebody else's published work: `GpuPass` has no acoustic enumerator, so the profiler
+has never timed one.
 
 The evidence sits in [research/acoustics.md](research/acoustics.md): the geometrical-acoustics
 survey, the creature roster's published audiograms, and the full reference list. This file says what
@@ -154,10 +157,9 @@ kernel **is** the visual kernel. Rays find emitters by hitting them, exactly as 
 
 Point sources are the opposite case and need the opposite treatment. A creature vocalisation is a
 point, a gathered ray will never hit it, and those paths must be enumerated explicitly. Phase 5
-therefore has two mechanisms in its *design* — gather for extended sounding geometry, enumerate for
-point sources — both walking the same hierarchy. That is not a design smell; it is the two cases
-being genuinely different. Only the first is built in the first cut, for reasons given under
-[The Build Proposal](#the-build-proposal).
+therefore has two mechanisms — `Acoustics::gather` for extended sounding geometry,
+`Acoustics::deliverCall` for point sources — both walking the same hierarchy. That is not a design
+smell; it is the two cases being genuinely different, and both are built.
 
 The cost structure that falls out is the **inverse** of the literature's, and the documentation should
 say so plainly so that nobody reasons about acoustic cost by analogy with rays per creature. The hum
@@ -170,10 +172,11 @@ The response is computed against one frame's BVH and arrives over the following 
 during which the Grid moves. Every interactive acoustics engine has this problem and every one of
 them accepts it. The honest thing is to state the bound rather than pretend the snapshot is exact:
 **nothing in the delivered response is staler than the response length in creature motion** — about
-58 ms, or sixteen frames, because the 20 m cap proposed below bounds *total accumulated path length*,
-not one-way range. (The 117 ms out-and-back row in the delay table is what a 20 m monostatic
-echolocation range would cost; an emitting creature therefore needs a 128-bin histogram, and that is
-a Phase 5b decision.)
+58 ms, or sixteen frames, because the 20 m cap bounds *total accumulated path length*, not one-way
+range. (The 117 ms out-and-back row in the delay table is what a 20 m *one-way* echolocation range
+would cost, and the decision went the other way: the cap stays on total path and sixty-four bins
+hold everything it permits, so an emitter's own echoes reach half the cap in range — ten metres,
+which is out at Schnitzler and Kalko's bound on useful echolocation anyway.)
 
 ### The ABI cannot deliver hearing the way it delivers irradiance
 
@@ -973,9 +976,10 @@ genuine position dependence, from which a creature could infer coarse altitude a
 the Grid's mirror floor makes vision untrustworthy. That is the same argument PERCEPTION.md already
 makes for vestibular sensing, arriving through a different sense.
 
-**Creature vocalisation is not excluded and should follow.** It makes the Grid's acoustics dynamic, it
-delivers echolocation for free once hearing exists, and it is the case that exercises the point-source
-enumeration path. It is Phase 5b, not a competitor.
+**Creature vocalisation followed**, as `Acoustics::deliverCall`. It makes the Grid's acoustics
+dynamic, it delivered echolocation the moment hearing existed, and it is the case that exercises
+the point-source enumeration path — a staged call sounds on the next tick, and every ear on the
+roster receives it on top of its gathered hum.
 
 ---
 
@@ -1140,14 +1144,11 @@ ISO 3382-1's definition contains the word *enclosure* and this scene is not one.
 
 ## What Phase 5 Defers
 
-Each of these has a written trigger, so that "later" means something checkable.
+Each of these has a written trigger, so that "later" means something checkable. One entry has
+already left this list the way an entry should: point sources were deferred here with the trigger
+"the vocalisation action lands in the ABI", the action landed, and the mechanism was built as
+`Acoustics::deliverCall` — see [The Build Proposal](#the-build-proposal).
 
-- **Point sources, and everything built to serve them.** Direct-occlusion rays against a point source
-  and image-source enumeration for a point source are both specified under
-  [The Build Proposal](#the-build-proposal) and neither is written in code in the first cut, because
-  the only point source in the design is a creature vocalisation and that is Phase 5b. Building the
-  second mechanism before its use case exists is the rule-4 violation this document rejects beam
-  tracing for. **Trigger: the vocalisation action lands in the ABI.**
 - **Diffuse rain / secondary sources.** The technique — turning every surface hit into a source that
   radiates explicitly towards the receiver, which is next-event estimation by another name — is
   correct, lets the receiver be a point, and traces to Heinz's 1993 grafting of statistical scattering
@@ -1224,30 +1225,32 @@ Each of these has a written trigger, so that "later" means something checkable.
 
 ### The pass
 
-Four steps per ear per solve, all against the existing hierarchy — but only the last two are built in
-the first cut, because the first two exist solely to serve point sources and there are no point sources
-until Phase 5b.
+Four steps per ear per solve, all against the existing hierarchy. The last two are the gather; the
+first two are the point-source delivery, `Acoustics::deliverCall`, built when the vocalisation
+action landed in the ABI and exercised by `src/tests/acoustics_tests.cpp` against hand-computable
+scenes.
 
-1. **Direct occlusion — specified now, built with Phase 5b.** For each point source, one any-hit ray
-   from source to listener. Neither `BvhLib::intersect` nor `trace()` has an early-out variant — both
-   compute the *nearest* hit and tighten the limit as they go. Adding one is about twenty lines on each
-   side and no BVH change, and the two must move together because `libs/bvh/tests/bvh_tests.cpp` exists
-   precisely to hold them to each other. **Make the result a fraction, never a bit.** The single largest
+1. **Direct occlusion — built.** For each point source, rays from listener to source, capped at the
+   leg's own length — the nearest-hit traversal with a distance cap answers clearance without any
+   any-hit variant having to exist. **The result is a fraction, never a bit.** The single largest
    error available in this whole subsystem is "ray blocked implies silence", stated most bluntly by
    Microsoft's Project Triton page: in a ray model "a thin lamppost blocking the ray from source to
    listener can occlude as much as a concrete wall". Steam Audio's fix is to model the source as a
-   sphere and sample several points within it, capped at 16 samples. Half a dozen extra rays turn a
-   binary shadow into a graded one. **It is not diffraction and must never be described as
+   sphere and sample several points within it, capped at 16 samples; here the probe is half a dozen
+   deterministic Fibonacci points on a sphere of the emitting body's own scale, and the clear
+   fraction scales the arrival. **It is not diffraction and must never be described as
    diffraction** — it removes the discontinuity, and the discontinuity is the artefact that would
    actually break a creature's behaviour.
-2. **Enumerated image sources — specified now, built with Phase 5b.** For point sources only: six
-   terrace levels plus about fifty outward-facing box faces, each reflected and validated with one BVH
-   ray that confirms both that the reflection point lies on a face at that level and that the path is
-   clear. Roughly 57 candidates per source-listener pair. Note that no pre-filter decides which of the
-   six levels are plausible for a given listener: six is small enough that the validation ray *is* the
-   plausibility test, which is why the listener's own terrace level never has to be determined and no
-   height-lookup machinery is needed. It is written down here so the histogram layout is not chosen in
-   ignorance of it, and it is not written in code until there is a vocalisation to enumerate.
+2. **Enumerated image sources — built.** For point sources only: the terrace levels plus about fifty
+   outward-facing box faces, each reflected by mirror arithmetic and then validated with rays — one
+   proving the reflection point stands on real geometry lying *in the mirror's own plane* with the
+   source's leg clear, one proving the leg to the ear. Roughly 57 candidates per source-listener
+   pair, first order only. Note that no pre-filter decides which levels are plausible for a given
+   listener: the candidate count is small enough that the validation ray *is* the plausibility
+   test, which is why the listener's own terrace level never has to be determined and no
+   height-lookup machinery is needed — `gridTerraceLevels` even lists the top level the
+   quantisation can only reach where the noise is exactly one, and on this landscape that candidate
+   simply never validates.
 3. **Deterministic gather**, for the hum bed and for everything the enumeration cannot reach — the
    risers, oblique paths, second order. Cast N directions from the ear, accumulate path length, and on
    every hit whose material has a non-zero `acoustic_source_strength`, deposit that strength times the

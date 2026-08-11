@@ -336,25 +336,38 @@ namespace
         return MathLib::Vec3{world_x, ground + half_extents.y, world_z};
     }
 
-    [[nodiscard]] Mesh makePillars(const GridFloorConfig& floor_config)
+    /*!
+        One box standing on the Grid: the placement fact itself.
+
+        Both of a box's public faces derive from this one struct — its mesh through `generateBox`,
+        and its acoustic mirror faces through `Acoustics::outwardBoxFaces` — so the wall a
+        creature's echo comes back off is the wall the User's window shows, by construction rather
+        than by two lists kept in step.
+    */
+    struct PlacedBox {
+        MathLib::Vec3 centre{};
+        MathLib::Vec3 half_extents{};
+    };
+
+    [[nodiscard]] std::vector<PlacedBox> pillarPlacements(const GridFloorConfig& floor_config)
     {
         constexpr float FLOOR_HALF_EXTENT{64.0f};
 
-        Mesh pillars{};
         const std::array<MathLib::Vec3, 6u> positions{MathLib::Vec3{-24.0f, 0.0f, -18.0f}, MathLib::Vec3{18.0f, 0.0f, -30.0f}, MathLib::Vec3{34.0f, 0.0f, 6.0f},
             MathLib::Vec3{-38.0f, 0.0f, 14.0f}, MathLib::Vec3{6.0f, 0.0f, -52.0f}, MathLib::Vec3{-8.0f, 0.0f, 22.0f}};
 
+        std::vector<PlacedBox> placements;
         for (size_t index{0u}; index < positions.size(); ++index) {
             const float height{6.0f + (static_cast<float>(index % 3u) * 4.0f)};
             const MathLib::Vec3 half_extents{0.45f, height * 0.5f, 0.45f};
             const MathLib::Vec3 centre{plantOnFloor(positions[index].x, positions[index].z, half_extents, floor_config)};
 
             if ((std::abs(centre.x) < FLOOR_HALF_EXTENT) && (std::abs(centre.z) < FLOOR_HALF_EXTENT)) {
-                pillars.append(generateBox(centre, half_extents));
+                placements.push_back(PlacedBox{.centre = centre, .half_extents = half_extents});
             }
         }
 
-        return pillars;
+        return placements;
     }
 
     /*!
@@ -365,26 +378,35 @@ namespace
         Each slab is a solid box rather than a plane: a ray must cross two interfaces to pass
         through, which is what makes the refraction visible instead of merely a tint.
     */
-    [[nodiscard]] Mesh makeGlassSlabs(const GridFloorConfig& floor_config)
+    [[nodiscard]] std::vector<PlacedBox> glassSlabPlacements(const GridFloorConfig& floor_config)
     {
-        Mesh slabs{};
-
         // Broad upright panes, thin front to back, spread across the near view.
         const MathLib::Vec3 wide_slab{3.0f, 3.0f, 0.35f};
-        slabs.append(generateBox(plantOnFloor(-9.0f, 8.0f, wide_slab, floor_config), wide_slab));
         const MathLib::Vec3 mid_slab{2.2f, 2.4f, 0.35f};
-        slabs.append(generateBox(plantOnFloor(2.0f, 2.0f, mid_slab, floor_config), mid_slab));
         const MathLib::Vec3 tall_slab{2.6f, 3.6f, 0.35f};
-        slabs.append(generateBox(plantOnFloor(13.0f, 10.0f, tall_slab, floor_config), tall_slab));
 
-        return slabs;
+        return std::vector<PlacedBox>{
+            PlacedBox{.centre = plantOnFloor(-9.0f, 8.0f, wide_slab, floor_config), .half_extents = wide_slab},
+            PlacedBox{.centre = plantOnFloor(2.0f, 2.0f, mid_slab, floor_config), .half_extents = mid_slab},
+            PlacedBox{.centre = plantOnFloor(13.0f, 10.0f, tall_slab, floor_config), .half_extents = tall_slab},
+        };
     }
 
     //! A glowing translucent column: emission and transmission in the same surface.
-    [[nodiscard]] Mesh makeGlowingColumn(const GridFloorConfig& floor_config)
+    [[nodiscard]] std::vector<PlacedBox> glowingColumnPlacement(const GridFloorConfig& floor_config)
     {
         const MathLib::Vec3 column{0.7f, 5.0f, 0.7f};
-        return generateBox(plantOnFloor(-2.0f, -12.0f, column, floor_config), column);
+        return std::vector<PlacedBox>{PlacedBox{.centre = plantOnFloor(-2.0f, -12.0f, column, floor_config), .half_extents = column}};
+    }
+
+    //! The meshes of a set of placed boxes, appended in placement order.
+    [[nodiscard]] Mesh boxMesh(const std::vector<PlacedBox>& placements)
+    {
+        Mesh mesh{};
+        for (const PlacedBox& box : placements) {
+            mesh.append(generateBox(box.centre, box.half_extents));
+        }
+        return mesh;
     }
 
     // The Grid: a mirror floor under a low terraced relief, with neon tubes along its grid lines.
@@ -415,9 +437,9 @@ namespace
         const Mesh floor{generateGridFloor(GRID_FLOOR_CONFIG)};
         const NeonGrid neon{generateGridFloorNeon(GRID_FLOOR_CONFIG, NEON_TUBE_CONFIG)};
 
-        const Mesh pillars{makePillars(GRID_FLOOR_CONFIG)};
-        const Mesh glass{makeGlassSlabs(GRID_FLOOR_CONFIG)};
-        const Mesh glowing_column{makeGlowingColumn(GRID_FLOOR_CONFIG)};
+        const Mesh pillars{boxMesh(pillarPlacements(GRID_FLOOR_CONFIG))};
+        const Mesh glass{boxMesh(glassSlabPlacements(GRID_FLOOR_CONFIG))};
+        const Mesh glowing_column{boxMesh(glowingColumnPlacement(GRID_FLOOR_CONFIG))};
 
         std::vector<BvhLib::Triangle> world_triangles;
         world_triangles.reserve(floor.triangleCount() + neon.primary.triangleCount() + neon.accent.triangleCount() + pillars.triangleCount() + glass.triangleCount()
@@ -429,6 +451,36 @@ namespace
         appendTriangles(world_triangles, glass, MATERIAL_GLASS);
         appendTriangles(world_triangles, glowing_column, MATERIAL_GLOWING_GLASS);
         return world_triangles;
+    }
+
+    /*!
+        The Grid's acoustic mirror planes: every terrace level the floor can quantise to, and the
+        outward faces of everything standing on it.
+
+        Derived from the very config the floor is generated from and the very placements the box
+        meshes are built from, so the candidate list cannot drift from the geometry the validation
+        rays then test it against. The list proposes; the Grid disposes. Ten boxes of five faces
+        and seven candidate levels — the top one exists only where the noise reaches exactly one,
+        which the shipped landscape never does, so it is a candidate that validation rejects
+        everywhere rather than an echo that arrives from nowhere.
+    */
+    [[nodiscard]] Acoustics::Reflectors makeGridReflectors()
+    {
+        Acoustics::Reflectors reflectors{};
+        reflectors.level_heights = gridTerraceLevels(GRID_FLOOR_CONFIG);
+
+        const auto add_faces = [&reflectors](const std::vector<PlacedBox>& placements) {
+            for (const PlacedBox& box : placements) {
+                for (const Acoustics::RectFace& face : Acoustics::outwardBoxFaces(box.centre, box.half_extents)) {
+                    reflectors.faces.push_back(face);
+                }
+            }
+        };
+        add_faces(pillarPlacements(GRID_FLOOR_CONFIG));
+        add_faces(glassSlabPlacements(GRID_FLOOR_CONFIG));
+        add_faces(glowingColumnPlacement(GRID_FLOOR_CONFIG));
+
+        return reflectors;
     }
 
     /*!
@@ -1047,7 +1099,7 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     }
 
     SensesTracer senses_tracer{device, world, makeMaterials(), max_rays, (shader_directory / "senses.spv").string(), logger};
-    GridSensesSource senses_source{scene, Acoustics::makeAcousticSourceStrengths(), &senses_tracer};
+    GridSensesSource senses_source{scene, Acoustics::makeAcousticSourceStrengths(), makeGridReflectors(), &senses_tracer};
 
     for (uint32_t index{0u}; index < ticks; ++index) {
         roster.tick(senses_source);

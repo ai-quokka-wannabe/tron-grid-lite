@@ -232,6 +232,29 @@ float gridSurfaceHeight(float world_x, float world_z, const GridFloorConfig& con
     return config.height + (relief * config.relief_amplitude);
 }
 
+std::vector<float> gridTerraceLevels(const GridFloorConfig& config)
+{
+    // The same three conditions under which gridSurfaceHeight returns config.height unconditionally:
+    // the floor is flat, and flat is one level.
+    if ((config.relief_amplitude <= 0.0f) || (config.relief_wavelength <= 0.0f) || (config.relief_octaves == 0u)) {
+        return {config.height};
+    }
+
+    // Smooth swells never hold a plane, so there is no level to name.
+    if (config.relief_terraces == 0u) {
+        return {};
+    }
+
+    std::vector<float> levels;
+    levels.reserve(config.relief_terraces + 1u);
+    for (uint32_t level{0u}; level <= config.relief_terraces; ++level) {
+        // Spelled as gridSurfaceHeight computes it — quantised fraction times amplitude — so the
+        // two agree to the last bit rather than to an argument about float association.
+        levels.push_back(config.height + ((static_cast<float>(level) / static_cast<float>(config.relief_terraces)) * config.relief_amplitude));
+    }
+    return levels;
+}
+
 float gridMeshHeight(float world_x, float world_z, const GridFloorConfig& config)
 {
     if ((config.cells == 0u) || (config.cell_size <= 0.0f)) {

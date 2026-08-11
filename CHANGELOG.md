@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Echolocation: a creature's call sounds on the Grid.** The point-source half of hearing, built
+  the moment its written trigger fired — ACOUSTICS.md deferred it against "the vocalisation action
+  lands in the ABI", and the action was already there. `Acoustics::deliverCall` enumerates what a
+  gather cannot hit: the direct path, graded by a six-point occlusion probe on a sphere of the
+  body's own scale so a thin post dims a call rather than silencing it (occlusion sampling, never
+  described as diffraction), plus one first-order image per terrace level and per outward box
+  face — mirror arithmetic proposing, validation rays disposing, with a hit refused unless it lies
+  at the reflection point *in the mirror's own plane*, so a wall standing on a terrace cannot
+  answer for the terrace. Same bins, same spreading floor, same air model as the gather, priced by
+  the same `depositArrival` the gather now shares rather than by a twin kept in step. The voice
+  joined the actuators: staged like every action, sounding next tick with no traction condition,
+  collected by the roster's new `SensesSource::beginTick` from physics-settled state — reading
+  staged copies mid-loop would hear a tick that never happened — and delivered by
+  `GridSensesSource` onto every ear's cached hum, the caller's own first and loudest, which is the
+  only readback a voice needs. The hum cache is never written by a call, so the skip licence stays
+  exact and a silent tick reads pure gather again, bit for bit. The Grid's reflector list derives
+  from the same `PlacedBox` placements the meshes are built from and the same config the floor is
+  generated from, so the wall an echo returns off is the wall the window shows. Echolocation as
+  built is **bistatic** — the 22.6° risers deflect a caller's own ping skyward, exactly as the
+  terraced-floor analysis predicted — and the vertical-riser generator change that would make
+  monostatic ranging real stays on the table in ACOUSTICS.md. Twenty-one new ctest cases pin the
+  arithmetic to hand-computed scenes (a wall five metres out answers in bin 28; a curtain wall at
+  source height dims the probe to exactly one half), and every new check was broken deliberately
+  once — bin arithmetic, validation, staging, call collection — and discriminated.
+
 - **A creature is subject to the Grid: gravity, contacts and friction.** The tick loop grew its
   physics step, and the integration policy is worth stating because it was chosen rather than
   defaulted: **analytic where a closed form exists, symplectic where it does not, impulses at the
@@ -253,6 +278,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the discrete device. Both exist for cross-vendor testing rather than for configuration.
 
 ### Changed
+
+- **`std::numbers` replaces hand-written mathematical constants where the bits agree.** The
+  acoustic two-pi and the first body's right-angle turn bound are now spelled from the C++20
+  standard constants — bit-identical to the literals they replace, so no gather, digest or hash
+  moves. `Acoustics::GOLDEN_TURN_FRACTION` deliberately stays a literal: `acoustics.slang` carries
+  the same literal on the device side, Slang has no `std::numbers` to share, and the header
+  documents that pairing as the reason it must not be derived.
 
 - **The Whitted walk moved into a `grid_optics` module, licensed by byte-identity.** `trace.slang`
   promised from its first line that "the same kernel will serve creature sensors", and the eye
@@ -555,6 +587,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tools/` gained a README, a requirements file and a `.venv` placeholder.
 
 ### Fixed
+
+- **`docs/PROGRAM_INTERFACE.md` § Actions restated a struct and drifted, proving its own rule.**
+  The listing still carried `desired_vertical_speed` after ABI v2 retired it, promised logging the
+  sanitiser does not do, and repeated the header's claim that "the body's descriptor carries what
+  its voice sounds like" — no such member exists; the voice is authored on the Grid's side as the
+  ears are. The listing is gone in favour of the header, which is what the document says it does
+  everywhere else, and the same false sentence was corrected at `TglActions::vocalisation_strength`
+  in the header itself — a comment-only change the fingerprint tool confirms costs nothing.
 
 - **The last three defects in `docs/PROGRAM_INTERFACE.md` are closed, before the physics tick loop
   exists to implement what the document describes.** Threading now states the header's own promise

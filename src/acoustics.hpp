@@ -359,4 +359,144 @@ namespace Acoustics
     */
     [[nodiscard]] ImpulseResponse gather(const BvhLib::Scene& scene, const std::vector<float>& source_strengths, const MathLib::Vec3& ear, const GatherConfig& config);
 
+    /*!
+        How closely a struck surface must align with a mirror plane before an image-source arrival
+        is believed, as the absolute dot product of the two unit normals.
+
+        The value is chosen against the Grid's own geometry: a flat terrace triangle or a box face
+        agrees with its plane to float rounding, while the tilted riser facets — 22.6°, and 30.5°
+        where a step crosses a quad diagonally — give dot products of 0.92 and 0.86. A riser is not
+        a specular return path for the plane above or below it, and this is the number that says so.
+    */
+    inline constexpr float MIRROR_ALIGNMENT_MINIMUM{0.999f};
+
+    /*!
+        One rectangular reflector: a corner and the two full edges that span the face.
+
+        The outward normal is `cross(edge_u, edge_v)` normalised, so the winding of the edges is the
+        statement of which side reflects. The edges must be perpendicular to each other — a box face
+        always is, and the in-rectangle test below assumes it.
+    */
+    struct RectFace {
+        MathLib::Vec3 origin{};
+        MathLib::Vec3 edge_u{};
+        MathLib::Vec3 edge_v{};
+    };
+
+    /*!
+        The mirror planes a point source's early reflections are enumerated against.
+
+        An enumeration rather than a search, because a point source cannot be gathered: a ray fan
+        from the ear has vanishing probability of passing through a point, so the paths from a call
+        must be constructed — source, mirror image, reflection point — and then *validated* against
+        the real geometry with rays. The list is therefore candidates, not facts: a level with no
+        triangle under the reflection point, or a face with something in the way, contributes
+        nothing, and the validation ray is the plausibility test. That is also why the list may be
+        generous — `gridTerraceLevels` includes the top level the quantisation can only reach where
+        the noise is exactly one, and on a landscape that never reaches it the candidate simply
+        never validates.
+
+        First order only. The Grid's own arithmetic rules out going further: six levels and fifty
+        faces are fifty-six candidates, and their second order is over three thousand, almost all of
+        them geometrically impossible. What first order misses — riser paths, oblique multi-bounce —
+        is exactly what the gather already covers for extended sources, and a call's late energy is
+        below the air and spreading floors regardless.
+    */
+    struct Reflectors {
+        //! Heights of horizontal mirror planes: the floor's terrace levels.
+        std::vector<float> level_heights;
+
+        //! Rectangular mirror faces: the outward faces of everything standing on the floor.
+        std::vector<RectFace> faces;
+    };
+
+    /*!
+        The five outward faces of an axis-aligned box: four sides and the top.
+
+        The bottom face is deliberately absent. A box on the Grid stands on the floor — `plantOnFloor`
+        sets it *into* the ground where a terrace step crosses its footprint — so its underside faces
+        earth rather than air, and a reflector nothing can reach is a candidate that costs validation
+        rays and returns nothing.
+
+        \param centre World-space centre of the box, in metres.
+        \param half_extents Half the size along each axis.
+        \return Five faces whose outward normals point away from the centre.
+    */
+    [[nodiscard]] std::array<RectFace, 5u> outwardBoxFaces(const MathLib::Vec3& centre, const MathLib::Vec3& half_extents);
+
+    //! What one call delivery needs to know that is not the Grid, the caller or the listener's position.
+    struct CallConfig {
+        /*!
+            The call's strength in each of the listener's bands, at full loudness.
+
+            What a voice sounds like is a fact about the emitting body, resolved into whichever
+            bands the listening ear happens to have — the same split the hum makes between its
+            Grid-level spectrum and the ear's edges. The unit default is the first body's white
+            call heard by the first body's ears; a preset body with a real voice resolves its own
+            spectrum, and that resolver arrives with it.
+        */
+        std::array<float, BAND_COUNT> spectrum{{1.0f, 1.0f, 1.0f, 1.0f}};
+
+        //! Atmospheric absorption in each of the listener's bands, in decibels per kilometre.
+        //! Authored per listener, exactly as `GatherConfig` documents.
+        std::array<float, BAND_COUNT> air_absorption_db_per_km{{0.0f, 0.0f, 0.0f, 0.0f}};
+
+        //! Total accumulated path cap, in metres. The same physical horizon the gather has.
+        float range_metres{RANGE_METRES};
+
+        /*!
+            Radius of the sphere the direct-occlusion probe samples, in metres.
+
+            The single largest error available in this subsystem is "ray blocked implies silence":
+            in a ray model a thin post between source and listener occludes as much as a wall. The
+            probe samples points on a sphere of this radius around the source and reports the
+            *fraction* of them reachable, so a graze dims the direct arrival instead of severing
+            it. **It is not diffraction and must never be described as diffraction** — it removes
+            the discontinuity, and the discontinuity is the artefact that would break a creature's
+            behaviour. The default is the first body's half height; pass the emitting body's own
+            scale.
+        */
+        float source_radius_metres{0.05f};
+
+        //! Points the occlusion probe samples. One, or a zero radius, degrades to a single
+        //! binary ray. Half a dozen is the number that turns a hard shadow into a graded one.
+        uint32_t occlusion_sample_count{6u};
+    };
+
+    /*!
+        Delivers one creature's call to one ear: the point-source half of hearing on the Grid.
+
+        The opposite mechanism to `gather`, for the opposite kind of source. The hum is extended
+        geometry a ray fan cannot miss; a call is a point a ray fan cannot hit. So where the gather
+        casts and collects, this **enumerates**: the direct path, graded by the occlusion probe
+        rather than cut by it, and one first-order image per reflector — the source mirrored in the
+        plane, the reflection point constructed, and both legs validated with rays through the very
+        hierarchy every other sense reads. A candidate whose reflection point has no triangle under
+        it, whose struck surface is not aligned with the mirror plane, or whose path is blocked
+        contributes nothing.
+
+        Same units, same bins, same spreading floor and same air model as the gather, applied by the
+        same arithmetic — the returned response adds bin for bin onto a gathered one, which is how a
+        tick's ear view carries the hum and every call at once. Surfaces reflect losslessly here for
+        the same reason they do there.
+
+        The response is the Grid's answer for the whole flight of the call: an echo later than the
+        listener's window is dropped, exactly as `TglEarDesc` documents, and with the range cap at
+        `RANGE_METRES` of total path nothing this function can produce falls off the end. A
+        monostatic echo therefore reaches half the cap in range — an emitter hears its own wall at
+        ten metres, not twenty — which is the physics of the out-and-back path rather than a second
+        budget.
+
+        \param scene The Grid. Validation rays are traced against it.
+        \param reflectors Candidate mirror planes, as `Reflectors` documents.
+        \param source World-space position the call leaves from, in metres.
+        \param strength Loudness of the call, in the unit `TglEarView::energy` defines. Zero or
+               negative is silence and returns an empty response.
+        \param ear World-space position of the listening ear, in metres.
+        \param config Spectrum, air absorption, range cap and the occlusion probe.
+        \return Energy per band per time bin, ready to add onto a gathered response.
+    */
+    [[nodiscard]] ImpulseResponse deliverCall(const BvhLib::Scene& scene, const Reflectors& reflectors, const MathLib::Vec3& source, float strength,
+        const MathLib::Vec3& ear, const CallConfig& config);
+
 } // namespace Acoustics

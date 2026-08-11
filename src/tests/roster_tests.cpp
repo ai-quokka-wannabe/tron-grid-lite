@@ -532,6 +532,34 @@ TEST_CASE(a_terrace_riser_is_a_wall_the_body_feels_on_its_face)
     TEST_CHECK_EQUAL(creature.forward_speed, 0.0f);
 }
 
+TEST_CASE(a_call_sounds_on_the_tick_after_it_is_staged)
+{
+    /*
+        The voice is an actuator like the wheels: what a Program returns is staged, and physics
+        acts on it next tick for every creature alike. The fixture calls from its very first tick,
+        so the first tick's voice is the zeroed default and the second tick's is the call — the
+        staging delay, observed in the one actuator with no traction condition.
+    */
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_calling", 1u, flatGround()};
+
+    roster.tick(nullSenses());
+    TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.0f);
+
+    roster.tick(nullSenses());
+    TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.75f);
+}
+
+TEST_CASE(a_meaningless_loudness_reaches_the_voice_as_silence)
+{
+    // The excessive Program shouts at minus five. A negative loudness is not a quieter sound but
+    // a meaningless one, so what reaches the voice actuator is silence rather than a magnitude.
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u, flatGround()};
+    roster.tick(nullSenses());
+    roster.tick(nullSenses());
+
+    TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.0f);
+}
+
 TEST_CASE(the_same_run_hashes_bit_identically_twice)
 {
     /*
@@ -564,6 +592,7 @@ TEST_CASE(the_same_run_hashes_bit_identically_twice)
             mix(creature.velocity.z);
             mix(creature.forward_speed);
             mix(creature.turn_rate);
+            mix(creature.vocalisation);
         }
         return hash;
     };
