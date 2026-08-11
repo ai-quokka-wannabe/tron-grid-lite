@@ -534,6 +534,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The last three defects in `docs/PROGRAM_INTERFACE.md` are closed, before the physics tick loop
+  exists to implement what the document describes.** Threading now states the header's own promise
+  — `program_tick` runs serially, in roster order, on one thread fixed for the whole run — where it
+  previously offered a parallel-tick licence one bullet away from a single-tick-thread claim; the
+  parallel tick is now named as a widening this version does not license, which is exactly the
+  change `TGL_ABI_VERSION` documents as a bump. The acoustic reference level is stated once, in the
+  header at `TglEarView::energy`: PROGRAM_INTERFACE.md points at it and ACOUSTICS.md derives it,
+  because a unit stated in two places can disagree with itself. The lifecycle defect turned out to
+  be already fixed in the document — physics advances once for the roster and actions stage after
+  every call, both outside the per-creature loop — so its box is ticked with a note that the
+  kinematic v1 `Roster::tick` is now the side that grows into the contract when physics lands.
 - **An uncovered window could sit showing stale pixels until the camera moved.** The platforms push
   an `Expose` event when the window's contents need drawing — uncovered, remapped, freshly shown —
   but the render loop forwarded it into the spectator, which ignores it, and the idle gate then

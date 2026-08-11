@@ -344,14 +344,19 @@ vtable, and produced the corruption the check exists to prevent. It now bumps on
 already-built Program could notice, and `tools/check_abi_version.py` enforces that in CI against a
 fingerprint of the header — a mechanism rather than a discipline.
 
-Three remain, and none is in the header:
+The last three are closed, and none was in the header:
 
-- [ ] **The lifecycle puts *advance physics* and *apply actions* both inside the per-creature loop**,
-      which makes roster order semantically load-bearing and "actions take effect next tick" false.
-- [ ] **Threading promises a single tick thread and parallel creature ticks one bullet apart.**
-- [ ] **The acoustic scale had two reference levels**, and while PROGRAM_INTERFACE.md and ACOUSTICS.md
-      now agree that the primary neon tube is the only one, nothing checks that they still agree. It
-      is a number stated in two documents, which is the shape this repository loses time to.
+- [x] **The lifecycle** advances physics once for the whole roster and stages actions after every
+      Program has been called — both outside the per-creature loop, with the ordering argument
+      written beside the listing. The kinematic v1 `Roster::tick` still applies actions in the loop
+      and says so; the physics etape is where the code grows into the documented contract.
+- [x] **Threading** now states the header's own promise — serial, roster order, one fixed thread —
+      and names the parallel tick as a widening this version does not license, which is exactly the
+      change `TGL_ABI_VERSION` documents as a bump.
+- [x] **The reference level is stated once**, in the header at `TglEarView::energy`.
+      PROGRAM_INTERFACE.md points at it, and ACOUSTICS.md derives it while saying it is the
+      derivation rather than a second statement. A unit stated in two places can disagree with
+      itself; one that is stated once cannot.
 
 ## Etape 14 — Name every Vulkan object, and handle a lost device once
 

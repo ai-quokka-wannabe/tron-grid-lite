@@ -432,12 +432,13 @@ own late arrivals.
 walks: finding arrival times within a band means stepping through bins, and this layout makes that
 one contiguous run per band where the transpose would make every step a stride.
 
-**The unit is the primary neon tube**, whose authored strength is 1.0 by definition. It is the Grid's
-only reference level — there is no absolute one, so no dB SPL figure is derivable from these numbers
-— and it is the same reference `TglActions::vocalisation_strength` uses. It is *not* relative to "the
-emitting source": a bin holds the sum of everything arriving within it, and a sum over 16,640 tubes
-and any number of calling creatures has no single source to be relative to. A bin no sound has
-reached reads zero, which is the physical answer rather than a sentinel.
+**The unit is defined once, in the header**, at `TglEarView::energy`: the primary neon tube, whose
+authored strength is 1.0 by definition, the Grid's only reference level, shared with
+`TglActions::vocalisation_strength`. This document deliberately does not restate the definition —
+a unit stated in two places is a unit that can disagree with itself — and the acoustics it follows
+from, including why a bin cannot be relative to "the emitting source", is derived in
+[ACOUSTICS.md](ACOUSTICS.md) where the model is. A bin no sound has reached reads zero, which is
+the physical answer rather than a sentinel.
 
 An `ear_count` of zero is a legitimate body, and is the correct specification for all three insect
 presets: an ear costs a gather, and a body with nothing worth hearing should not pay for one. The
@@ -558,20 +559,16 @@ separate breaking changes would have been a change that did nothing on its own.
 
 ## Threading and Ownership
 
-- `program_tick` is called from the **tick thread** — the thread that owns the tick, which is not
-  necessarily the thread any one call runs on; see the parallel licence below. Which OS thread that
-  is may change between ticks; it will not change during one.
-- The Grid may tick **different creatures in parallel**. A Program library must therefore treat
-  `program_tick` as reentrant across distinct handles: per-creature state is fine, shared mutable
-  library state must be synchronised by the Program, and any global mutable state is a bug waiting
-  to happen.
-
-  This is an **obligation on the Program author, not a promise the Grid must exercise** — a
-  single-threaded Grid satisfies it by never using it. What the Grid does promise, either way, is
-  the merge: **each call writes its own `TglActions` slot, the Grid joins, and actions are applied
-  in fixed roster order.** No result depends on completion order. The licence covers this call and
-  nothing else; the physics step advances bodies serially in roster order, because bodies push each
-  other.
+- `program_tick` is called **serially, in roster order, on one thread whose identity is fixed for
+  the whole run** — the header's own words, repeated here only to attach the reasoning. Serial
+  because replay is claimed and bodies push each other, so no result may depend on who finished
+  first; a fixed thread so that a Program caching thread-local state, or hosting a runtime that
+  cares which thread calls in, has something solid to stand on.
+- **A parallel tick is a widening this version does not license.** The design would survive one —
+  each call writes its own `TglActions` slot, the Grid applies them in fixed roster order after
+  every call has returned, so completion order can never matter — but a Program built against this
+  version is entitled to the serial promise, and widening it is exactly the change
+  `TGL_ABI_VERSION` names as a bump: a threading promise widened or narrowed.
 - `library_init`, `program_rez`, `program_derez` and `library_shutdown` are called from a single
   thread with no other Program call in flight.
 - `program_tick` **must not block.** The reason is not a tick budget — there is no budget and
