@@ -455,12 +455,12 @@ needs — with the direct arrival graded by an occlusion probe rather than cut b
 thin post dims a call; it does not silence it; and the grading is occlusion sampling, never
 diffraction), and one validated first-order image per terrace level and per outward box face, each
 constructed by mirror arithmetic and then confirmed with rays through the same hierarchy every
-other sense reads. What the enumeration cannot reach, nothing pretends to deliver: the terrace
-risers are tilted as built, so a call bounced off one deflects rather than returns, and
-echolocation on the Grid is **bistatic** — creatures hear each other's calls and their echoes, and
-a caller hears its own echo only off surfaces that genuinely face it, such as a box wall.
-[ACOUSTICS.md](ACOUSTICS.md) § The Terraced Floor carries the riser geometry and the one generator
-change that would make monostatic ranging real.
+other sense reads. The mirrors include the floor's own risers: every terrace wall on the Grid is
+genuinely vertical and stands in the enumeration, so echolocation is **monostatic as well as
+bistatic** — a caller hears its own ping come straight back off the step in front of it, ranges it
+by the delay, and hears every other creature's calls and echoes besides.
+[ACOUSTICS.md](ACOUSTICS.md) § The Terraced Floor carries the wall geometry and its measured
+numbers.
 
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
 time bin per ear, and stops.** Anything that names a source, separates streams, reports "a wall is

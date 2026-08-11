@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The risers stand vertical, and a creature can range a wall with its own voice.** The drawn
+  floor stopped being a corner-sampled heightfield: every cell now stands flat at the level of its
+  own centre, joined by genuinely vertical walls wherever neighbours differ — 655 of them on the
+  shipped landscape, 1,091.7 m² of mirror, every facet of the floor horizontal or vertical with
+  nothing tilted in between for a call to be deflected by. The walls come from one list,
+  `gridRiserWalls`: the mesh emits its wall triangles from it and `makeGridReflectors` hands the
+  same rectangles to the image-source delivery, so the mirror an echo comes back off is the wall
+  the picture shows, by construction. Monostatic echolocation is real and under ctest: a test
+  stands a caller three metres before a wall of the Grid's own floor and hears the ping come back
+  in bin 17. `gridMeshHeight` became piecewise constant to match — the level of the cell under the
+  point, a genuine jump at every stepped boundary — so physics walks into a wall rather than up a
+  ramp; `plantOnFloor` samples every overlapped cell because a footprint's lowest point stopped
+  living on its perimeter; and the neon lies flat on the lips, terrace edges lit above dark
+  cliffs, with the tube-endpoint sliver a dead-ending tube pokes into the wall it meets recorded
+  as invisible and harmless rather than engineered away. The reference digests moved because the
+  picture was meant to move: NVIDIA and Intel re-recorded on the daily machine in this commit, the
+  AMD row and the second NVIDIA card pending the weekly machine, and the NVIDIA-to-Intel
+  cross-vendor drift figure barely moved across a rebuilt floor — 2.97% to 2.95% — which is the
+  stability that figure is kept to watch. ACOUSTICS.md's terraced-floor sections were re-measured
+  and rewritten: the "risers are not vertical" analysis became the record of why they now are, the
+  90° step-to-floor dihedral genuinely retro-reflects in one plane where the old 157° did nothing,
+  and the vertical-riser bullet left the defer list the way a bullet should — built, with its
+  trigger's reasoning kept in the code it produced.
+
 - **Creatures stand on the Grid: accepted bodies join the world, and every sense meets them.** The
   staging half of the render model. A new `Stage` assembles the scene once — the Grid at the
   identity, one hierarchy per modelled creature built at rez, one material table with every body's

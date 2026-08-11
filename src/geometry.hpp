@@ -106,15 +106,17 @@ struct Mesh {
 /*!
     Configuration for the grid floor — the Grid's default surface.
 
-    The floor is a subdivided plane displaced by a low relief, so it rolls gently rather than
-    lying dead flat. The relief costs nothing: it moves vertices that already exist, so the
-    triangle count and the hierarchy built over it are unchanged.
+    The floor is a lattice of flat cells, each standing at a level the relief chooses, joined by
+    genuinely vertical risers wherever neighbouring levels differ. The relief decides where the
+    terraces are; the drawn floor holds every facet horizontal or vertical, with nothing tilted in
+    between. The risers cost triangles — two per stepped cell boundary, on top of the two every
+    cell always had — and they are the whole point.
 
-    It earns its place twice over. Optically, a curved mirror bends what it reflects, so the neon
-    lines draw as arcs across the swells instead of as a ruled lattice. Acoustically, it matters
-    far more: a flat plane sends every reflection away at the mirror angle and none of it ever
-    returns, whereas a rolling surface aims some reflections back into the scene, which is where
-    echoes come from. A perfectly flat Grid would be acoustically almost silent.
+    It earns its place twice over. Optically, the stepped mirror breaks the neon into terrace-edge
+    lines with dark cliffs beneath them, which reads as something built rather than grown.
+    Acoustically it matters far more: a flat plane sends every reflection away at the mirror angle
+    and none of it ever returns, while a vertical riser throws a call straight back at whoever
+    made it — the walls are what make echoes, and echolocation, possible on the Grid at all.
 */
 struct GridFloorConfig {
     uint32_t cells{64u}; //!< Number of quads along each axis, so `cells` × `cells` quads in total.
@@ -155,9 +157,9 @@ struct NeonTubeConfig {
     /*!
         Vertical lift above the surface, in metres, so a tube does not z-fight with the floor.
 
-        The lift is purely vertical while the strip widens horizontally, so on sloping ground the
-        outer edge of a tube gains no extra height. It must therefore exceed `half_width` times the
-        steepest floor gradient, or the strip's outer millimetre sinks below the terrace it crosses.
+        The drawn floor is flat cells joined by vertical risers, and every tube lies flat on a
+        lip, so the lift only has to clear coplanarity with the terrace top it rests on — there is
+        no gradient anywhere under a tube for its outer edge to sink below.
     */
     float surface_offset{0.005f};
     uint32_t major_interval{8u}; //!< Every Nth grid line gets the accent colour. Zero puts every line in the primary sub-mesh.
@@ -218,14 +220,15 @@ struct NeonGrid {
     Returns the height of the floor **as it is actually drawn**, at a world-space position.
 
     This is not the same thing as `gridSurfaceHeight`, and the difference is the whole reason this
-    function exists. `gridSurfaceHeight` is the analytic surface, and with terracing it is a step
-    function; the mesh only samples it at grid vertices and interpolates linearly between them, so
-    across a cell that a riser passes through, the drawn triangle is a ramp where the analytic
-    function is a cliff. Anything that must sit *on* the floor has to ask where the floor is, not
-    where the function that generated it would have been — otherwise it hovers or sinks by up to a
-    full terrace step.
+    function exists. `gridSurfaceHeight` is the analytic relief, whose terrace boundaries curve
+    wherever the noise puts them; the drawn floor stands every cell flat at the level of its own
+    centre and joins neighbouring cells with genuinely vertical risers, so the drawn boundary runs
+    along the cell lattice. Anything that must sit *on* the floor has to ask where the floor is,
+    not where the function that generated it would have been.
 
-    Positions beyond the floor's extent are clamped to its edge.
+    Piecewise constant, therefore: the level of the cell under the point, with a step exactly at
+    every cell boundary whose neighbours disagree. Positions beyond the floor's extent are clamped
+    to its edge.
 
     \param world_x World-space X, in metres.
     \param world_z World-space Z, in metres.
@@ -233,6 +236,36 @@ struct NeonGrid {
     \return World-space Y of the drawn surface at that point, in metres.
 */
 [[nodiscard]] float gridMeshHeight(float world_x, float world_z, const GridFloorConfig& config);
+
+/*!
+    One vertical riser of the drawn floor: a rectangle standing on a cell boundary.
+
+    `edge_u` runs along the boundary, `edge_v` straight up, and the winding is the statement of
+    which side reflects: `cross(edge_u, edge_v)` normalised points **towards the lower cell** —
+    into the air a creature stands in, because the other side is inside the hill.
+*/
+struct GridWall {
+    MathLib::Vec3 origin{}; //!< A bottom corner of the wall, in world space.
+    MathLib::Vec3 edge_u{}; //!< Along the cell boundary, full length.
+    MathLib::Vec3 edge_v{}; //!< Straight up, the full level difference.
+};
+
+/*!
+    Returns every vertical riser the drawn floor has, in generation order.
+
+    **This is the single source the walls have.** `generateGridFloor` emits its riser triangles
+    from exactly this list, and the acoustic image-source delivery enumerates its riser mirrors
+    from exactly this list, so the wall an echo comes back off is the wall the picture shows — by
+    construction rather than by two generators kept in step.
+
+    These walls are what make monostatic echolocation real on the Grid: a call emitted towards a
+    riser strikes a genuinely vertical face and comes straight back, where the tilted facets of a
+    corner-sampled heightfield deflected it skyward.
+
+    \param config Floor dimensions and relief.
+    \return One wall per cell boundary whose neighbouring levels differ. Empty for a flat floor.
+*/
+[[nodiscard]] std::vector<GridWall> gridRiserWalls(const GridFloorConfig& config);
 
 /*!
     Generates the grid floor: a subdivided plane displaced by `gridSurfaceHeight`.

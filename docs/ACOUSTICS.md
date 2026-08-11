@@ -216,40 +216,38 @@ has no echoes worth computing. That was true when they looked. It is now only pa
 
 `gridSurfaceHeight` in `src/geometry.cpp` sums three octaves of smoothstep value noise at a base
 wavelength of 46 m, normalises to `[0, 1]`, quantises with `floor(relief * 6) / 6`, and scales by a
-5 m amplitude. The scene in `main.cpp` uses 64 cells at 2.0 m, so a 128 m floor of 8,192 triangles,
-unchanged in count from the flat version — the relief displaces vertices that already existed.
+5 m amplitude. The drawn floor stands **every cell flat at the level of its own centre and joins
+neighbouring cells with genuinely vertical risers**: `generateGridFloor` emits one flat quad per
+cell and two wall triangles per stepped cell boundary, from the same `gridRiserWalls` list the
+acoustic image-source delivery enumerates its riser mirrors from — one source, so the mirror an
+echo comes back off is the wall the picture shows. Every facet of the floor is horizontal or
+vertical; there is nothing tilted anywhere for a reflection to be deflected by.
 
-Evaluating that function over the shipped landscape (seed 42) gives hard numbers rather than
+Evaluating the shipped landscape (seed 42, 64 cells at 2.0 m) gives hard numbers rather than
 adjectives:
 
 | Measured over the built floor | Value |
 |-------------------------------|-------|
 | Distinct terrace levels | 6, at 0, 0.833, 1.667, 2.500, 3.333 and 4.167 m |
 | Terrace step | exactly 0.833 m everywhere; no double steps occur |
-| Grid edges crossing a level change | 693 of 8,320 (8.3 %) |
-| Floor triangles that are dead flat | 7,014 of 8,192 (85.6 %) |
-| Riser triangles at 22.6° | 990 |
-| Riser triangles at 30.5° (a step crossing a quad diagonally) | 188 |
-| Steepest facet anywhere | 30.5° |
-| Terrace run along a grid axis | median 7 cells (14 m); over both axes, mean 10.3 cells (20.5 m), longest 62 cells (124 m) |
-| Total riser surface | ≈ 2,581 m², about 15.5 % of the floor |
+| Vertical riser walls | 655, one per stepped cell boundary |
+| Floor triangles | 9,502 — 8,192 flat and 1,310 wall |
+| Steepest facet anywhere | 90°, which is every wall; everything else is 0° |
+| Total riser surface | 1,091.7 m² of genuinely vertical mirror, 1,310 m of wall run |
 
-Two notes on that table. The top terrace: `floor(relief * 6) / 6` yields levels `k/6` for `k` in 0 to
-5, so the highest ground stands at five sixths of the amplitude — **4.17 m, not 5 m**. The amplitude
-is the parameter; the top level is the consequence. And the run statistics are direction-dependent in
-a way it is easy to quote wrongly: along X the mean is 9.7 cells and the longest run 50 cells, along
-Z the mean is 11.0 cells and the longest 62; the median is 7 cells along X and 8 along Z. The
-combined figures above are the ones used everywhere else in this document.
+Two notes on that table. The top terrace: `floor(relief * 6) / 6` yields levels `k/6` for `k` in 0
+to 5, so the highest ground stands at five sixths of the amplitude — **4.17 m, not 5 m**. The
+amplitude is the parameter; the top level is the consequence. And the terrace boundaries run along
+the cell lattice rather than along the noise's own contours: a cell's level is the quantised relief
+at its centre, so the landscape is the noise's, cell-snapped — which is also what makes
+`gridMeshHeight` piecewise constant and a wall a genuine jump rather than a ramp.
 
-**What stands on the floor is partly inside it.** `plantOnFloor` samples `gridSurfaceHeight` at a
-box's centre and at the four corners of its footprint and takes the **minimum**, so a pillar or slab
-straddling a level change is set into the higher ground rather than left hovering over the lower. The
-acoustic consequence is not a slot underneath — there is none — but that the buried portion of a
-face is not a reflector at all. The image-source enumeration below counts "about fifty outward-facing
-box faces", and for a box straddling a step the usable extent of the two faces on the high side is
-reduced by up to 0.833 m at the bottom. The validation ray catches this for free, because a
-reflection point below ground fails the ray test like any other; it is recorded here so that nobody
-reads "fifty faces" as "fifty full rectangles".
+**What stands on the floor is partly inside it.** `plantOnFloor` takes the **minimum** drawn level
+over every cell a box's footprint overlaps, so a pillar or slab straddling a step is set into the
+higher ground rather than left hovering over the lower. The acoustic consequence is not a slot
+underneath — there is none — but that the buried portion of a face is not a reflector at all. The
+validation ray catches this for free, because a reflection point below ground fails the ray test
+like any other; it is recorded here so that nobody reads "fifty faces" as "fifty full rectangles".
 
 ### What it does acoustically
 
@@ -280,50 +278,42 @@ addresses the two regimes where even the empirical curve misbehaves — receiver
 and receivers near the shadow boundary — which are the two regimes a small creature walking past a
 terrace step lives in permanently.
 
-**Deflection instead of escape.** A facet tilted by `θ` rotates the specular direction by `2θ`. At
-22.6° that is 45.2°, at 30.5° it is 61°. A ray skimming a flat plane at grazing incidence bounces
-forward at grazing and keeps skimming until it runs off the edge; over terraced ground it is kicked
-well off the mirror direction, sometimes up out of the Grid and sometimes down into the next
-terrace. That is geometric scattering, modelled as geometry.
+**Interruption instead of escape.** A ray skimming a flat plane at grazing incidence bounces
+forward at grazing and keeps skimming until it runs off the edge; over terraced ground it runs into
+the next riser instead, and a vertical wall returns its horizontal component outright. Rays that
+would have left the Grid unheard come back across it. That is geometric scattering, modelled as
+geometry — and with every facet horizontal or vertical, it is scattering into a right-angled world,
+which is as legible as scattering ever gets.
 
-**Concave corners, which do almost nothing.** Where a riser meets the terrace below it the dihedral
-is about 157°; the junction with the terrace above is convex, at about 203° through the air, and does
-not even qualify. Retro-reflecting dihedrals want 90°. This mechanism is not doing useful work and
-should not be claimed.
+**Concave corners, which now genuinely retro-reflect in one plane.** Where a vertical riser meets
+the terrace below it the dihedral is exactly 90°, which is what a retro-reflecting corner wants: a
+ray arriving in the vertical plane across the step returns parallel to itself after the pair of
+bounces, whatever its height angle. It is a second-order path — the first-order image enumeration
+does not construct it — so it arrives through the gather rather than through the delivery, and it
+is named here so that nobody reads its absence from the enumeration as its absence from the Grid.
 
-### What it does not do: the risers are not vertical
+### The risers are vertical, and what that bought
 
-The design comment in `src/geometry.cpp` describes "near-vertical risers between them". The generator
-cannot produce those, and the reason is arithmetic rather than a bug.
+A corner-sampled heightfield cannot stand a wall up: a level change between two samples 2 m apart
+becomes a quad rising 0.833 m over 2 m of run — 22.6°, or 30.5° across a diagonal — and a
+horizontal call striking such a facet reflects skyward and never returns. That arithmetic is why an
+earlier revision of this floor could carry echoes for a *listener* and still support no monostatic
+echolocation whatever: retro-reflection off a 22.6° facet needs the ray to arrive along the facet
+normal, which for a creature at height `h` means standing two centimetres from the riser.
 
-`generateGridFloor` is a heightfield sampled at the cell corners. A level change between two adjacent
-samples 2 m apart becomes one quad rising 0.833 m over 2 m of run — **22.6°**, or 30.5° where the
-step crosses a quad diagonally. The mesh has no way to represent anything steeper, because the
-shortest horizontal distance it can express is one cell.
+The drawn floor therefore stopped being a corner-sampled heightfield. Cells are flat, the walls
+between them are vertical, and a creature emitting horizontally at a riser hits it square on and
+hears the echo come straight back — at any range the caps allow, off 1,091.7 m² of wall distributed
+across the whole 128 m. The walls are first-class acoustic mirrors: `gridRiserWalls` hands the very
+rectangles the mesh is built from to the image-source delivery, `src/tests/acoustics_tests.cpp`
+ranges one of them monostatically under ctest, and the alignment guard in `Acoustics::deliverCall`
+keeps a wall from ever answering for a terrace level or a level for a wall.
 
-That matters, and it matters most for the one capability the acoustic phase makes possible for free.
-Consider a monostatic echolocator: source and listener co-located, listening for its own echo. In a
-perfectly specular world only facets whose normal points back at the emitter return anything. A
-horizontal ray from a creature at 5 cm hitting a 22.6° riser reflects **upward at 45° and never
-returns**. Retro-reflection off a 22.6° facet requires the ray to arrive along the facet normal, i.e.
-22.6° from vertical, which for a creature at height `h` means a riser at a horizontal distance of only
-`0.42 h` — two centimetres for a five-centimetre creature. **As built, the terraces cannot support
-monostatic echolocation at all.**
-
-With genuinely vertical risers they can, immediately and at any range: a creature emitting
-horizontally hits a vertical face square on and the echo comes straight back. That is the behaviour
-the design comment reasons about — *"a riser standing square to the ground throws sound back across
-the Grid"* — and it is one generator change away.
-
-**Recommendation.** Have `generateGridFloor` emit an explicit vertical quad at every level change
-rather than tilting the surface quad. Cost: 693 boundary edges, two triangles each, **1,386 extra
-triangles** — the floor goes from 8,192 to 9,578 and the scene from 24,952 to 26,338, an increase of
-5.6 %. In exchange the Grid gains **1,155 m² of genuinely vertical wall** distributed across 128 m,
-and every one of those square metres retro-reflects. The alternative, dropping `cell_size` well below
-the terrace step, is worse: at 0.25 m the risers reach 73° but the floor costs 524,288 triangles.
-
-If neither change is made, the honest statement in the documentation must be that the relief tilts
-reflections rather than returning them, and that echolocation on the Grid is bistatic only.
+The cost was 1,310 wall triangles and the honesty of the landform: terrace boundaries now run along
+the cell lattice rather than along the noise's own curves, which is a Tron floor being more itself
+rather than less. The alternative — dropping `cell_size` far enough below the terrace step that the
+ramps approached vertical — would have cost half a million triangles to approximate what 1,310
+deliver exactly.
 
 ### What the relief changes in the research's conclusions
 
@@ -334,27 +324,27 @@ Two conclusions have to be revised and one has to be defended.
 their own right, so they contribute one-way arrivals around 20 ms, and a bistatic path from a source
 beyond a step arrives around 41 ms. Six terrace levels give a family of floor images 2.4 ms apart in
 one-way path. That is a sparse, structured, learnable set of arrivals in the 20–120 ms band which a
-flat plane simply did not produce. What does not arrive is the monostatic echo: a 22.6° riser
-deflects rather than returns, which is what the vertical-riser recommendation above is for.
+flat plane simply did not produce. And the monostatic echo arrives too, now that the risers stand
+vertical: a caller's own ping comes straight back off the step in front of it, which is the
+capability the whole riser change was bought for.
 
 **Revised: the ~55-plane image-source enumeration.** The recommendation to enumerate image sources
-over "one floor plane plus about fifty box faces" assumed a flat floor. There is no single floor plane
-any more. The distinct acoustic planes are now six terrace levels plus 1,178 riser facets plus about
-fifty outward box faces — roughly 1,234 first-order candidates, and about 1.5 million at order two.
-Pure image-source enumeration over the floor is dead. What survives is a hybrid: enumerate the **six
-terrace levels** (treating each as an infinite horizontal plane, reflecting the source in it, and
+over "one floor plane plus about fifty box faces" assumed a flat floor. There is no single floor
+plane any more. The distinct acoustic planes are now the terrace levels, 655 vertical riser walls
+and about fifty outward box faces — some 700 first-order candidates, of which the range cap prunes
+all but the nearby before any validation ray is spent, and about half a million at order two. Pure
+image-source enumeration stops at first order. What runs is a hybrid: enumerate the **terrace
+levels** (treating each as an infinite horizontal plane, reflecting the source in it, and
 accepting the candidate only when a validation ray confirms the reflection point lies on a triangle at
 that level) and the **fifty box faces**; gather everything else.
 
 **Defended: there is still no reverberation.** The relief adds surface, not enclosure. There is no
-ceiling, there are no walls, and the sky is still infinite and black. No heightfield facet can turn an
-upward-going ray back down: its outward normal always has a positive vertical component, so a
-reflection off its visible side makes an upward ray steeper rather than shallower. That holds at 22.6°
-as built and equally at 90° with the vertical risers recommended above, so energy leaving with an
-upward component is gone forever either way, and the riser change does not put this conclusion at
-risk. Rays still escape after one or two bounces. RT60 is still undefined, Sabine's formula still has
-an unbounded volume, and a statistical reverberator would still be synthesising a signal the physics
-does not produce.
+ceiling, the sky is still infinite and black, and no facet of the floor can turn an upward-going ray
+back down: a horizontal facet's normal points up, and a vertical wall leaves a ray's vertical
+component exactly alone — a wall returns a call across the Grid, never down into it. Energy leaving
+with an upward component is gone forever, rays still escape after a bounce or two, RT60 is still
+undefined, Sabine's formula still has an unbounded volume, and a statistical reverberator would
+still be synthesising a signal the physics does not produce.
 
 ### Echo and reverberation are not the same thing
 
@@ -580,10 +570,10 @@ The warning does not transfer, and saying so explicitly is better than either ig
 a parameter to placate it.
 
 The cost of this decision is real and named in the previous section: a purely specular world
-backscatters only from facets whose normals point at the emitter, which is why monostatic echolocation
-needs the risers to be vertical. **If the specular-only acoustic model ever proves too impoverished,
-the correct fix is more geometry, not a statistical float.** That is the same answer the relief already
-gave once.
+backscatters only from facets whose normals point at the emitter, which is why monostatic
+echolocation needed the risers vertical — and why they now are. **If the specular-only acoustic
+model ever proves too impoverished, the correct fix is more geometry, not a statistical float.**
+That is the answer the relief gave once and the risers gave again.
 
 #### Why not transmission
 
@@ -1183,9 +1173,6 @@ already left this list the way an entry should: point sources were deferred here
   integration window and would make a creature's ears sluggish in a way no animal's are. **Trigger: a
   measured solve that is too slow.** If adopted, choose the time constant from auditory integration, not
   from the paper's default.
-- **Vertical risers.** Strictly a geometry change rather than an acoustics one, but it is the change
-  with the largest acoustic payoff available, and it is the precondition for monostatic echolocation.
-  Recommended, sized above at 1,386 triangles.
 
 ---
 

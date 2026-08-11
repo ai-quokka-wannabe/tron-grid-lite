@@ -9,7 +9,7 @@ add_test(NAME geometry_tests COMMAND geometry_tests)
 # test target compiles that one translation unit directly rather than a library extracted for a
 # single consumer. It needs bvh as well, because the gather traces the very same hierarchy the
 # renderer does — which is the whole point of it.
-add_executable(acoustics_tests acoustics_tests.cpp ../acoustics.cpp)
+add_executable(acoustics_tests acoustics_tests.cpp ../acoustics.cpp ../geometry.cpp)
 target_link_libraries(acoustics_tests PRIVATE math bvh testing)
 add_test(NAME acoustics_tests COMMAND acoustics_tests)
 
