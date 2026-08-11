@@ -255,6 +255,28 @@ std::vector<float> gridTerraceLevels(const GridFloorConfig& config)
     return levels;
 }
 
+namespace
+{
+
+    /*!
+        The level one cell of the drawn floor stands at: the quantised relief at the cell's centre.
+
+        The centre rather than a corner, because a cell has one level and its centre is the one
+        point that is unambiguously its own — every corner is shared with neighbours that may stand
+        elsewhere. Everything about the drawn floor derives from this one function: the flat cell
+        quads, the risers between them, the mesh-height query and the neon's lip heights, which is
+        what keeps five consumers from disagreeing about a landscape.
+    */
+    [[nodiscard]] float cellLevel(uint32_t cell_x, uint32_t cell_z, const GridFloorConfig& config)
+    {
+        const float half_size{(static_cast<float>(config.cells) * config.cell_size) * 0.5f};
+        const float centre_x{((static_cast<float>(cell_x) + 0.5f) * config.cell_size) - half_size};
+        const float centre_z{((static_cast<float>(cell_z) + 0.5f) * config.cell_size) - half_size};
+        return gridSurfaceHeight(centre_x, centre_z, config);
+    }
+
+} // namespace
+
 float gridMeshHeight(float world_x, float world_z, const GridFloorConfig& config)
 {
     if ((config.cells == 0u) || (config.cell_size <= 0.0f)) {
@@ -273,30 +295,69 @@ float gridMeshHeight(float world_x, float world_z, const GridFloorConfig& config
     const uint32_t cell_x{std::min(static_cast<uint32_t>(grid_x), config.cells - 1u)};
     const uint32_t cell_z{std::min(static_cast<uint32_t>(grid_z), config.cells - 1u)};
 
-    const float u{grid_x - static_cast<float>(cell_x)};
-    const float v{grid_z - static_cast<float>(cell_z)};
+    // Piecewise constant: the drawn floor stands every cell flat at its own level, so the height
+    // under a point is the level of the cell that owns it, with the step exactly on the boundary.
+    return cellLevel(cell_x, cell_z, config);
+}
 
-    const auto cornerHeight = [&](uint32_t vertex_x, uint32_t vertex_z) {
-        const float corner_x{(static_cast<float>(vertex_x) * config.cell_size) - half_size};
-        const float corner_z{(static_cast<float>(vertex_z) * config.cell_size) - half_size};
-        return gridSurfaceHeight(corner_x, corner_z, config);
-    };
+std::vector<GridWall> gridRiserWalls(const GridFloorConfig& config)
+{
+    std::vector<GridWall> walls;
 
-    const float h00{cornerHeight(cell_x, cell_z)};
-    const float h10{cornerHeight(cell_x + 1u, cell_z)};
-    const float h01{cornerHeight(cell_x, cell_z + 1u)};
-    const float h11{cornerHeight(cell_x + 1u, cell_z + 1u)};
-
-    /*
-        Barycentric interpolation over whichever of the cell's two triangles contains the point.
-        emitSurfaceQuad splits the quad as {p00, p01, p10} and {p10, p01, p11}, so the diagonal runs
-        from p01 to p10 and u + v <= 1 selects the first.
-    */
-    if ((u + v) <= 1.0f) {
-        return (h00 * (1.0f - u - v)) + (h10 * u) + (h01 * v);
+    if ((config.cells == 0u) || (config.cell_size <= 0.0f)) {
+        return walls;
     }
 
-    return (h10 * (1.0f - v)) + (h01 * (1.0f - u)) + (h11 * ((u + v) - 1.0f));
+    const float half_size{(static_cast<float>(config.cells) * config.cell_size) * 0.5f};
+
+    /*
+        Every internal cell boundary, both axes, in one fixed order — X-boundaries row by row, then
+        Z-boundaries — so that the mesh and the reflector list, both generated from this, agree
+        triangle for rectangle. The winding puts `cross(edge_u, edge_v)` towards the lower cell,
+        because that side is air and the other is the inside of the hill.
+    */
+    for (uint32_t z{0u}; z < config.cells; ++z) {
+        for (uint32_t x{0u}; (x + 1u) < config.cells; ++x) {
+            const float low{cellLevel(x, z, config)};
+            const float high{cellLevel(x + 1u, z, config)};
+            if (low == high) {
+                continue;
+            }
+
+            const float boundary_x{(static_cast<float>(x + 1u) * config.cell_size) - half_size};
+            const float z0{(static_cast<float>(z) * config.cell_size) - half_size};
+
+            GridWall wall{};
+            wall.origin = MathLib::Vec3{boundary_x, std::min(low, high), (low < high) ? z0 : (z0 + config.cell_size)};
+            // Towards -X when the left cell is lower (z cross y), towards +X when the right one is
+            // (y cross z reversed by walking the boundary the other way).
+            wall.edge_u = MathLib::Vec3{0.0f, 0.0f, (low < high) ? config.cell_size : -config.cell_size};
+            wall.edge_v = MathLib::Vec3{0.0f, std::fabs(high - low), 0.0f};
+            walls.push_back(wall);
+        }
+    }
+
+    for (uint32_t x{0u}; x < config.cells; ++x) {
+        for (uint32_t z{0u}; (z + 1u) < config.cells; ++z) {
+            const float low{cellLevel(x, z, config)};
+            const float high{cellLevel(x, z + 1u, config)};
+            if (low == high) {
+                continue;
+            }
+
+            const float boundary_z{(static_cast<float>(z + 1u) * config.cell_size) - half_size};
+            const float x0{(static_cast<float>(x) * config.cell_size) - half_size};
+
+            GridWall wall{};
+            wall.origin = MathLib::Vec3{(low < high) ? (x0 + config.cell_size) : x0, std::min(low, high), boundary_z};
+            // Towards -Z when the near cell is lower, towards +Z when the far one is.
+            wall.edge_u = MathLib::Vec3{(low < high) ? -config.cell_size : config.cell_size, 0.0f, 0.0f};
+            wall.edge_v = MathLib::Vec3{0.0f, std::fabs(high - low), 0.0f};
+            walls.push_back(wall);
+        }
+    }
+
+    return walls;
 }
 
 Mesh generateGridFloor(const GridFloorConfig& config)
@@ -310,6 +371,10 @@ Mesh generateGridFloor(const GridFloorConfig& config)
     floor.vertices.reserve(triangle_count * 3u);
     floor.indices.reserve(triangle_count * 3u);
 
+    // The terraces themselves: every cell one flat quad at its own level. The relief still shapes
+    // the landscape — it decides which level each cell stands at — but no facet of the drawn floor
+    // is ever tilted: the surface is horizontal, the risers below are vertical, and there is
+    // nothing in between for a reflection to be deflected by.
     for (uint32_t z{0u}; z < config.cells; ++z) {
         for (uint32_t x{0u}; x < config.cells; ++x) {
             const float x0{(static_cast<float>(x) * config.cell_size) - half_size};
@@ -317,10 +382,12 @@ Mesh generateGridFloor(const GridFloorConfig& config)
             const float z0{(static_cast<float>(z) * config.cell_size) - half_size};
             const float z1{(static_cast<float>(z + 1u) * config.cell_size) - half_size};
 
-            const MathLib::Vec3 p00{x0, gridSurfaceHeight(x0, z0, config), z0};
-            const MathLib::Vec3 p10{x1, gridSurfaceHeight(x1, z0, config), z0};
-            const MathLib::Vec3 p01{x0, gridSurfaceHeight(x0, z1, config), z1};
-            const MathLib::Vec3 p11{x1, gridSurfaceHeight(x1, z1, config), z1};
+            const float level{cellLevel(x, z, config)};
+
+            const MathLib::Vec3 p00{x0, level, z0};
+            const MathLib::Vec3 p10{x1, level, z0};
+            const MathLib::Vec3 p01{x0, level, z1};
+            const MathLib::Vec3 p11{x1, level, z1};
 
             // Surface coordinates in grid cells from the centre of the floor.
             const float u0{static_cast<float>(x) - half_cells};
@@ -330,6 +397,25 @@ Mesh generateGridFloor(const GridFloorConfig& config)
 
             emitSurfaceQuad(floor, p00, p10, p01, p11, u0, u1, v0, v1);
         }
+    }
+
+    /*
+        The risers, from the one list the acoustic mirrors also read — see `gridRiserWalls`. Each
+        wall is two triangles whose geometric normal is the wall's own outward normal, towards the
+        lower cell's air.
+    */
+    for (const GridWall& wall : gridRiserWalls(config)) {
+        const MathLib::Vec3 a{wall.origin};
+        const MathLib::Vec3 b{wall.origin + wall.edge_u};
+        const MathLib::Vec3 c{wall.origin + wall.edge_u + wall.edge_v};
+        const MathLib::Vec3 d{wall.origin + wall.edge_v};
+        const MathLib::Vec3 normal{wall.edge_u.cross(wall.edge_v).normalised()};
+
+        // The uv runs along the wall and up it, in cell units, which is all a wall can offer.
+        const float length_cells{std::sqrt(wall.edge_u.dot(wall.edge_u)) / config.cell_size};
+        const float height_cells{std::sqrt(wall.edge_v.dot(wall.edge_v)) / config.cell_size};
+        emitTriangle(floor, a, b, c, normal, {0.0f, 0.0f}, {length_cells, 0.0f}, {length_cells, height_cells});
+        emitTriangle(floor, a, c, d, normal, {0.0f, 0.0f}, {length_cells, height_cells}, {0.0f, height_cells});
     }
 
     return floor;
@@ -343,18 +429,27 @@ NeonGrid generateGridFloorNeon(const GridFloorConfig& floor_config, const NeonTu
     const float half_size{(static_cast<float>(floor_config.cells) * floor_config.cell_size) * 0.5f};
 
     /*
-        The tubes must sit on the relief, not float above the flat plane it is displaced from, so
-        this samples the same surface function the floor mesh does. The two agree exactly because
-        they pass coordinates computed by the same expression from the same integer grid, not
-        because the heights are copied from one to the other.
+        A tube lies on the lip: flat, at the higher of the two cell levels its edge borders. The
+        drawn floor is flat cells joined by vertical risers, so a lattice edge no longer has one
+        height along it — it has a level on each side, and the tube takes the upper one, lighting
+        the terrace edges while the walls below them stay dark cliffs. Same `cellLevel` the floor
+        quads and the risers derive from, so a tube can neither float nor sink.
     */
-    const auto gridVertex = [&](uint32_t gx, uint32_t gz) -> MathLib::Vec3 {
-        const float world_x{(static_cast<float>(gx) * floor_config.cell_size) - half_size};
-        const float world_z{(static_cast<float>(gz) * floor_config.cell_size) - half_size};
-        return MathLib::Vec3{world_x, gridSurfaceHeight(world_x, world_z, floor_config), world_z};
+    const auto lipHeight = [&](uint32_t low_cell_x, uint32_t low_cell_z, uint32_t high_cell_x, uint32_t high_cell_z) {
+        // The two cells flanking the edge, clamped at the floor's rim where only one exists.
+        float lip{cellLevel(std::min(low_cell_x, floor_config.cells - 1u), std::min(low_cell_z, floor_config.cells - 1u), floor_config)};
+        if ((high_cell_x < floor_config.cells) && (high_cell_z < floor_config.cells)) {
+            lip = std::max(lip, cellLevel(high_cell_x, high_cell_z, floor_config));
+        }
+        return lip;
     };
 
-    // Lines running along X, one per Z row.
+    const auto latticeCoord = [&](uint32_t gx) {
+        return (static_cast<float>(gx) * floor_config.cell_size) - half_size;
+    };
+
+    // Lines running along X, one per Z row: the edge from lattice (x, z) to (x + 1, z) borders the
+    // cell rows z - 1 and z.
     for (uint32_t z{0u}; z < verts_per_side; ++z) {
         const bool major_row{isMajorGridLine(z, tube_config.major_interval)};
 
@@ -363,18 +458,23 @@ NeonGrid generateGridFloorNeon(const GridFloorConfig& floor_config, const NeonTu
             // crossings of a major row and a major column stay a single unbroken accent lattice.
             const bool major_edge{major_row || isMajorGridLine(x, tube_config.major_interval)};
             Mesh& target{major_edge ? neon.accent : neon.primary};
-            emitEdgeQuad(target, gridVertex(x, z), gridVertex(x + 1u, z), tube_config);
+
+            const float lip{lipHeight(x, (z == 0u) ? 0u : (z - 1u), x, z)};
+            emitEdgeQuad(target, MathLib::Vec3{latticeCoord(x), lip, latticeCoord(z)}, MathLib::Vec3{latticeCoord(x + 1u), lip, latticeCoord(z)}, tube_config);
         }
     }
 
-    // Lines running along Z, one per X column.
+    // Lines running along Z, one per X column: the edge from (x, z) to (x, z + 1) borders the cell
+    // columns x - 1 and x.
     for (uint32_t x{0u}; x < verts_per_side; ++x) {
         const bool major_column{isMajorGridLine(x, tube_config.major_interval)};
 
         for (uint32_t z{0u}; z < floor_config.cells; ++z) {
             const bool major_edge{major_column || isMajorGridLine(z, tube_config.major_interval)};
             Mesh& target{major_edge ? neon.accent : neon.primary};
-            emitEdgeQuad(target, gridVertex(x, z), gridVertex(x, z + 1u), tube_config);
+
+            const float lip{lipHeight((x == 0u) ? 0u : (x - 1u), z, x, z)};
+            emitEdgeQuad(target, MathLib::Vec3{latticeCoord(x), lip, latticeCoord(z)}, MathLib::Vec3{latticeCoord(x), lip, latticeCoord(z + 1u)}, tube_config);
         }
     }
 

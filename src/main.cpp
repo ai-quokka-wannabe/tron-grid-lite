@@ -301,36 +301,32 @@ namespace
             hovering — something set into the ground reads as deliberate, whereas something floating
             above it reads as broken.
 
-            The samples ask `gridMeshHeight` rather than `gridSurfaceHeight`, because the mesh ramps
-            across a cell where the analytic surface steps. Asking the analytic function left the
-            glowing column standing 0.29 m clear of its own reflection.
-
-            The drawn floor is piecewise linear, so the lowest point over a rectangle is always at a
-            corner of that rectangle or at a grid vertex inside it. Both are sampled.
+            The samples ask `gridMeshHeight` rather than `gridSurfaceHeight`, because the box has to
+            stand on the floor as drawn rather than on the function it was drawn from. The drawn
+            floor is piecewise constant per cell, so the lowest point over a rectangle is the lowest
+            cell the rectangle overlaps — one sample anywhere inside each overlapped cell covers it,
+            and the cell's own midline through the footprint is a point that is always inside both.
         */
         const float min_x{world_x - half_extents.x};
         const float max_x{world_x + half_extents.x};
         const float min_z{world_z - half_extents.z};
         const float max_z{world_z + half_extents.z};
 
-        float ground{gridMeshHeight(world_x, world_z, floor_config)};
-
-        for (const float sample_x : {min_x, max_x}) {
-            for (const float sample_z : {min_z, max_z}) {
-                ground = std::min(ground, gridMeshHeight(sample_x, sample_z, floor_config));
-            }
-        }
-
         const float half_size{(static_cast<float>(floor_config.cells) * floor_config.cell_size) * 0.5f};
-        const auto firstVertexAbove = [&](float world_coordinate) {
-            return static_cast<int32_t>(std::ceil((world_coordinate + half_size) / floor_config.cell_size));
+        const auto cellIndexOf = [&](float world_coordinate) {
+            const float cells{static_cast<float>(floor_config.cells)};
+            const float grid{std::clamp((world_coordinate + half_size) / floor_config.cell_size, 0.0f, cells)};
+            return std::min(static_cast<uint32_t>(grid), floor_config.cells - 1u);
+        };
+        const auto cellMidline = [&](uint32_t cell_index) {
+            return ((static_cast<float>(cell_index) + 0.5f) * floor_config.cell_size) - half_size;
         };
 
-        for (int32_t vertex_x{firstVertexAbove(min_x)}; (static_cast<float>(vertex_x) * floor_config.cell_size) - half_size <= max_x; ++vertex_x) {
-            for (int32_t vertex_z{firstVertexAbove(min_z)}; (static_cast<float>(vertex_z) * floor_config.cell_size) - half_size <= max_z; ++vertex_z) {
-                const float vertex_world_x{(static_cast<float>(vertex_x) * floor_config.cell_size) - half_size};
-                const float vertex_world_z{(static_cast<float>(vertex_z) * floor_config.cell_size) - half_size};
-                ground = std::min(ground, gridMeshHeight(vertex_world_x, vertex_world_z, floor_config));
+        float ground{gridMeshHeight(world_x, world_z, floor_config)};
+
+        for (uint32_t cell_x{cellIndexOf(min_x)}; cell_x <= cellIndexOf(max_x); ++cell_x) {
+            for (uint32_t cell_z{cellIndexOf(min_z)}; cell_z <= cellIndexOf(max_z); ++cell_z) {
+                ground = std::min(ground, gridMeshHeight(cellMidline(cell_x), cellMidline(cell_z), floor_config));
             }
         }
 
@@ -469,6 +465,17 @@ namespace
     {
         Acoustics::Reflectors reflectors{};
         reflectors.level_heights = gridTerraceLevels(GRID_FLOOR_CONFIG);
+
+        /*
+            The floor's own risers, from the very list the floor mesh emits its wall triangles
+            from — see `gridRiserWalls`. These are what make monostatic echolocation real: a call
+            emitted at a riser strikes a genuinely vertical mirror and comes straight back, so a
+            creature can range the step in front of it by its own voice. The range cap prunes the
+            distant ones before any validation ray is spent.
+        */
+        for (const GridWall& wall : gridRiserWalls(GRID_FLOOR_CONFIG)) {
+            reflectors.faces.push_back(Acoustics::RectFace{.origin = wall.origin, .edge_u = wall.edge_u, .edge_v = wall.edge_v});
+        }
 
         const auto add_faces = [&reflectors](const std::vector<PlacedBox>& placements) {
             for (const PlacedBox& box : placements) {

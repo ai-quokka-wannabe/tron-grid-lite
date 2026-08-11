@@ -374,10 +374,11 @@ namespace Acoustics
         How closely a struck surface must align with a mirror plane before an image-source arrival
         is believed, as the absolute dot product of the two unit normals.
 
-        The value is chosen against the Grid's own geometry: a flat terrace triangle or a box face
-        agrees with its plane to float rounding, while the tilted riser facets — 22.6°, and 30.5°
-        where a step crosses a quad diagonally — give dot products of 0.92 and 0.86. A riser is not
-        a specular return path for the plane above or below it, and this is the number that says so.
+        Every facet of the Grid is horizontal or vertical, so a genuine mirror agrees with its
+        plane to float rounding and everything else disagrees by a right angle. What the guard
+        refuses is a surface merely passing through the reflection point — a riser standing where
+        a terrace level's mirror arithmetic put its bounce, or a terrace top where a wall's did —
+        which would deliver an echo computed with the wrong mirror's geometry.
     */
     inline constexpr float MIRROR_ALIGNMENT_MINIMUM{0.999f};
 

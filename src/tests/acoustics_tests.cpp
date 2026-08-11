@@ -21,6 +21,7 @@
 */
 
 #include "../acoustics.hpp"
+#include "../geometry.hpp"
 #include <testing/testing.hpp>
 #include <cmath>
 #include <cstdint>
@@ -757,6 +758,69 @@ TEST_CASE(a_call_from_inside_a_hull_is_gagged_unless_the_hull_is_the_callers)
     for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
         TEST_CHECK_CLOSE(carried.at(band, binOf(3.6f)), DIRECT_ENERGY, 1e-7f);
     }
+}
+
+TEST_CASE(a_call_comes_back_off_the_grids_own_riser)
+{
+    /*
+        The payoff the vertical risers were built for: a creature standing before a step of the
+        Grid's own floor hears its own call come straight back — monostatic echolocation, off the
+        terrain itself rather than off furniture. The wall list is the mesh's own single source,
+        so the mirror the delivery validates is the very wall the floor drew.
+    */
+    const GridFloorConfig config{.cells = 64u, .cell_size = 2.0f, .height = 0.0f};
+
+    const Mesh floor{generateGridFloor(config)};
+    std::vector<BvhLib::Triangle> triangles;
+    triangles.reserve(floor.triangleCount());
+    for (std::size_t index{0u}; (index + 2u) < floor.indices.size(); index += 3u) {
+        const Vertex& a{floor.vertices[floor.indices[index]]};
+        const Vertex& b{floor.vertices[floor.indices[index + 1u]]};
+        const Vertex& c{floor.vertices[floor.indices[index + 2u]]};
+        const MathLib::Vec3 va{a.position[0], a.position[1], a.position[2]};
+        const MathLib::Vec3 vb{b.position[0], b.position[1], b.position[2]};
+        const MathLib::Vec3 vc{c.position[0], c.position[1], c.position[2]};
+        triangles.push_back(BvhLib::Triangle{.v0 = va, .material = MATERIAL_FLOOR, .edge1 = vb - va, .padding0 = 0u, .edge2 = vc - va, .padding1 = 0u});
+    }
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+
+    const std::vector<GridWall> walls{gridRiserWalls(config)};
+    TEST_CHECK(!walls.empty());
+
+    /*
+        Stand three metres out from a wall, call, and listen from a whisker beside the mouth. Not
+        every wall has three metres of clear air in front of it — terrain stands where terrain
+        stands, and the validation rays refuse a blocked mirror exactly as they should — so the
+        search takes the first wall that answers, and the claim under test is that the Grid's own
+        floor offers one.
+    */
+    bool heard{false};
+    for (const GridWall& wall : walls) {
+        const MathLib::Vec3 centre{wall.origin + ((wall.edge_u + wall.edge_v) * 0.5f)};
+        const MathLib::Vec3 outward{wall.edge_u.cross(wall.edge_v).normalised()};
+
+        const MathLib::Vec3 source{centre + (outward * 3.0f)};
+        const MathLib::Vec3 ear{centre + (outward * 3.02f)};
+
+        // A caller buried in higher terrain is no test of anything.
+        if (gridMeshHeight(source.x, source.z, config) > source.y) {
+            continue;
+        }
+
+        Acoustics::Reflectors reflectors{};
+        reflectors.faces.push_back(Acoustics::RectFace{.origin = wall.origin, .edge_u = wall.edge_u, .edge_v = wall.edge_v});
+
+        const Acoustics::ImpulseResponse response{Acoustics::deliverCall(scene, reflectors, source, 1.0f, ear, plainCallConfig())};
+
+        // Out and back: the image stands three metres behind the wall, the ear a whisker past
+        // three in front, 6.02 m in all — bin 17 at 343 m/s.
+        if (energyInBin(response, 17u) > 0.0f) {
+            heard = true;
+            break;
+        }
+    }
+
+    TEST_CHECK(heard);
 }
 
 TEST_CASE(outward_box_faces_face_outward_and_omit_the_bottom)

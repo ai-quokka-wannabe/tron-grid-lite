@@ -188,9 +188,15 @@ build/windows-msvc/src/Release/TronGridLite.exe --record --frames 12 --width 640
 
 | Vendor | Devices measured | Digest |
 |--------|------------------|--------|
-| NVIDIA | GeForce GTX 1650 Ti (Turing), GeForce RTX 4090 Laptop (Ada Lovelace) | `68B384D91F70FFEF79AD16E30FA355F92B1937DB7BE3DA2713E6F84663E0501E` |
-| AMD | Radeon(TM) Graphics, integrated | `E5CB839D9906AAD1629FA34E73103DB8D45DD57D83FF1656833CD41761B3A87C` |
-| Intel | RaptorLake-S Mobile Graphics, integrated | `CCB8075A9B719CD3D41A9E62D5774E915653E1756405E7BF37129B029474C763` |
+| NVIDIA | GeForce RTX 4090 Laptop (Ada Lovelace) | `70DDA0E77A7B9A0560F4DE4AC0FA6268A39C1B60CF3F6AA8F1E84D4E72A0593F` |
+| AMD | pending: the weekly machine has not seen the vertical risers yet | — |
+| Intel | RaptorLake-S Mobile Graphics, integrated | `BEB778C562B09B955AE92BEB8472E800F965E8E585B24CB3390E7F8CD8EFBB98` |
+
+The digests moved legitimately with the vertical-riser floor — the picture was meant to change —
+and were re-recorded on the daily machine's two devices in the same commit. Two rows wait for the
+weekly machine: the AMD digest, and the NVIDIA row's second card (the GTX 1650 Ti), whose agreement
+with the 4090 is what backs the per-vendor claim below. Until it is re-measured, that claim rests
+on the previous scene's evidence.
 
 **Determinism is per vendor rather than per device, and that is measured rather than assumed.** Two
 NVIDIA cards two architecture generations apart — Turing and Ada Lovelace, different machines,
@@ -204,8 +210,11 @@ of multiply-adds and the transcendentals — actually gets spent.
 
 | Comparison | Bytes differing | Worst delta |
 |------------|-----------------|-------------|
-| NVIDIA vs AMD | 16.38% | 224 of 255 |
-| NVIDIA vs Intel | 2.97% | 199 of 255 |
+| NVIDIA vs AMD | pending the weekly machine (16.38% and 224 of 255 on the previous scene) | — |
+| NVIDIA vs Intel | 2.95% | 197 of 255 |
+
+The NVIDIA-to-Intel figure barely moved across a scene change that rebuilt the whole floor — 2.97%
+became 2.95% — which is exactly the stability these rows are kept to watch.
 
 Alarming figures that are not: this is a world of mirrors, so a ray passing one side of an edge
 instead of the other lands on a neon tube instead of on black, and a single contracted multiply-add
