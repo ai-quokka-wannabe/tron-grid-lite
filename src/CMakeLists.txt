@@ -17,6 +17,7 @@ add_executable(${PROJECT_NAME}
     program_library.cpp
     roster.cpp
     senses.cpp
+    stage.cpp
     senses_tracer.cpp
     cinematic.cpp
 )

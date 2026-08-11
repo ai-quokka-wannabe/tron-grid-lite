@@ -22,28 +22,36 @@ namespace
     //! Block size for the buffer arena. Comfortably larger than every table this owns put together.
     constexpr vk::DeviceSize BUFFER_BLOCK_BYTES{4u * 1024u * 1024u};
 
+    /*!
+        A lone hierarchy as a one-placement flat scene.
+
+        The Grid is an instance like any other, and it goes through `makeInstance` and `flatten`
+        rather than round the side of them. That is the point: the path a creature body takes is
+        the path the only body in the world took for every frame this renderer had drawn before
+        bodies existed, instead of a path a test promised worked.
+
+        An identity placement also makes the two-level traversal free to verify: one instance at
+        the identity must produce, to the bit, the picture that traversing the geometry directly
+        produces — see the reference render digests in `.claude/CLAUDE.md`.
+    */
+    [[nodiscard]] BvhLib::FlatScene singlePlacement(const BvhLib::Bvh& bvh, const MathLib::Mat4& to_world)
+    {
+        BvhLib::Scene scene{};
+        scene.geometries.push_back(bvh);
+        scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, to_world));
+        return BvhLib::flatten(scene);
+    }
+
 } // namespace
 
 World::World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& logger, const MathLib::Mat4& to_world) :
+    World(device, singlePlacement(bvh, to_world), logger)
+{
+}
+
+World::World(const Device& device, const BvhLib::FlatScene& flat, LoggingLib::Logger& logger) :
     m_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, BUFFER_BLOCK_BYTES)
 {
-    /*
-        The Grid is an instance like any other, sitting at the identity, and it goes through
-        `makeInstance` and `flatten` rather than round the side of them. That is the point: the path a
-        creature body will take is the path the only body in the world takes today, so it is exercised
-        by every frame this renderer has ever drawn instead of by a test written for one instance and
-        a comment promising the rest.
-
-        It also makes the two-level traversal free to verify. One instance at the identity must
-        produce, to the bit, the picture that traversing the geometry directly produces — see the
-        reference render digests in `.claude/CLAUDE.md`.
-    */
-    BvhLib::Scene scene{};
-    scene.geometries.push_back(bvh);
-    scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, to_world));
-
-    const BvhLib::FlatScene flat{BvhLib::flatten(scene)};
-
     m_node_count = static_cast<uint32_t>(flat.nodes.size());
     m_triangle_count = static_cast<uint32_t>(flat.triangles.size());
     m_instance_count = static_cast<uint32_t>(flat.instances.size());

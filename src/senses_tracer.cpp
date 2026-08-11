@@ -43,16 +43,22 @@ namespace
 
 } // namespace
 
-SensesTracer::SensesTracer(const Device& device, const World& world, const std::vector<Material>& materials, uint32_t max_rays, const std::string& shader_path,
-    LoggingLib::Logger& logger) :
+SensesTracer::SensesTracer(const Device& device, const World& world, const std::vector<Material>& materials, const std::vector<BvhLib::InstanceRecord>& initial_instances,
+    uint32_t max_rays, const std::string& shader_path, LoggingLib::Logger& logger) :
     m_device(&device),
     m_world(&world),
     m_max_rays(max_rays),
+    m_instance_capacity(static_cast<uint32_t>(initial_instances.size())),
+    m_instance_count(static_cast<uint32_t>(initial_instances.size())),
     m_device_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, DEVICE_BLOCK_BYTES),
     m_host_arena(device, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, HOST_BLOCK_BYTES)
 {
     if (materials.empty()) {
         throw std::runtime_error{"The senses pass needs a material table to shade with."};
+    }
+
+    if (initial_instances.empty()) {
+        throw std::runtime_error{"The senses pass needs at least one placement to trace against."};
     }
 
     if (max_rays == 0u) {
@@ -71,6 +77,18 @@ SensesTracer::SensesTracer(const Device& device, const World& world, const std::
     m_results = vk::raii::Buffer{
         device.get(), vk::BufferCreateInfo{.size = result_bytes, .usage = vk::BufferUsageFlagBits::eStorageBuffer, .sharingMode = vk::SharingMode::eExclusive}};
     m_results_mapped = m_host_arena.bind(m_results);
+
+    /*
+        The pass's own placement buffer, host-visible because bodies move every tick and this is
+        rewritten per creature per solve. The world's instance buffer stays the static upload the
+        window renders from; the two share nodes and triangles, which never move, and disagree
+        only about where things stand — which is the whole difference between a stage and a map.
+    */
+    const vk::DeviceSize instance_bytes{static_cast<vk::DeviceSize>(m_instance_capacity) * sizeof(BvhLib::InstanceRecord)};
+    m_instances = vk::raii::Buffer{
+        device.get(), vk::BufferCreateInfo{.size = instance_bytes, .usage = vk::BufferUsageFlagBits::eStorageBuffer, .sharingMode = vk::SharingMode::eExclusive}};
+    m_instances_mapped = m_host_arena.bind(m_instances);
+    std::memcpy(m_instances_mapped, initial_instances.data(), static_cast<size_t>(instance_bytes));
 
     // Defined contents before the first solve, for the same reason the acoustic pass zeroes its
     // buffers: a dispatch that somehow precedes the first write reads zeros rather than garbage.
@@ -101,7 +119,7 @@ SensesTracer::SensesTracer(const Device& device, const World& world, const std::
     const std::array<vk::DescriptorBufferInfo, 6> buffer_infos{vk::DescriptorBufferInfo{.buffer = m_world->nodes(), .offset = 0u, .range = vk::WholeSize},
         vk::DescriptorBufferInfo{.buffer = m_world->triangles(), .offset = 0u, .range = vk::WholeSize},
         vk::DescriptorBufferInfo{.buffer = *m_materials.buffer, .offset = 0u, .range = vk::WholeSize},
-        vk::DescriptorBufferInfo{.buffer = m_world->instances(), .offset = 0u, .range = vk::WholeSize},
+        vk::DescriptorBufferInfo{.buffer = *m_instances, .offset = 0u, .range = vk::WholeSize},
         vk::DescriptorBufferInfo{.buffer = *m_rays, .offset = 0u, .range = vk::WholeSize},
         vk::DescriptorBufferInfo{.buffer = *m_results, .offset = 0u, .range = vk::WholeSize}};
 
@@ -134,6 +152,17 @@ SensesTracer::SensesTracer(const Device& device, const World& world, const std::
     m_fence = vk::raii::Fence{m_device->get(), vk::FenceCreateInfo{}};
 }
 
+void SensesTracer::stage(const std::vector<BvhLib::InstanceRecord>& instances)
+{
+    if (instances.size() > m_instance_capacity) {
+        throw std::runtime_error{
+            "More placements than this senses pass was built for: " + std::to_string(instances.size()) + " of " + std::to_string(m_instance_capacity) + "."};
+    }
+
+    std::memcpy(m_instances_mapped, instances.data(), instances.size() * sizeof(BvhLib::InstanceRecord));
+    m_instance_count = static_cast<uint32_t>(instances.size());
+}
+
 std::vector<MathLib::Vec4> SensesTracer::solve(const std::vector<MathLib::Vec4>& rays, uint32_t max_bounces)
 {
     if ((rays.size() % 2u) != 0u) {
@@ -154,7 +183,7 @@ std::vector<MathLib::Vec4> SensesTracer::solve(const std::vector<MathLib::Vec4>&
     command_buffer.reset();
     command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-    const SensesPushConstants push{.ray_count = ray_count, .max_bounces = max_bounces, .instance_count = m_world->instanceCount()};
+    const SensesPushConstants push{.ray_count = ray_count, .max_bounces = max_bounces, .instance_count = m_instance_count};
 
     command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, *m_pipeline);
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *m_pipeline_layout, 0u, {*m_descriptor_sets[0]}, {});

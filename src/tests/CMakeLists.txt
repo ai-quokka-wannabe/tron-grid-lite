@@ -47,6 +47,13 @@ add_test(NAME roster_tests COMMAND roster_tests)
 # A creature hearing the Grid is likewise a complete thing to check with no device: the senses seam
 # takes a Creature rather than a Roster, so no Program library is needed either — the tests build
 # the creature by hand and hold the source to the ABI's own promises about what it wires in.
-add_executable(senses_tests senses_tests.cpp ../senses.cpp ../roster.cpp ../program_library.cpp ../acoustics.cpp)
+add_executable(senses_tests senses_tests.cpp ../senses.cpp ../stage.cpp ../roster.cpp ../program_library.cpp ../acoustics.cpp)
 target_link_libraries(senses_tests PRIVATE program_abi math bvh testing ${CMAKE_DL_LIBS})
 add_test(NAME senses_tests COMMAND senses_tests)
+
+# The stage is host arithmetic over the roster's models — scene assembly, one material table,
+# per-tick placements — so it is testable with no device, which is where its correctness matters:
+# the ear path walks exactly the scene this class maintains.
+add_executable(stage_tests stage_tests.cpp ../stage.cpp ../roster.cpp ../program_library.cpp ../acoustics.cpp)
+target_link_libraries(stage_tests PRIVATE program_abi math bvh testing ${CMAKE_DL_LIBS})
+add_test(NAME stage_tests COMMAND stage_tests)

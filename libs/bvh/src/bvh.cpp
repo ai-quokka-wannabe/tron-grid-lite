@@ -562,7 +562,8 @@ namespace BvhLib
         return instance;
     }
 
-    Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance)
+    Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance, uint32_t skip_instance_a,
+        uint32_t skip_instance_b)
     {
         Hit nearest{};
 
@@ -574,6 +575,10 @@ namespace BvhLib
 
         for (uint32_t index{0u}; index < static_cast<uint32_t>(scene.instances.size()); ++index) {
             const Instance& instance{scene.instances[index]};
+
+            if ((index == skip_instance_a) || (index == skip_instance_b)) {
+                continue; // Transparent to this ray: a body the caller asked to see through.
+            }
 
             if (instance.geometry >= scene.geometries.size()) {
                 continue; // An instance naming a geometry that is not there contributes nothing.
@@ -633,38 +638,46 @@ namespace BvhLib
             flat.triangles.insert(flat.triangles.end(), geometry.triangles.begin(), geometry.triangles.end());
         }
 
+        flat.instances.reserve(scene.instances.size());
+        for (const Instance& instance : scene.instances) {
+            if (instance.geometry < scene.geometries.size()) {
+                flat.instances.push_back(flattenInstance(instance, node_offsets[instance.geometry], triangle_offsets[instance.geometry],
+                    static_cast<uint32_t>(scene.geometries[instance.geometry].nodes.size())));
+            } else {
+                // A zero node count is how the shader spells the skip that intersectScene performs
+                // for an instance naming a geometry that is not there.
+                flat.instances.push_back(flattenInstance(instance, 0u, 0u, 0u));
+            }
+        }
+
+        return flat;
+    }
+
+    InstanceRecord flattenInstance(const Instance& instance, uint32_t node_offset, uint32_t triangle_offset, uint32_t node_count)
+    {
         // A row of a column-major matrix: element (col, row) lives at m[col * 4 + row], so row r is
         // every fourth float starting at r.
         const auto row = [](const MathLib::Mat4& matrix, uint32_t index) {
             return MathLib::Vec4{matrix(0u, index), matrix(1u, index), matrix(2u, index), matrix(3u, index)};
         };
 
-        flat.instances.reserve(scene.instances.size());
-        for (const Instance& instance : scene.instances) {
-            InstanceRecord record{};
+        InstanceRecord record{};
 
-            record.to_instance_row0 = row(instance.to_instance, 0u);
-            record.to_instance_row1 = row(instance.to_instance, 1u);
-            record.to_instance_row2 = row(instance.to_instance, 2u);
-            record.to_world_row0 = row(instance.to_world, 0u);
-            record.to_world_row1 = row(instance.to_world, 1u);
-            record.to_world_row2 = row(instance.to_world, 2u);
+        record.to_instance_row0 = row(instance.to_instance, 0u);
+        record.to_instance_row1 = row(instance.to_instance, 1u);
+        record.to_instance_row2 = row(instance.to_instance, 2u);
+        record.to_world_row0 = row(instance.to_world, 0u);
+        record.to_world_row1 = row(instance.to_world, 1u);
+        record.to_world_row2 = row(instance.to_world, 2u);
 
-            record.bounds_min = instance.bounds_min;
-            record.bounds_max = instance.bounds_max;
+        record.bounds_min = instance.bounds_min;
+        record.bounds_max = instance.bounds_max;
 
-            if (instance.geometry < scene.geometries.size()) {
-                record.node_offset = node_offsets[instance.geometry];
-                record.triangle_offset = triangle_offsets[instance.geometry];
-                record.node_count = static_cast<uint32_t>(scene.geometries[instance.geometry].nodes.size());
-            }
-            // Otherwise the count stays zero, which is how the shader spells the skip that
-            // intersectScene performs for an instance naming a geometry that is not there.
+        record.node_offset = node_offset;
+        record.triangle_offset = triangle_offset;
+        record.node_count = node_count;
 
-            flat.instances.push_back(record);
-        }
-
-        return flat;
+        return record;
     }
 
 } // namespace BvhLib

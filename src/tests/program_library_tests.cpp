@@ -590,6 +590,40 @@ TEST_CASE(a_refused_program_is_named_in_every_message)
     }
 }
 
+TEST_CASE(the_grid_hosts_one_program_library_per_run)
+{
+    /*
+        One live library per process, enforced rather than assumed. The replay claim names one tick
+        loop driving one roster; TglLibraryInfo::creature_count is promised exact for the run; and
+        a second library would put two Programs' process-wide state — locales, signal handlers,
+        whatever a GUI toolkit drags in — into one address space with no rule about who wins.
+    */
+    const ProgramLib::Library first{fixtureDirectory(), GOOD_PROGRAM, libraryInfo()};
+
+    std::string message;
+    try {
+        const ProgramLib::Library second{fixtureDirectory(), GOOD_PROGRAM, libraryInfo()};
+    } catch (const std::runtime_error& error) {
+        message = error.what();
+    }
+
+    TEST_CHECK(!message.empty());
+    TEST_CHECK(message.find("one Program library per run") != std::string::npos);
+}
+
+TEST_CASE(a_shut_down_library_frees_the_slot_for_the_next)
+{
+    // Sequential loads are legitimate and must stay so: the listing probes its candidates one at a
+    // time, each unloaded before the next is opened.
+    {
+        const ProgramLib::Library first{fixtureDirectory(), GOOD_PROGRAM, libraryInfo()};
+        TEST_CHECK(!first.identifier().empty());
+    }
+
+    const ProgramLib::Library second{fixtureDirectory(), GOOD_PROGRAM, libraryInfo()};
+    TEST_CHECK(!second.identifier().empty());
+}
+
 int main()
 {
     return static_cast<int>(TestingLib::runAll());

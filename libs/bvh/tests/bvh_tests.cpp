@@ -18,6 +18,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <utility>
 #include <vector>
@@ -515,6 +516,58 @@ TEST_CASE(the_nearest_instance_wins_and_names_itself)
     TEST_CHECK(behind.valid);
     TEST_CHECK_EQUAL(behind.instance, 0u);
     TEST_CHECK_CLOSE(behind.distance, 20.0f, 1e-4f);
+}
+
+TEST_CASE(a_skipped_instance_is_transparent_to_the_ray)
+{
+    /*
+        The two skip parameters exist for creature bodies: a body's own senses see through their
+        own hull, and a call's paths see through the caller's and the listener's. What they must
+        mean here is exactly transparency — the ray behaves as if the named placements were not in
+        the scene at all, and everything else answers as before.
+    */
+    std::vector<BvhLib::Triangle> quad{makeTriangle(MathLib::Vec3{-1.0f, -1.0f, 0.0f}, MathLib::Vec3{1.0f, -1.0f, 0.0f}, MathLib::Vec3{0.0f, 1.0f, 0.0f})};
+    BvhLib::Bvh geometry{BvhLib::build(std::move(quad))};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, MathLib::Mat4::translate(MathLib::Vec3{0.0f, 0.0f, -20.0f})));
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, MathLib::Mat4::translate(MathLib::Vec3{0.0f, 0.0f, -5.0f})));
+    scene.geometries.push_back(std::move(geometry));
+
+    const MathLib::Vec3 origin{0.0f, 0.0f, 0.0f};
+    const MathLib::Vec3 forward{0.0f, 0.0f, -1.0f};
+
+    // Skipping the near instance uncovers the far one.
+    const BvhLib::Hit past_near{BvhLib::intersectScene(scene, origin, forward, 100.0f, 1u)};
+    TEST_CHECK(past_near.valid);
+    TEST_CHECK_EQUAL(past_near.instance, 0u);
+    TEST_CHECK_CLOSE(past_near.distance, 20.0f, 1e-4f);
+
+    // Skipping both leaves nothing to strike.
+    const BvhLib::Hit past_both{BvhLib::intersectScene(scene, origin, forward, 100.0f, 0u, 1u)};
+    TEST_CHECK(!past_both.valid);
+
+    // And NO_INSTANCE skips nothing, which is every caller that predates bodies.
+    const BvhLib::Hit unskipped{BvhLib::intersectScene(scene, origin, forward, 100.0f, BvhLib::NO_INSTANCE, BvhLib::NO_INSTANCE)};
+    TEST_CHECK(unskipped.valid);
+    TEST_CHECK_EQUAL(unskipped.instance, 1u);
+}
+
+TEST_CASE(flatten_instance_is_the_per_instance_half_of_flatten)
+{
+    // The cheap per-tick path and the whole path must be the same arithmetic; byte equality is the
+    // claim, because flatten is written in terms of flattenInstance.
+    std::vector<BvhLib::Triangle> quad{makeTriangle(MathLib::Vec3{-1.0f, -1.0f, 0.0f}, MathLib::Vec3{1.0f, -1.0f, 0.0f}, MathLib::Vec3{0.0f, 1.0f, 0.0f})};
+    BvhLib::Bvh geometry{BvhLib::build(std::move(quad))};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(geometry, 0u, MathLib::Mat4::translate(MathLib::Vec3{3.0f, -2.0f, 7.0f})));
+    scene.geometries.push_back(std::move(geometry));
+
+    const BvhLib::FlatScene flat{BvhLib::flatten(scene)};
+    const BvhLib::InstanceRecord alone{BvhLib::flattenInstance(scene.instances[0], 0u, 0u, static_cast<uint32_t>(scene.geometries[0].nodes.size()))};
+
+    TEST_CHECK(std::memcmp(&alone, flat.instances.data(), sizeof(BvhLib::InstanceRecord)) == 0);
 }
 
 TEST_CASE(an_instance_naming_a_missing_geometry_is_skipped_not_crashed)

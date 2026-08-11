@@ -221,9 +221,11 @@ are decisions waiting on the owner, not conclusions.
    now hands back a `TglRenderModel` — vertices, triangles and materials in the Grid's own
    continuous model — validated whole and copied at rez (ABI v3). The shape lives with the
    creature's repository rather than in the Grid, which is both the Tron fiction played straight
-   and the only ownership that scales across an organisation of creature repos. What remains of
-   this question is the staging half — the writable instance buffer, the per-tick transform and
-   the senses seeing it — which is the next etape's work. The predicted payoffs stand: creatures
+   and the only ownership that scales across an organisation of creature repos. The staging half
+   is built too: `Stage` assembles the scene and the one material table, the senses pass keeps its
+   own per-tick instance buffer, and a creature's own body is excluded from its own senses — its
+   record blanked for its eyes, its instance skipped for its ears and its voice. The predicted
+   payoffs stand delivered: creatures
    become visible to each other because they emit; they become acoustic occluders because the same
    instance answers acoustic rays; and since the floor is a perfect mirror, a glowing creature has
    a reflection in its own visual field. The mirror self-recognition test materialises out of the

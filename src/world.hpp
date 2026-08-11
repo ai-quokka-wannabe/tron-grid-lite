@@ -39,12 +39,14 @@ class Device; // forward declaration
     class is where that claim is kept on the host side, as `grid_bvh.slang` keeps it on the device
     side.
 
-    Immutable once built, and **it stays that way even when creatures move**. Phase 6 adds bodies, but
-    they do not join this hierarchy: they get their own, under the top level that already exists here
-    and today holds a single box — the Grid's, at the identity. The Grid's own structure is therefore
-    never rebuilt, and a rigid body's is built once when it is rezzed. Rebuilding everything each tick
-    would cost 31 ms with twenty creatures against 0.0031 ms for the top level alone — see
-    `docs/ARCHITECTURE.md` § One hierarchy today, two when creatures move.
+    Immutable once built, and **it stays that way even though creatures move**. A body does not join
+    the Grid's hierarchy: it brings its own, built once at rez, and stands under the top level as
+    one more instance — the arrangement `docs/ARCHITECTURE.md` § One hierarchy today, two when
+    creatures move measured before it was built. What moves per tick is placement alone, and the
+    moving copy is not this class's: the senses pass keeps its own host-visible instance buffer,
+    refreshed from `BvhLib::flattenInstance`, while the buffers here — including the instance
+    buffer's static snapshot — never change after upload. Rebuilding everything each tick would
+    cost 31 ms with twenty creatures against 0.0031 ms for the top level alone.
 
     That the one instance sits at the identity is what makes the arrangement cheap to trust: an
     identity transform must leave the picture bit-for-bit what traversing the geometry directly
@@ -66,6 +68,22 @@ public:
                wrong — see `--verify-scene`.
     */
     World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& logger, const MathLib::Mat4& to_world = MathLib::Mat4::identity());
+
+    /*!
+        Uploads a whole flattened scene: every geometry concatenated, every placement recorded.
+
+        The many-body form the single-hierarchy constructor is written in terms of. The instance
+        buffer uploaded here is the placements *as flattened* — a static map of where things stood.
+        A consumer whose placements move each tick keeps its own host-visible copy and refreshes it
+        from `BvhLib::flattenInstance`; this class stays immutable either way, which is what the
+        class comment promises.
+
+        \param device Logical device.
+        \param flat The scene, already flattened. Node and triangle arrays may be empty for an
+               empty Grid; the instance array must not be, because an empty Grid is still placed.
+        \param logger Logger for the upload summary.
+    */
+    World(const Device& device, const BvhLib::FlatScene& flat, LoggingLib::Logger& logger);
 
     // Non-copyable, non-movable: it owns Vulkan objects that passes hold references to.
     World(const World&) = delete;

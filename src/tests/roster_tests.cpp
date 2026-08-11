@@ -647,28 +647,38 @@ TEST_CASE(the_same_run_hashes_bit_identically_twice)
         return (z > -1.0f) ? 0.0f : -0.5f;
     }};
 
-    RosterLib::Roster first{fixtureDirectory(), "tgl_driver_turning", 3u, terraced};
-    RosterLib::Roster second{fixtureDirectory(), "tgl_driver_turning", 3u, terraced};
-
-    uint64_t first_hash_at_start{0u};
-    bool anything_moved{false};
-
-    for (uint32_t index{0u}; index < 128u; ++index) {
-        first.tick(nullSenses());
-        second.tick(nullSenses());
-
-        const uint64_t first_hash{hashRoster(first)};
-        const uint64_t second_hash{hashRoster(second)};
-        TEST_CHECK_EQUAL(first_hash, second_hash);
-
-        if (index == 0u) {
-            first_hash_at_start = first_hash;
-        } else if (first_hash != first_hash_at_start) {
-            anything_moved = true;
+    /*
+        Two whole runs rather than two rosters side by side, because the Grid hosts one Program
+        library per run and the check must live under the same rule as the thing it checks. It is
+        also the stronger claim: the second run reproduces the first across a full library
+        shutdown and reload, which is the shape an actual replay has.
+    */
+    const auto hashRun = [&]() {
+        RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_turning", 3u, terraced};
+        std::vector<uint64_t> hashes;
+        hashes.reserve(128u);
+        for (uint32_t index{0u}; index < 128u; ++index) {
+            roster.tick(nullSenses());
+            hashes.push_back(hashRoster(roster));
         }
+        return hashes;
+    };
+
+    const std::vector<uint64_t> first{hashRun()};
+    const std::vector<uint64_t> second{hashRun()};
+
+    TEST_CHECK_EQUAL(first.size(), second.size());
+    for (size_t index{0u}; index < first.size(); ++index) {
+        TEST_CHECK_EQUAL(first[index], second[index]);
     }
 
     // The floor under the comparison: two frozen worlds also agree perfectly, about nothing.
+    bool anything_moved{false};
+    for (size_t index{1u}; index < first.size(); ++index) {
+        if (first[index] != first.front()) {
+            anything_moved = true;
+        }
+    }
     TEST_CHECK(anything_moved);
 }
 

@@ -228,11 +228,27 @@ namespace BvhLib
     [[nodiscard]] Instance makeInstance(const Bvh& geometry, uint32_t geometry_index, const MathLib::Mat4& to_world);
 
     /*!
+        The instance index that names no instance, for the skip parameters below.
+
+        A sentinel rather than an optional, because it crosses into configuration structs that want
+        aggregate initialisation, and because the shader-side instance index is a plain uint with
+        exactly this "none" spelling available.
+    */
+    inline constexpr uint32_t NO_INSTANCE{0xFFFFFFFFu};
+
+    /*!
         Traces one ray against a whole scene and returns the nearest hit across every instance.
 
         The host-side twin of the two-level traversal the compute shader will perform, and the
         specification it is checked against — the same relationship `intersect` has with the
         single-level shader path.
+
+        **The two skip parameters make named instances transparent to this ray.** Two rather than
+        one or many, because two is what the Grid's senses actually need: a creature's own senses
+        skip its own body, and a call's paths skip the caller's body and the listener's — a source
+        inside its own hull would otherwise gag itself, and an ear inside its own hull would be
+        deaf. `NO_INSTANCE` skips nothing, which is every caller that predates creatures having
+        bodies.
 
         **The ray is transformed into instance space without normalising it**, and that is not an
         oversight. Leaving the transformed direction unnormalised means the ray parameter is identical
@@ -252,7 +268,8 @@ namespace BvhLib
         \param max_distance Furthest hit to accept.
         \return The nearest hit, with `instance` naming which placement it belongs to.
     */
-    [[nodiscard]] Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance);
+    [[nodiscard]] Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance,
+        uint32_t skip_instance_a = NO_INSTANCE, uint32_t skip_instance_b = NO_INSTANCE);
 
     /*!
         One instance in the form the shader reads: 144 bytes, std430, ready to upload.
@@ -331,5 +348,24 @@ namespace BvhLib
         \return The three arrays, ready for a `std::memcpy` into mapped buffers.
     */
     [[nodiscard]] FlatScene flatten(const Scene& scene);
+
+    /*!
+        Packs one instance into the record the shader reads, given where its geometry landed.
+
+        The per-instance half of `flatten`, public because a moving instance is exactly this much
+        work per tick: the geometry offsets never change once the buffers are uploaded, so a caller
+        that cached them rebuilds one 144-byte record per moved body instead of re-concatenating
+        every node and triangle on the Grid. `flatten` itself is written in terms of this function,
+        which is what keeps the two from drifting.
+
+        \param instance The placement, with its transforms and world bounds current.
+        \param node_offset Where the instance's geometry begins in the shared node buffer.
+        \param triangle_offset Where it begins in the shared triangle buffer.
+        \param node_count Nodes in that geometry. Zero makes the shader skip the instance, which is
+               also how a caller silences a body deliberately — a creature's own senses blank their
+               own record rather than asking the shader to learn a skip.
+        \return The record, ready to overwrite its slot in a mapped instance buffer.
+    */
+    [[nodiscard]] InstanceRecord flattenInstance(const Instance& instance, uint32_t node_offset, uint32_t triangle_offset, uint32_t node_count);
 
 } // namespace BvhLib

@@ -19,22 +19,57 @@
 #include <string>
 #include <utility>
 
-GridSensesSource::GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, Acoustics::Reflectors reflectors, RadianceSolver* radiance_solver) :
+GridSensesSource::GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, Acoustics::Reflectors reflectors, RadianceSolver* radiance_solver,
+    Stage* stage) :
     m_scene(scene),
     m_source_strengths(std::move(source_strengths)),
     m_reflectors(std::move(reflectors)),
-    m_radiance_solver(radiance_solver)
+    m_radiance_solver(radiance_solver),
+    m_stage(stage)
 {
 }
 
 void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatures)
 {
+    /*
+        Bodies first, because everything after depends on where they stand. A tick on which any
+        body moved stales every traced-sense cache: the caches key on the listener's own pose
+        because that used to be everything a solve read, and a body standing in the scene is read
+        too. The comparison is exact, like the cache keys it guards.
+    */
+    m_bodies_moved = false;
+    if (m_stage != nullptr) {
+        std::vector<RosterLib::Pose> poses;
+        for (const RosterLib::Creature& creature : creatures) {
+            if (!creature.model.empty()) {
+                poses.push_back(creature.pose);
+            }
+        }
+
+        if (poses.size() != m_last_body_poses.size()) {
+            m_bodies_moved = true;
+        } else {
+            for (size_t index{0u}; index < poses.size(); ++index) {
+                if ((!(poses[index].position == m_last_body_poses[index].position)) || (poses[index].yaw != m_last_body_poses[index].yaw)) {
+                    m_bodies_moved = true;
+                    break;
+                }
+            }
+        }
+
+        m_last_body_poses = std::move(poses);
+        m_stage->update(creatures);
+    }
+
     m_calls.clear();
     for (const RosterLib::Creature& creature : creatures) {
         if (creature.vocalisation > 0.0f) {
             // The call leaves from the body's own position, exactly as the ABI documents at
-            // TglActions::vocalisation_strength.
-            m_calls.push_back(Call{.position = creature.pose.position, .strength = creature.vocalisation});
+            // TglActions::vocalisation_strength — and it sees through its own hull, which is what
+            // the caller instance is for.
+            m_calls.push_back(Call{.position = creature.pose.position,
+                .strength = creature.vocalisation,
+                .caller_instance = (m_stage != nullptr) ? m_stage->instanceOf(creature.body.creature_id) : BvhLib::NO_INSTANCE});
         }
     }
 }
@@ -100,6 +135,9 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
     CreatureEars& state{earStateFor(body.creature_id, body.ear_count)};
     m_ear_views.resize(body.ear_count);
 
+    // The listener's own body, which its ears hear through rather than into.
+    const uint32_t own_instance{(m_stage != nullptr) ? m_stage->instanceOf(body.creature_id) : BvhLib::NO_INSTANCE};
+
     for (uint32_t index{0u}; index < body.ear_count; ++index) {
         const TglEarDesc& ear{body.ears[index]};
 
@@ -117,11 +155,12 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
 
         EarKey& cached{state.keys[index]};
         AlignedResponse& stored{state.responses[index]};
-        if ((!cached.solved) || (!(cached.world_position == world))) {
+        if ((!cached.solved) || m_bodies_moved || (!(cached.world_position == world))) {
             Acoustics::GatherConfig config{};
             for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
                 config.air_absorption_db_per_km[band] = ear.air_absorption_db_per_km[band];
             }
+            config.skip_instance = own_instance;
             /*
                 The hum spectrum stays at the config's unit default. The first body's band edges are
                 chosen so that each band holds exactly one harmonic of the Grid's hum, which makes
@@ -157,8 +196,10 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
                 call_config.air_absorption_db_per_km[band] = ear.air_absorption_db_per_km[band];
             }
             call_config.source_radius_metres = RosterLib::BODY_HALF_HEIGHT;
+            call_config.listener_instance = own_instance;
 
             for (const Call& call : m_calls) {
+                call_config.caller_instance = call.caller_instance;
                 const Acoustics::ImpulseResponse arrivals{Acoustics::deliverCall(m_scene, m_reflectors, call.position, call.strength, world, call_config)};
                 for (size_t bin{0u}; bin < arrivals.bins.size(); ++bin) {
                     scratch.energy[bin] += arrivals.bins[bin];
@@ -184,7 +225,7 @@ void GridSensesSource::fillVision(const RosterLib::Creature& creature, TglSenses
 
     CreatureVision& state{visionStateFor(body)};
 
-    const bool pose_changed{(!state.solved) || (!(state.position == creature.pose.position)) || (state.yaw != creature.pose.yaw)};
+    const bool pose_changed{(!state.solved) || m_bodies_moved || (!(state.position == creature.pose.position)) || (state.yaw != creature.pose.yaw)};
     if (pose_changed) {
         /*
             One flat batch for everything this creature sees: eye samples first, in eye order and
@@ -229,6 +270,21 @@ void GridSensesSource::fillVision(const RosterLib::Creature& creature, TglSenses
         for (uint32_t sample{0u}; sample < body.irradiance_sample_count; ++sample) {
             rays.push_back(MathLib::Vec4::fromVec3(centre, 0.0f));
             rays.push_back(MathLib::Vec4::fromVec3(Acoustics::fibonacciDirection(sample, body.irradiance_sample_count), 0.0f));
+        }
+
+        if (m_stage != nullptr) {
+            /*
+                The tick's placements, with the creature's own body blanked to a zero node count:
+                its eyes see through its own hull the way its ears hear through it, and the blank
+                record is the flat spelling of the same skip — the shader never learns a special
+                case.
+            */
+            std::vector<BvhLib::InstanceRecord> records{m_stage->flatInstances()};
+            const uint32_t own_instance{m_stage->instanceOf(body.creature_id)};
+            if (own_instance < records.size()) {
+                records[own_instance].node_count = 0u;
+            }
+            m_radiance_solver->stage(records);
         }
 
         const std::vector<MathLib::Vec4> radiance{m_radiance_solver->solve(rays, SENSES_MAX_BOUNCES)};

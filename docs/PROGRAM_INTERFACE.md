@@ -572,9 +572,14 @@ A Program that authors its model knows only what it chose to write — the same 
 genome is in — and what its body actually does in the world it still learns the way an animal
 does, by bumping into things.
 
-What the Grid does with an accepted model — staging it into the world's hierarchy, moving it with
-the pose, making it visible to other creatures' eyes and audible in their echoes — is the Grid's
-business and the next etape's work, not a promise this document makes early.
+**And the staging is built.** An accepted model becomes a hierarchy of its own at rez — built once,
+because a rigid body's hierarchy never needs rebuilding — and stands in the world as an instance
+whose transform follows the pose each tick. Other creatures see it, their calls shadow behind it,
+and the hum bends around it. A creature's own senses see *through* its own hull, deliberately: its
+ears sit on its body and its voice leaves from inside it, so a hull that blocked its own sensors
+would deafen and gag the body it belongs to. What is lost with that first cut is the creature's
+own head shadow, which needs sensors modelled proud of the hull — the body author's business, not
+the Grid's.
 
 ---
 
