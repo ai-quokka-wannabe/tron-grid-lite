@@ -216,17 +216,18 @@ are decisions waiting on the owner, not conclusions.
    inexplicable at tick 41,203 can be replayed exactly, and that changing one thing in an experiment
    changes one thing. See [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md) § Determinism and
    Replay, which now separates the three properties that travel under that one word.
-5. **Does the first creature body have geometry?** The largest single scope decision here. Without it,
-   physics is still verifiable, the generation never moves, and `World` needs no change at all in v1.
-   With it, the debug window shows the creature and the writable instance buffer, the frames-in-flight
-   write, the per-tick `flatten` trap and runtime rez all come due at once.
-   **The material is settled either way: mirror panels and emissive edge tubes**, from the same
-   continuous model every other surface uses. It costs no new pass and no new shader — a body is one
-   instance in the two-level hierarchy carrying a material slot — and three things fall out of it for
-   free. Creatures become visible to each other because they emit; they become acoustic occluders and
-   reflectors because the same instance answers acoustic rays; and since the floor is a perfect mirror,
-   a glowing creature has a reflection in its own visual field. The mirror self-recognition test
-   materialises out of the material model without anyone building it.
+5. **Does the first creature body have geometry?** ~~The largest single scope decision here.~~
+   **Decided, and the mechanism was the owner's: the Program brings its own body.** `program_rez`
+   now hands back a `TglRenderModel` — vertices, triangles and materials in the Grid's own
+   continuous model — validated whole and copied at rez (ABI v3). The shape lives with the
+   creature's repository rather than in the Grid, which is both the Tron fiction played straight
+   and the only ownership that scales across an organisation of creature repos. What remains of
+   this question is the staging half — the writable instance buffer, the per-tick transform and
+   the senses seeing it — which is the next etape's work. The predicted payoffs stand: creatures
+   become visible to each other because they emit; they become acoustic occluders because the same
+   instance answers acoustic rays; and since the floor is a perfect mirror, a glowing creature has
+   a reflection in its own visual field. The mirror self-recognition test materialises out of the
+   material model without anyone building it.
 6. ~~How many segments, and does the first worm get its two eyes?~~ **Decided: one rigid segment.**
    A body that bends needs a solver able to bend it, and no physics exists in this repository at all
    yet; an articulated multi-body solver with joint limits is a substantially larger first step than a

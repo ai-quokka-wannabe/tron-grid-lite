@@ -141,6 +141,27 @@ namespace RosterLib
     struct Creature;
 
     /*!
+        A body's validated shape, copied out of the Program's borrowed `TglRenderModel` at rez.
+
+        Owned storage rather than borrowed pointers, because the ABI's arrays die with the rez call
+        and the shape has to outlive every tick. Kept in the ABI's own element types so that what
+        was accepted is exactly what was offered; the world's triangle form is derived from this
+        when the body is staged into the scene, not here, because staging owes the world global
+        material indices this struct cannot know.
+    */
+    struct CreatureModel {
+        std::vector<MathLib::Vec3> vertex_positions;
+        std::vector<TglRenderTriangle> triangles;
+        std::vector<TglRenderMaterial> materials;
+
+        //! True when the body has no visible shape, which is a legitimate body and today's default.
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return triangles.empty();
+        }
+    };
+
+    /*!
         Fills the senses only the tracers can answer: eyes, ears and irradiance.
 
         An interface rather than a member, because what stands behind it differs by run mode: the
@@ -201,6 +222,10 @@ namespace RosterLib
         //! This creature's own body. The Grid keeps a copy because the descriptor handed to
         //! program_rez is borrowed for that call only, and the bounds are needed every tick.
         TglCreatureDesc body{};
+
+        //! The shape the Program offered at rez and the Grid accepted, validated whole. Empty for
+        //! a Program that offered none, which every fixture but the modelled one is.
+        CreatureModel model{};
 
         Pose pose{};
 

@@ -40,7 +40,7 @@ namespace
     {
     }
 
-    TglProgram* programRez(const TglCreatureDesc*) noexcept
+    TglProgram* programRez(const TglCreatureDesc*, TglRenderModel*) noexcept
     {
         return nullptr;
     }

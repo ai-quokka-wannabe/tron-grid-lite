@@ -60,9 +60,10 @@ static void libraryInit(const TglLibraryInfo* info) TGL_NOEXCEPT
     g_lifecycle |= TGL_TEST_LIFECYCLE_INIT;
 }
 
-static TglProgram* programRez(const TglCreatureDesc* desc) TGL_NOEXCEPT
+static TglProgram* programRez(const TglCreatureDesc* desc, TglRenderModel* model) TGL_NOEXCEPT
 {
     (void)desc;
+    (void)model;
     return (TglProgram*)&g_creature_state;
 }
 
