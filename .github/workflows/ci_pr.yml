@@ -256,6 +256,12 @@ jobs:
             - name: They must still agree at an angle
               run: ./build/linux-x11-gcc/src/Release/TronGridLite --verify-scene
 
+            # One bounce collapses the Whitted walk to the host's first hit, which checks the senses
+            # pass's own plumbing — the ray buffer, the offsets, the readback. The shading it shares
+            # with the renderer stays licensed by the reference render digest.
+            - name: A creature's eye and the host must agree
+              run: ./build/linux-x11-gcc/src/Release/TronGridLite --verify-senses
+
     ci-success:
         name: CI Success
         needs: [quick-checks, build, sanitisers, verify-on-cpu]

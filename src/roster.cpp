@@ -69,7 +69,43 @@ namespace
         },
     };
 
-    //! The body every creature gets until glTF bodies arrive. One rigid piece; ears, no eyes yet.
+    /*!
+        Two eyes of one sample each, at the same stations as the ears.
+
+        The head sample looks forward along the body's own -Z and the tail sample backward along
+        +Z — the arrangement of the simplest preset in PERCEPTION.md, whose head and tail
+        photoreceptors sitting in different places is the only spatial light discrimination it has.
+
+        One channel, because these are intensity receptors with no colour opinion. The acceptance
+        angle is the eye's true integration width; the render currently answers it with a single
+        ray, which delivers the aliasing PERCEPTION.md rule 4 asks for rather than the blur rule 6
+        eventually wants. Quantisation is stated as zero because the Grid does not quantise yet,
+        and claiming four bits before the mechanism exists would be prose pretending to be code.
+    */
+    constexpr std::array<float, 3u> FIRST_BODY_HEAD_EYE_DIRECTION{0.0f, 0.0f, -1.0f};
+    constexpr std::array<float, 3u> FIRST_BODY_TAIL_EYE_DIRECTION{0.0f, 0.0f, 1.0f};
+    constexpr std::array<float, 1u> FIRST_BODY_EYE_ACCEPTANCE_RADIANS{0.5235988f};
+
+    constexpr std::array<TglEyeDesc, 2u> FIRST_BODY_EYES{
+        TglEyeDesc{
+            .sample_directions = FIRST_BODY_HEAD_EYE_DIRECTION.data(),
+            .sample_acceptance_angles = FIRST_BODY_EYE_ACCEPTANCE_RADIANS.data(),
+            .position = {0.0f, 0.0f, -0.2f},
+            .sample_count = 1u,
+            .channels = 1u,
+            .quantisation_bits = 0u,
+        },
+        TglEyeDesc{
+            .sample_directions = FIRST_BODY_TAIL_EYE_DIRECTION.data(),
+            .sample_acceptance_angles = FIRST_BODY_EYE_ACCEPTANCE_RADIANS.data(),
+            .position = {0.0f, 0.0f, 0.2f},
+            .sample_count = 1u,
+            .channels = 1u,
+            .quantisation_bits = 0u,
+        },
+    };
+
+    //! The body every creature gets until glTF bodies arrive. One rigid piece; two ears, two eyes.
     [[nodiscard]] TglCreatureDesc firstBody(uint64_t creature_id) noexcept
     {
         TglCreatureDesc desc{};
@@ -82,11 +118,14 @@ namespace
         */
         desc.random_seed = 0x9E3779B97F4A7C15ull ^ (creature_id * 0x1000193ull);
 
-        desc.eyes = nullptr;
+        desc.eyes = FIRST_BODY_EYES.data();
         desc.ears = FIRST_BODY_EARS.data();
-        desc.eye_count = 0u;
+        desc.eye_count = static_cast<uint32_t>(FIRST_BODY_EYES.size());
         desc.ear_count = static_cast<uint32_t>(FIRST_BODY_EARS.size());
-        desc.irradiance_sample_count = 0u;
+
+        // Sixty-four rays for the sphere integral: enough that the mean is stable against the
+        // Fibonacci set's stride, and two orders of magnitude below what one window pixel costs.
+        desc.irradiance_sample_count = 64u;
         desc.max_contact_count = 0u;
 
         /*
@@ -148,6 +187,13 @@ namespace RosterLib
         const float sin_yaw{std::sin(pose.yaw)};
         const float cos_yaw{std::cos(pose.yaw)};
         return pose.position + MathLib::Vec3{(body_point.x * cos_yaw) + (body_point.z * sin_yaw), body_point.y, (body_point.z * cos_yaw) - (body_point.x * sin_yaw)};
+    }
+
+    MathLib::Vec3 worldDirectionFromBody(const Pose& pose, const MathLib::Vec3& body_direction) noexcept
+    {
+        const float sin_yaw{std::sin(pose.yaw)};
+        const float cos_yaw{std::cos(pose.yaw)};
+        return MathLib::Vec3{(body_direction.x * cos_yaw) + (body_direction.z * sin_yaw), body_direction.y, (body_direction.z * cos_yaw) - (body_direction.x * sin_yaw)};
     }
 
     void sanitiseAndClamp(TglActions& actions, const TglCreatureDesc& desc) noexcept

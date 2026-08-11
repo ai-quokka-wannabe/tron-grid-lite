@@ -77,6 +77,10 @@ namespace RosterLib
     //! This is how a sensor's position on the body becomes the place it senses from.
     [[nodiscard]] MathLib::Vec3 worldFromBody(const Pose& pose, const MathLib::Vec3& body_point) noexcept;
 
+    //! A body-frame direction carried into world space: the rotation alone, with no translation.
+    //! This is how an eye sample's view direction becomes the way it actually looks.
+    [[nodiscard]] MathLib::Vec3 worldDirectionFromBody(const Pose& pose, const MathLib::Vec3& body_direction) noexcept;
+
     /*!
         Replaces non-finite values with zero and then clamps to the body's bounds.
 

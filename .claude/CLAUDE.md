@@ -254,10 +254,10 @@ its own internals opens its own window; that is its business, and the Grid provi
 
 ## The three checks worth running
 
-All three need a device but none needs a display, and a device does not have to be a GPU. **The two
+All of them need a device but none needs a display, and a device does not have to be a GPU. **The
 verification modes run in CI on every push**, against lavapipe — Mesa's software Vulkan driver, which
 satisfies everything this renderer asks for (Vulkan 1.3, dynamic rendering, synchronisation2, a
-graphics family that dispatches compute) and answers both comparisons in about a second.
+graphics family that dispatches compute) and answers each comparison in about a second.
 
 That leaves `--benchmark` as the one still needing hardware, which is right: it measures a GPU, and a
 software implementation has nothing to say about that.
@@ -280,6 +280,7 @@ Debian or Ubuntu it is `mesa-vulkan-drivers`. The Vulkan SDK ships neither — i
 |---------|---------|
 | `--verify-acoustics` | Does `acoustics.slang` compute what `Acoustics::gather` computes? |
 | `--verify-scene` | The same question with the Grid placed **at an angle**, which is the only way any transform arithmetic gets exercised on the device. At the identity a matrix and its transpose are the same sixteen numbers. |
+| `--verify-senses` | Does `senses.slang` answer a sample ray with what the host's first hit says? At one bounce the Whitted walk collapses to a copied emission constant, so the agreement is exact — which checks the senses pass's own plumbing, while the shading it shares with the renderer stays licensed by the digest. |
 | `--benchmark` | What each GPU pass costs, from the device's own timestamps. Run-to-run spread about 2%, against 10% for timing `--record` with a wall clock. |
 
 `--benchmark` writes nothing and reads nothing back, discards ten warm-up frames, and walks the same

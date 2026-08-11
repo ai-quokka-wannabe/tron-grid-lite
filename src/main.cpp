@@ -40,6 +40,7 @@
 #include "profiler.hpp"
 #include "roster.hpp"
 #include "senses.hpp"
+#include "senses_tracer.hpp"
 #include "program_library.hpp"
 #include "spectator.hpp"
 #include "surface.hpp"
@@ -899,6 +900,164 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
 }
 
 /*!
+    Holds `senses.slang` to a specification the host can compute.
+
+    At one bounce the Whitted walk collapses to something `BvhLib::intersectScene` can answer
+    exactly: the radiance of a single ray is the emission of the first surface it strikes, with a
+    throughput of one and no Fresnel anywhere. So the check fans deterministic rays from a listener
+    among the terraces, runs the senses pass at `max_bounces = 1`, and compares every answer
+    against the host's first hit.
+
+    That verifies the plumbing this pass adds — the ray buffer, the offsets, the readback — while
+    the shading it shares with the renderer stays licensed by the reference render digest, which
+    exercises the full ray tree at depth six. Between the two checks nothing in the senses path is
+    trusted on faith.
+
+    **They are not expected to agree ray for ray without exception.** The two traversals order
+    their arithmetic differently, so a ray that grazes a tube's edge can strike it on one side and
+    miss it on the other — the same last-bit freedom the acoustic comparison documents. The
+    comparison therefore reports the total, the count of disagreeing rays, and a did-anything-
+    arrive floor on emissive hits, with thresholds sized to grazing incidence rather than to taste.
+*/
+[[nodiscard]] int verifySenses(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& logger, const std::filesystem::path& shader_directory)
+{
+    constexpr uint32_t FAN_COUNT{512u};
+
+    const World world{device, bvh, logger};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, MathLib::Mat4::identity()));
+    scene.geometries.push_back(bvh);
+
+    const std::vector<Material> materials{makeMaterials()};
+
+    // The same station the acoustic checks listen from: among the terraces, so the fan meets
+    // risers, tubes and floor rather than only the flat.
+    const float ground{gridMeshHeight(6.0f, -12.0f, GRID_FLOOR_CONFIG)};
+    const MathLib::Vec3 origin{6.0f, ground + 1.7f, -12.0f};
+
+    std::vector<MathLib::Vec4> rays;
+    rays.reserve(2u * FAN_COUNT);
+    for (uint32_t index{0u}; index < FAN_COUNT; ++index) {
+        rays.push_back(MathLib::Vec4::fromVec3(origin, 0.0f));
+        rays.push_back(MathLib::Vec4::fromVec3(Acoustics::fibonacciDirection(index, FAN_COUNT), 0.0f));
+    }
+
+    SensesTracer senses_tracer{device, world, materials, FAN_COUNT, (shader_directory / "senses.spv").string(), logger};
+    const std::vector<MathLib::Vec4> measured{senses_tracer.solve(rays, 1u)};
+
+    float host_total{0.0f};
+    float device_total{0.0f};
+    uint32_t emissive_hits{0u};
+    uint32_t disagreements{0u};
+    float worst_difference{0.0f};
+
+    for (uint32_t index{0u}; index < FAN_COUNT; ++index) {
+        const MathLib::Vec3 direction{Acoustics::fibonacciDirection(index, FAN_COUNT)};
+        const BvhLib::Hit hit{BvhLib::intersectScene(scene, origin, direction, 10000.0f)};
+
+        MathLib::Vec3 expected{0.0f, 0.0f, 0.0f};
+        if (hit.valid) {
+            const BvhLib::Triangle& triangle{scene.geometries[scene.instances[hit.instance].geometry].triangles[hit.triangle]};
+            expected = materials[triangle.material].emission;
+        }
+        if ((expected.x + expected.y + expected.z) > 0.0f) {
+            ++emissive_hits;
+        }
+
+        const MathLib::Vec4& answer{measured[index]};
+        const float difference{std::max({std::fabs(answer.x - expected.x), std::fabs(answer.y - expected.y), std::fabs(answer.z - expected.z)})};
+        worst_difference = std::max(worst_difference, difference);
+        if (difference > 1e-4f) {
+            ++disagreements;
+        }
+
+        host_total += expected.x + expected.y + expected.z;
+        device_total += answer.x + answer.y + answer.z;
+    }
+
+    const float relative_total{(host_total > 0.0f) ? (std::fabs(host_total - device_total) / host_total) : 0.0f};
+
+    logger.logInfo("Senses fan: " + std::to_string(FAN_COUNT) + " rays, " + std::to_string(emissive_hits) + " emissive hits, host total "
+        + std::to_string(static_cast<double>(host_total)) + ", device total " + std::to_string(static_cast<double>(device_total)) + ".");
+    logger.logInfo("  totals differ by " + std::to_string(static_cast<double>(relative_total * 100.0f)) + " %; " + std::to_string(disagreements)
+        + " rays disagree, worst by " + std::to_string(static_cast<double>(worst_difference)) + ".");
+
+    bool agreed{true};
+
+    // The floor: a fan from this station that strikes no neon at all means the comparison compared
+    // nothing, which this suite has been caught by before.
+    if (emissive_hits < (FAN_COUNT / 50u)) {
+        logger.logError("  Almost nothing emissive was struck; the comparison had nothing to compare.");
+        agreed = false;
+    }
+
+    // Grazing rays may resolve differently on the two sides; whole per cents of the fan may not.
+    if (disagreements > (FAN_COUNT / 100u)) {
+        logger.logError("  More rays disagree than grazing incidence can explain.");
+        agreed = false;
+    }
+
+    if (relative_total > 0.005f) {
+        logger.logError("  Totals disagree by more than half a per cent, which is more than edge cases explain.");
+        agreed = false;
+    }
+
+    if (agreed) {
+        logger.logInfo("Senses verification passed: senses.slang and the host's first hit agree.");
+        return EXIT_SUCCESS;
+    }
+
+    logger.logFatal("Senses verification FAILED.");
+    return EXIT_FAILURE;
+}
+
+/*!
+    Runs a Program against the Grid for a fixed number of ticks, senses and all.
+
+    This is the mode the sensor interface exists for: the body's ears gather the Grid's hum on the
+    host, its eyes and irradiance are answered by the very `radiance` the User's window renders
+    with, and the Program decides what to do about it. No window, no swapchain, no presentation —
+    a device with no monitor attached is a perfectly good Grid.
+*/
+[[nodiscard]] int runProgramTicks(const Device& device, const World& world, const BvhLib::Bvh& bvh, const std::string& program_identifier, uint32_t ticks,
+    const std::filesystem::path& shader_directory, LoggingLib::Logger& logger)
+{
+    const std::filesystem::path directory{ProgramLib::defaultDirectory()};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, MathLib::Mat4::identity()));
+    scene.geometries.push_back(bvh);
+
+    RosterLib::Roster roster{directory, program_identifier, 1u};
+
+    // Sized from the roster actually rezzed rather than guessed: every eye sample plus every
+    // irradiance direction of the hungriest body is what one solve carries.
+    uint32_t max_rays{1u};
+    for (const RosterLib::Creature& creature : roster.creatures()) {
+        uint32_t body_rays{creature.body.irradiance_sample_count};
+        for (uint32_t eye{0u}; eye < creature.body.eye_count; ++eye) {
+            body_rays += creature.body.eyes[eye].sample_count;
+        }
+        max_rays = std::max(max_rays, body_rays);
+    }
+
+    SensesTracer senses_tracer{device, world, makeMaterials(), max_rays, (shader_directory / "senses.spv").string(), logger};
+    GridSensesSource senses_source{scene, Acoustics::makeAcousticSourceStrengths(), &senses_tracer};
+
+    for (uint32_t index{0u}; index < ticks; ++index) {
+        roster.tick(senses_source);
+    }
+
+    const RosterLib::Creature& creature{roster.creatures().front()};
+    logger.logInfo("Program \"" + program_identifier + "\" ran for " + std::to_string(ticks) + " ticks ("
+        + std::to_string(static_cast<float>(ticks) * RosterLib::TICK_SECONDS) + " s). Creature at (" + std::to_string(creature.pose.position.x) + ", "
+        + std::to_string(creature.pose.position.y) + ", " + std::to_string(creature.pose.position.z) + "), facing " + std::to_string(creature.pose.yaw)
+        + " rad, moving at " + std::to_string(creature.forward_speed) + " m/s.");
+    return EXIT_SUCCESS;
+}
+
+/*!
     Draws the Grid until told to stop. Runs on the render thread and owns the Vulkan timeline.
 
     Every Vulkan object created here belongs to this thread for its whole life, which is the point:
@@ -1319,6 +1478,7 @@ int main(int argc, char** argv)
         */
         bool verify_acoustics{false};
         bool verify_scene{false};
+        bool verify_senses{false};
         bool benchmarking{false};
 
         /*
@@ -1384,6 +1544,8 @@ int main(int argc, char** argv)
                 verify_acoustics = true;
             } else if (argument == "--verify-scene") {
                 verify_scene = true;
+            } else if (argument == "--verify-senses") {
+                verify_senses = true;
             } else if (argument == "--benchmark") {
                 benchmarking = true;
             } else if (argument == "--gpu") {
@@ -1412,9 +1574,10 @@ int main(int argc, char** argv)
             nothing for a bare invocation to run, and saying so before a device is opened is cheaper
             and clearer than saying it after the Grid has been built and uploaded.
         */
-        if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !list_gpus && !list_programs && program_identifier.empty()) {
+        if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !verify_senses && !list_gpus && !list_programs
+            && program_identifier.empty()) {
             logger.logInfo("Nothing to do. Pass --window to look at the Grid, or one of --record, --benchmark, "
-                           "--verify-acoustics, --verify-scene, --list-gpus, --list-programs, --program <name> [--ticks N].");
+                           "--verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs, --program <name> [--ticks N].");
             return EXIT_SUCCESS;
         }
 
@@ -1462,45 +1625,19 @@ int main(int argc, char** argv)
             rate is not chosen yet, and a check that invented one would hand a Program a number the
             eventual run would contradict.
         */
-        if (!program_identifier.empty()) {
+        if (!program_identifier.empty() && (ticks == 0u)) {
             const std::filesystem::path directory{ProgramLib::defaultDirectory()};
-
-            /*
-                With --ticks the Program is not merely checked but run: rezzed onto a body, given
-                that many turns, and derezzed. The body has no physics yet, but it hears: its ears
-                gather the Grid's hum through the same hierarchy the renderer traces, on the host,
-                which is why this mode still needs no device. What it proves is the round trip —
-                that a library somebody else compiled can perceive something of the Grid and move
-                on it, and that the Grid decides how much of what it asked for it is willing to
-                act on.
-            */
-            if (ticks > 0u) {
-                const BvhLib::Bvh grid_hierarchy{BvhLib::build(buildGridTriangles())};
-
-                BvhLib::Scene scene{};
-                scene.instances.push_back(BvhLib::makeInstance(grid_hierarchy, 0u, MathLib::Mat4::identity()));
-                scene.geometries.push_back(grid_hierarchy);
-
-                GridSensesSource senses_source{scene, Acoustics::makeAcousticSourceStrengths()};
-                RosterLib::Roster roster{directory, program_identifier, 1u};
-
-                for (uint32_t index{0u}; index < ticks; ++index) {
-                    roster.tick(senses_source);
-                }
-
-                const RosterLib::Creature& creature{roster.creatures().front()};
-                logger.logInfo("Program \"" + program_identifier + "\" ran for " + std::to_string(ticks) + " ticks ("
-                    + std::to_string(static_cast<float>(ticks) * RosterLib::TICK_SECONDS) + " s). Creature at (" + std::to_string(creature.pose.position.x) + ", "
-                    + std::to_string(creature.pose.position.y) + ", " + std::to_string(creature.pose.position.z) + "), facing " + std::to_string(creature.pose.yaw)
-                    + " rad, moving at " + std::to_string(creature.forward_speed) + " m/s.");
-                return EXIT_SUCCESS;
-            }
-
             const ProgramLib::Inspection inspection{ProgramLib::inspect(directory, program_identifier)};
 
             logger.logInfo("Program \"" + program_identifier + "\" loads. ABI version " + std::to_string(inspection.abi_version) + ", vtable "
                 + std::to_string(inspection.struct_size) + " bytes, from " + ProgramLib::resolve(directory, program_identifier).string() + ".");
             return EXIT_SUCCESS;
+        }
+
+        // A Program run continues past here because its eyes need a device — but never a window.
+        if (!program_identifier.empty() && wants_window) {
+            logger.logError("With --window there are no creatures: run the Program without a window.");
+            return EXIT_FAILURE;
         }
 
         // The window, the surface and the swapchain are created together or not at all. Every mode
@@ -1587,6 +1724,17 @@ int main(int argc, char** argv)
                     : MathLib::Mat4::identity()};
 
             return verifyAcoustics(device, bvh, ears, logger, shader_directory, placement);
+        }
+
+        // A check on sight needs no post-processing: only the Grid, a device and senses.spv.
+        if (verify_senses) {
+            return verifySenses(device, bvh, logger, shader_directory);
+        }
+
+        // The Program run: everything above this line was the Grid coming up, and everything the
+        // debug window would add below it is deliberately absent.
+        if (!program_identifier.empty()) {
+            return runProgramTicks(device, world, bvh, program_identifier, ticks, shader_directory, logger);
         }
 
         Tracer tracer{device, world, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};

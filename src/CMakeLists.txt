@@ -17,6 +17,7 @@ add_executable(${PROJECT_NAME}
     program_library.cpp
     roster.cpp
     senses.cpp
+    senses_tracer.cpp
     cinematic.cpp
 )
 
@@ -118,6 +119,8 @@ add_slang_shader(trace trace.slang traceMain)
 # Phase 5 acoustic gather — the same hierarchy, a different sense.
 add_slang_shader(acoustics acoustics.slang acousticMain)
 
+add_slang_shader(senses senses.slang senseMain)
+
 # Phase 4 post-processing.
 add_slang_shader(postprocess postprocess.slang postprocessMain)
 
@@ -129,6 +132,7 @@ add_slang_shader(bloom bloom_downsample.slang bloomExtractMain bloomDownsampleMa
 set(SHADER_MODULES
     trace
     acoustics
+    senses
     postprocess
     bloom
 )
