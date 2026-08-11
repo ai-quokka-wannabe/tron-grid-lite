@@ -532,6 +532,52 @@ TEST_CASE(a_terrace_riser_is_a_wall_the_body_feels_on_its_face)
     TEST_CHECK_EQUAL(creature.forward_speed, 0.0f);
 }
 
+TEST_CASE(a_model_offered_at_rez_arrives_whole)
+{
+    /*
+        The one field in the interface the Program authors rather than receives: the modelled
+        fixture offers a four-vertex pyramid with a glowing tail, and what the Grid keeps must be
+        exactly what was offered — counts, indices and values alike — because the ABI's arrays die
+        with the rez call and this copy is the shape's whole survival.
+    */
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_modelled", 1u, flatGround()};
+    const RosterLib::CreatureModel& model{roster.creatures().front().model};
+
+    TEST_CHECK(!model.empty());
+    TEST_CHECK_EQUAL(model.vertex_positions.size(), 4u);
+    TEST_CHECK_EQUAL(model.triangles.size(), 4u);
+    TEST_CHECK_EQUAL(model.materials.size(), 2u);
+
+    // Facts strong enough to catch a shuffled or truncated copy rather than merely a missing one.
+    TEST_CHECK_EQUAL(model.vertex_positions.front().z, -0.2f); // The nose points forward.
+    TEST_CHECK_EQUAL(model.triangles.back().material, 1u); // The tail wears the second material.
+    TEST_CHECK(model.materials[1].emission[2] > 0.0f); // And the tail glows.
+    TEST_CHECK_EQUAL(model.materials[0].transmission, 0.0f); // The hull is an opaque mirror.
+}
+
+TEST_CASE(a_model_naming_a_vertex_that_does_not_exist_refuses_the_whole_rez)
+{
+    // The misshapen fixture's port flank names vertex nine of a model with four. Accepting the
+    // salvageable part would ship a body its author never saw; the Grid refuses the rez outright.
+    std::string message;
+    try {
+        RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_misshapen", 1u, flatGround()};
+        roster.tick(nullSenses());
+    } catch (const std::runtime_error& error) {
+        message = error.what();
+    }
+
+    TEST_CHECK(!message.empty());
+    TEST_CHECK(message.find("a model the Grid refuses") != std::string::npos);
+    TEST_CHECK(message.find("names vertex 9") != std::string::npos);
+}
+
+TEST_CASE(a_program_that_offers_no_model_stays_bodiless)
+{
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, flatGround()};
+    TEST_CHECK(roster.creatures().front().model.empty());
+}
+
 TEST_CASE(a_call_sounds_on_the_tick_after_it_is_staged)
 {
     /*

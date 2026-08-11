@@ -85,6 +85,25 @@
     X(TglCreatureDesc, max_vocalisation_strength) \
     X(TglCreatureDesc, padding0)
 
+#define TGL_RENDER_MATERIAL_MEMBERS(X) \
+    X(TglRenderMaterial, colour) \
+    X(TglRenderMaterial, index_of_refraction) \
+    X(TglRenderMaterial, emission) \
+    X(TglRenderMaterial, transmission)
+
+#define TGL_RENDER_TRIANGLE_MEMBERS(X) \
+    X(TglRenderTriangle, vertices) \
+    X(TglRenderTriangle, material)
+
+#define TGL_RENDER_MODEL_MEMBERS(X) \
+    X(TglRenderModel, vertex_positions) \
+    X(TglRenderModel, triangles) \
+    X(TglRenderModel, materials) \
+    X(TglRenderModel, vertex_count) \
+    X(TglRenderModel, triangle_count) \
+    X(TglRenderModel, material_count) \
+    X(TglRenderModel, padding0)
+
 #define TGL_EYE_VIEW_MEMBERS(X) \
     X(TglEyeView, samples) \
     X(TglEyeView, sample_count) \
@@ -134,6 +153,9 @@
     S(TglEyeDesc, TGL_EYE_DESC_MEMBERS) \
     S(TglEarDesc, TGL_EAR_DESC_MEMBERS) \
     S(TglCreatureDesc, TGL_CREATURE_DESC_MEMBERS) \
+    S(TglRenderMaterial, TGL_RENDER_MATERIAL_MEMBERS) \
+    S(TglRenderTriangle, TGL_RENDER_TRIANGLE_MEMBERS) \
+    S(TglRenderModel, TGL_RENDER_MODEL_MEMBERS) \
     S(TglEyeView, TGL_EYE_VIEW_MEMBERS) \
     S(TglEarView, TGL_EAR_VIEW_MEMBERS) \
     S(TglContact, TGL_CONTACT_MEMBERS) \

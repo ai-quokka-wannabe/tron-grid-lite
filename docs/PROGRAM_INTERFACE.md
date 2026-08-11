@@ -147,7 +147,8 @@ below does not cover:
 3. tglGetProgramVTable(TGL_PROGRAM_ABI_VERSION) -> vtable, or NULL -> abort this Program.
 4. vtable->library_init(&library_info)               once per loaded library
 5. For each creature body assigned to this library:
-       vtable->program_rez(&creature_desc)           -> opaque Program handle
+       vtable->program_rez(&creature_desc, &render_model)   -> opaque Program handle,
+                                                               and the body's own shape back
 6. Per tick:
        a. The Grid advances physics once, for every body on the roster.
        b. The Grid renders each creature's eyes into their own tiny render targets.
@@ -203,49 +204,25 @@ true for one creature and false for the rest.
   per-struct size fields and no compatibility shims.
 - **Fixed-width types only.** `uint32_t`, `int32_t`, `float`, `uint64_t`. No `int`, no `long`, no
   `size_t`, no `bool`, no enums with unspecified underlying type, no bitfields.
-- **Standard layout, natural padding.** Every struct here is a plain C standard-layout type of
-  fixed-width members, so MSVC, GCC and Clang lay it out identically on both supported platforms.
-  Members are grouped by modality for legibility rather than shuffled to eliminate the odd padding
-  word, and no padding members are written by hand: the compiler's own padding is part of the ABI
-  and both sides will be compiled from the same header once it ships.
+- **Standard layout, and no padding anywhere.** Every struct here is a plain C standard-layout
+  type of fixed-width members, so MSVC, GCC and Clang lay it out identically on both supported
+  platforms — and every struct asserts that its members account for all of its bytes. Where
+  alignment would otherwise insert a hole, a named and documented padding member takes the slot,
+  because a struct with indeterminate bytes is neither hashable nor recordable, and this
+  repository hashes things.
 
 ### Vtable
 
-```c
-#define TGL_PROGRAM_ABI_VERSION 1u  /*!< Bumps on any change a built Program could notice. */
+`TglProgramVTable` is declared in
+[the header](../libs/program-abi/include/tgl/tgl_program_abi.h), like everything else in the
+interface. This document deliberately does not restate it — the listing this section used to
+carry proved the rule by drifting three ways at once: it still named the version constant
+`TGL_PROGRAM_ABI_VERSION` pinned at 1, showed a vtable without the `struct_size` and
+`abi_version` header members, and spelt `program_rez` without the model it now carries back.
 
-/*! Opaque per-creature Program state. The Grid never dereferences this. */
-typedef struct TglProgram TglProgram;
-
-/*! Function pointers a Program library provides to the Grid. */
-typedef struct TglProgramVTable
-{
-    /* -- Library scope -------------------------------------------------------------- */
-
-    /*! Called once after the library is loaded, before any Program is rezzed. */
-    void (*library_init)(const TglLibraryInfo* info);
-
-    /* -- Program scope -------------------------------------------------------------- */
-
-    /*! Rezzes one Program onto one creature body. Returns NULL on failure; the Grid then skips
-        that body, and a rez that returned NULL never receives a matching program_derez. */
-    TglProgram* (*program_rez)(const TglCreatureDesc* desc);
-
-    /*! Called once per tick per live creature. Must not block. */
-    void (*program_tick)(TglProgram* program, const TglSenses* senses, TglActions* actions);
-
-    /*! Derezzes one Program. The handle is invalid afterwards. */
-    void (*program_derez)(TglProgram* program);
-
-    /* -- Library scope -------------------------------------------------------------- */
-
-    /*! Called once before the library is unloaded, after every Program has been derezzed. */
-    void (*library_shutdown)(void);
-} TglProgramVTable;
-```
-
-The whole interface is one exported symbol and five struct members, and the members fall into two
-scopes: `library_init` and `library_shutdown` bracket the loaded library, while `program_rez`,
+The whole interface is one exported symbol, a two-member vtable header — `struct_size`, the one
+piece of compatibility machinery in the file, and `abi_version` — and five `noexcept` function
+pointers falling into two scopes: `library_init` and `library_shutdown` bracket the loaded library, while `program_rez`,
 `program_tick` and `program_derez` bracket the life of one Program on one body. That split is what
 the rest of this document rests on, so it is written into the struct rather than left implied.
 
@@ -557,6 +534,47 @@ must do it the way animals do — by making a noise whose meaning the listener h
 It arrives together with hearing rather than after it, because **echolocation needs no new sense**:
 a creature that can emit a sound and hear the reflections already has it, so splitting the two into
 separate breaking changes would have been a change that did nothing on its own.
+
+---
+
+## The Body's Own Shape
+
+`program_rez` hands the Grid something back: alongside the returned handle, a Program may fill the
+`TglRenderModel` the Grid passes in — vertices, triangles and materials, in the Grid's own
+continuous material model — and that shape becomes the creature's body in the world. The struct and
+its validation contract are declared in
+[the header](../libs/program-abi/include/tgl/tgl_program_abi.h); what belongs here is the
+reasoning.
+
+**This is the one thing in the interface a Program authors rather than receives, and the inversion
+is deliberate.** The Grid decides what a body can do and sense — bounds, ears, eyes — because
+capability is physics and physics is the Grid's. What a body looks like lives with the Program,
+because a creature's shape belongs in the creature's own repository, and a Grid that carried every
+creature's mesh would couple its releases to every body ever modelled. A Program rezzes into the
+Grid with its own appearance, which is the oldest sentence in the fiction this project is named
+for.
+
+**The Grid keeps what it must.** The material model is the Grid's — a body is built of the same
+mirror, glow and glass every surface of the Grid is, and nothing in the model can express a
+texture because nothing on the Grid can. The frame is the body frame, in metres, one rigid piece
+like the body it dresses. And the Grid validates the whole model before accepting any of it: an
+index out of range, a value that is not a number, a triangle with no area or a material Snell's
+law cannot bend refuses the rez outright — accepted entire or refused entire, because a silent
+repair would ship a body its author never saw, and a poisoned hierarchy fails somewhere else
+entirely on behalf of every creature at once.
+
+**Offering no model is a legitimate body, and it is today's default.** A zeroed model is a creature
+with no visible shape, exactly what every body has been until now.
+
+**"A Program is never handed a diagram of its own body" survives unchanged.** The Grid still tells
+a Program nothing about its shape, and the senses still report only what the body feels and sees.
+A Program that authors its model knows only what it chose to write — the same epistemic position a
+genome is in — and what its body actually does in the world it still learns the way an animal
+does, by bumping into things.
+
+What the Grid does with an accepted model — staging it into the world's hierarchy, moving it with
+the pose, making it visible to other creatures' eyes and audible in their echoes — is the Grid's
+business and the next etape's work, not a promise this document makes early.
 
 ---
 

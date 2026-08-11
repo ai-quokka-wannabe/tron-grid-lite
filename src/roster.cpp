@@ -150,6 +150,89 @@ namespace
         return std::isfinite(value) ? value : 0.0f;
     }
 
+    /*!
+        Copies a Program's borrowed model into owned storage, validating the whole of it first.
+
+        Accepted entire or refused entire, with the reason. Validation is not politeness: a
+        non-finite vertex or a zero-area triangle entering the world's hierarchy poisons a
+        traversal that fails somewhere else entirely, on behalf of every creature at once —
+        exactly the failure sanitiseAndClamp exists to stop in the other direction. Actions are
+        sanitised rather than refused because they arrive every tick and a stream must degrade
+        gracefully; a model arrives once, at rez, where a loud refusal is cheap and a silent
+        repair would ship a body its author never saw.
+
+        \throws std::runtime_error naming the first defect found.
+    */
+    [[nodiscard]] RosterLib::CreatureModel copyValidatedModel(const TglRenderModel& model)
+    {
+        RosterLib::CreatureModel out{};
+
+        if (model.triangle_count == 0u) {
+            // No visible body. Every other field is ignored, exactly as the ABI documents.
+            return out;
+        }
+
+        if ((model.vertex_positions == nullptr) || (model.triangles == nullptr) || (model.materials == nullptr) || (model.vertex_count == 0u)
+            || (model.material_count == 0u)) {
+            throw std::runtime_error{"the model declares triangles without the arrays to build them from"};
+        }
+
+        out.vertex_positions.reserve(model.vertex_count);
+        for (uint32_t vertex{0u}; vertex < model.vertex_count; ++vertex) {
+            const float x{model.vertex_positions[(vertex * 3u) + 0u]};
+            const float y{model.vertex_positions[(vertex * 3u) + 1u]};
+            const float z{model.vertex_positions[(vertex * 3u) + 2u]};
+            if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z)) {
+                throw std::runtime_error{"vertex " + std::to_string(vertex) + " is not finite"};
+            }
+            out.vertex_positions.push_back(MathLib::Vec3{x, y, z});
+        }
+
+        out.triangles.reserve(model.triangle_count);
+        for (uint32_t index{0u}; index < model.triangle_count; ++index) {
+            const TglRenderTriangle& triangle{model.triangles[index]};
+            for (const uint32_t vertex : triangle.vertices) {
+                if (vertex >= model.vertex_count) {
+                    throw std::runtime_error{
+                        "triangle " + std::to_string(index) + " names vertex " + std::to_string(vertex) + " of a model with " + std::to_string(model.vertex_count)};
+                }
+            }
+            if (triangle.material >= model.material_count) {
+                throw std::runtime_error{"triangle " + std::to_string(index) + " names material " + std::to_string(triangle.material) + " of a model with "
+                    + std::to_string(model.material_count)};
+            }
+
+            const MathLib::Vec3 edge1{out.vertex_positions[triangle.vertices[1]] - out.vertex_positions[triangle.vertices[0]]};
+            const MathLib::Vec3 edge2{out.vertex_positions[triangle.vertices[2]] - out.vertex_positions[triangle.vertices[0]]};
+            const MathLib::Vec3 cross{edge1.cross(edge2)};
+            if (!(cross.dot(cross) > 0.0f)) {
+                throw std::runtime_error{"triangle " + std::to_string(index) + " has no area, and a normal cannot be derived from it"};
+            }
+
+            out.triangles.push_back(triangle);
+        }
+
+        out.materials.reserve(model.material_count);
+        for (uint32_t index{0u}; index < model.material_count; ++index) {
+            const TglRenderMaterial& material{model.materials[index]};
+            for (const float value : {material.colour[0], material.colour[1], material.colour[2], material.index_of_refraction, material.emission[0],
+                     material.emission[1], material.emission[2], material.transmission}) {
+                if (!std::isfinite(value)) {
+                    throw std::runtime_error{"material " + std::to_string(index) + " is not finite"};
+                }
+            }
+            if (!(material.index_of_refraction > 0.0f)) {
+                throw std::runtime_error{"material " + std::to_string(index) + " has a non-positive index of refraction, which Snell's law cannot bend"};
+            }
+            if ((material.transmission < 0.0f) || (material.transmission > 1.0f)) {
+                throw std::runtime_error{"material " + std::to_string(index) + " transmits outside zero to one, which is not a fraction"};
+            }
+            out.materials.push_back(material);
+        }
+
+        return out;
+    }
+
     [[nodiscard]] float clampMagnitude(float value, float bound) noexcept
     {
         if (value > bound) {
@@ -222,7 +305,11 @@ namespace RosterLib
         for (uint32_t index{0u}; index < creature_count; ++index) {
             const TglCreatureDesc desc{firstBody(index)};
 
-            TglProgram* const program{m_library.vtable().program_rez(&desc)};
+            // Zeroed by the Grid before the call, exactly as actions are: a Program that offers
+            // no body must not inherit whatever was on the stack and be judged on it.
+            TglRenderModel model{};
+
+            TglProgram* const program{m_library.vtable().program_rez(&desc, &model)};
             if (program == nullptr) {
                 throw std::runtime_error{"Program \"" + m_library.identifier() + "\" refused to rez creature " + std::to_string(index) + "."};
             }
@@ -230,6 +317,17 @@ namespace RosterLib
             Creature creature;
             creature.program = program;
             creature.body = desc;
+
+            try {
+                creature.model = copyValidatedModel(model);
+            } catch (const std::exception& defect) {
+                // The rez succeeded, so the handle is real and owed its derez before the refusal
+                // leaves this frame — a Program is entitled to unwind in program_derez what it
+                // built in program_rez.
+                m_library.vtable().program_derez(program);
+                throw std::runtime_error{
+                    "Program \"" + m_library.identifier() + "\" offered creature " + std::to_string(index) + " a model the Grid refuses: " + defect.what() + "."};
+            }
 
             // Spaced along +X so that two creatures do not begin inside one another. A body has no
             // extent yet, so this is a convention waiting for a reason rather than a clearance.

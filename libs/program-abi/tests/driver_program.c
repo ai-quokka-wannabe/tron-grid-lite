@@ -33,14 +33,59 @@
 
 static int g_creature_state = 0;
 
+#if defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN)
+/* A little pyramid of a body: four vertices, four faces, a near-black mirror hull and one glowing
+   tail face. Small enough that a test can check every number by hand, and real enough to exercise
+   every array a model carries. The nose sits at the head sensors' station. */
+static const float g_model_vertices[] = {
+    0.0f,
+    0.05f,
+    -0.2f, /* nose */
+    -0.1f,
+    -0.05f,
+    0.2f, /* tail port */
+    0.1f,
+    -0.05f,
+    0.2f, /* tail starboard */
+    0.0f,
+    0.1f,
+    0.2f, /* tail top */
+};
+
+static const TglRenderMaterial g_model_materials[] = {
+    {{0.02f, 0.02f, 0.03f}, 1.5f, {0.0f, 0.0f, 0.0f}, 0.0f}, /* the hull: a mirror, almost black */
+    {{0.05f, 0.05f, 0.05f}, 1.5f, {0.1f, 2.0f, 3.0f}, 0.0f}, /* the tail: neon */
+};
+#endif
+
+#if defined(TGL_DRIVER_MODELLED)
+static const TglRenderTriangle g_model_triangles[] = {
+    {{0u, 2u, 1u}, 0u}, /* belly */
+    {{0u, 1u, 3u}, 0u}, /* port flank */
+    {{0u, 3u, 2u}, 0u}, /* starboard flank */
+    {{1u, 2u, 3u}, 1u}, /* tail, glowing */
+};
+#elif defined(TGL_DRIVER_MISSHAPEN)
+/* The same body except that the port flank names a vertex that does not exist. The Grid must
+   refuse the whole rez rather than keep the salvageable part: a model is accepted entire or not
+   at all. */
+static const TglRenderTriangle g_model_triangles[] = {
+    {{0u, 2u, 1u}, 0u},
+    {{0u, 9u, 3u}, 0u}, /* vertex 9 of a model with four */
+    {{0u, 3u, 2u}, 0u},
+    {{1u, 2u, 3u}, 1u},
+};
+#endif
+
 static void libraryInit(const TglLibraryInfo* info) TGL_NOEXCEPT
 {
     (void)info;
 }
 
-static TglProgram* programRez(const TglCreatureDesc* desc) TGL_NOEXCEPT
+static TglProgram* programRez(const TglCreatureDesc* desc, TglRenderModel* model) TGL_NOEXCEPT
 {
     (void)desc;
+    (void)model;
 
 #if defined(TGL_DRIVER_REFUSES_REZ)
     /* A Program that cannot take this body. Nothing is wrong with the library — the ABI says a rez
@@ -51,6 +96,16 @@ static TglProgram* programRez(const TglCreatureDesc* desc) TGL_NOEXCEPT
     (void)&g_creature_state;
     return NULL;
 #else
+#if defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN)
+    /* The Program's own storage, borrowed for this call exactly as the descriptor's arrays are
+       borrowed in the other direction. The Grid copies what it accepts before the call returns. */
+    model->vertex_positions = g_model_vertices;
+    model->triangles = g_model_triangles;
+    model->materials = g_model_materials;
+    model->vertex_count = 4u;
+    model->triangle_count = 4u;
+    model->material_count = 2u;
+#endif
     return (TglProgram*)&g_creature_state;
 #endif
 }
@@ -82,6 +137,10 @@ static void programTick(TglProgram* program, const TglSenses* senses, TglActions
 #elif defined(TGL_DRIVER_SILENT)
     /* Writes nothing at all, which is legitimate: the Grid zeroes the actions before every call, so
        a Program with nothing to say coasts to a stop rather than repeating itself. */
+    (void)actions;
+#elif defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN)
+    /* The body is the point; the Program stands. The misshapen variant never reaches this line,
+       because its rez is refused, but the branch keeps the two variants one line apart. */
     (void)actions;
 #else
     /* Straight ahead at half the body's limit, turning not at all. Chosen so the arithmetic is exact

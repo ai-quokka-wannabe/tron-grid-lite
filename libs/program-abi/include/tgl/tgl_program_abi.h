@@ -52,7 +52,7 @@ extern "C"
     produces exactly the silent memory corruption the number exists to prevent, and produces it
     without failing anywhere.
 */
-#define TGL_ABI_VERSION 2u
+#define TGL_ABI_VERSION 3u
 
 /* ================================================================================================
    Toolchain glue
@@ -324,6 +324,105 @@ typedef struct TglCreatureDesc {
 } TglCreatureDesc;
 
 /* ================================================================================================
+   The render model, handed once at rez — and in the other direction
+
+   This is the one thing in the interface a Program authors rather than receives, and the
+   inversion is deliberate. The Grid decides what a body can do and sense, because capability is
+   physics and physics is the Grid's; what a body looks like lives with the Program, because a
+   creature's shape belongs in the creature's own repository and a Grid that carried every
+   creature's mesh would couple its releases to every body ever modelled. A Program rezzes in
+   with its own appearance.
+
+   The Grid keeps what it must. The material model is the Grid's — a body is built of the same
+   continuous colour / refraction / emission / transmission stuff every surface of the Grid is,
+   in linear units, and nothing here can express a texture because nothing on the Grid can. The
+   frame is the body frame, in metres. And the Grid validates before it accepts: a model with an
+   index out of range, a value that is not a number, or a triangle with no area refuses the rez
+   outright, because a NaN vertex in the world's hierarchy would take the Grid down on behalf of
+   one Program.
+
+   One rigid piece, like the body it dresses. A model that bends needs a solver able to bend it,
+   and when that solver arrives the model grows its segments in the same version bump that gives
+   the body joints.
+
+   "A Program is never handed a diagram of its own body" survives this section unchanged: the
+   Grid still tells a Program nothing about its shape, and the senses still report only what the
+   body feels and sees. A Program that authors its model knows only what it chose to write, which
+   is the same epistemic position a genome is in.
+   ================================================================================================ */
+
+/*! One surface of a body, in the Grid's own material model — the same four quantities every
+    surface of the Grid carries, in the same linear units. See docs/MATERIALS.md for what they
+    mean; what matters here is only the layout. */
+typedef struct TglRenderMaterial {
+    /*! Linear tint applied to reflected and transmitted light, (r, g, b). Mirrors are typically
+        almost black. */
+    float colour[3];
+
+    /*! Refractive index. Drives Fresnel for every surface, and Snell refraction when transmission
+        is non-zero. Must be positive and finite. */
+    float index_of_refraction;
+
+    /*! Emitted radiance, (r, g, b), watts per steradian per square metre. Non-zero makes the
+        surface a light — a body's own neon. */
+    float emission[3];
+
+    /*! Fraction of non-reflected light that passes through rather than being absorbed, 0 to 1. */
+    float transmission;
+} TglRenderMaterial;
+
+/*! One triangle of a body: three vertex indices and the material of its face. */
+typedef struct TglRenderTriangle {
+    /*! Indices into the model's vertex list, anticlockwise seen from outside the body. */
+    uint32_t vertices[3];
+
+    /*! Index into the model's material list. */
+    uint32_t material;
+} TglRenderTriangle;
+
+/*!
+    A body's shape, filled by the Program during program_rez and copied by the Grid before the
+    call returns.
+
+    The Grid zeroes this before the call. A Program with no visible body leaves it zeroed —
+    triangle_count of zero means no geometry, every other field is then ignored, and that is a
+    legitimate body rather than a degenerate one. A Program that provides a model points every
+    array at its own storage, borrowed for the duration of the call exactly as the descriptor's
+    arrays are borrowed in the other direction.
+
+    A model with any triangle is validated whole before any of it is accepted: vertex_count,
+    triangle_count and material_count must all be non-zero with their pointers non-NULL, every
+    index must be in range, every value finite, the index of refraction positive, transmission
+    within zero and one, and every triangle must have area. A model that fails any of it refuses
+    the whole rez, loudly, because the alternative is a poisoned world hierarchy that fails
+    somewhere else entirely.
+*/
+typedef struct TglRenderModel {
+    /*! Vertex positions in body frame, metres: three floats per vertex, vertex_count * 3 in
+        total. NULL when triangle_count is zero. */
+    const float* vertex_positions;
+
+    /*! The triangles. NULL when triangle_count is zero. */
+    const TglRenderTriangle* triangles;
+
+    /*! The body's materials. NULL when triangle_count is zero. */
+    const TglRenderMaterial* materials;
+
+    /*! Number of vertices, not floats. */
+    uint32_t vertex_count;
+
+    /*! Number of triangles. Zero means the body has no visible shape. */
+    uint32_t triangle_count;
+
+    /*! Number of materials. */
+    uint32_t material_count;
+
+    /*! Unused; present so the struct's members account for all of its bytes. Alignment padding,
+        not a reserved capability. */
+    uint32_t padding0;
+} TglRenderModel;
+
+/* ================================================================================================
    Views, handed every tick and valid only for the duration of one program_tick call
    ================================================================================================ */
 
@@ -551,8 +650,12 @@ typedef struct TglProgramVTable {
 
     /* -- Program scope -------------------------------------------------------------------------- */
 
-    /*! Rezzes one Program onto one body. Returns NULL on failure. Roster thread. Must not be NULL. */
-    TglProgram* (*program_rez)(const TglCreatureDesc* desc)TGL_NOEXCEPT;
+    /*! Rezzes one Program onto one body. Returns NULL on failure. Roster thread. Must not be NULL.
+
+        `model` is the Program's to fill and the Grid's to validate — see TglRenderModel. The Grid
+        zeroes it before the call and copies what it accepts before the call returns; a Program
+        that leaves it zeroed has no visible body, which is a legitimate body and today's default. */
+    TglProgram* (*program_rez)(const TglCreatureDesc* desc, TglRenderModel* model)TGL_NOEXCEPT;
 
     /*! Called once per tick per live creature, serially, in roster order, on one thread whose
         identity is fixed for the whole run. Must not block. Must not be NULL. */
@@ -622,6 +725,11 @@ TGL_STATIC_ASSERT(TGL_SUM12(TglCreatureDesc, creature_id, random_seed, eyes, ear
                       max_turn_rate, max_vocalisation_strength, padding0)
         == sizeof(TglCreatureDesc),
     "TglCreatureDesc has padding beyond its named padding member: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM4(TglRenderMaterial, colour, index_of_refraction, emission, transmission) == sizeof(TglRenderMaterial),
+    "TglRenderMaterial has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM2(TglRenderTriangle, vertices, material) == sizeof(TglRenderTriangle), "TglRenderTriangle has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM7(TglRenderModel, vertex_positions, triangles, materials, vertex_count, triangle_count, material_count, padding0) == sizeof(TglRenderModel),
+    "TglRenderModel has padding beyond its named padding member: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM3(TglEyeView, samples, sample_count, channels) == sizeof(TglEyeView), "TglEyeView has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM3(TglEarView, energy, band_count, bin_count) == sizeof(TglEarView), "TglEarView has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM2(TglContact, position, impulse) == sizeof(TglContact), "TglContact has padding: a member changed width.");
@@ -667,6 +775,25 @@ TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_forward_speed) == 48u, "TglCreat
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_turn_rate) == 52u, "TglCreatureDesc::max_turn_rate must sit at offset 52.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_vocalisation_strength) == 56u, "TglCreatureDesc::max_vocalisation_strength must sit at offset 56.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, padding0) == 60u, "TglCreatureDesc::padding0 must sit at offset 60.");
+
+TGL_STATIC_ASSERT(sizeof(TglRenderMaterial) == 32u, "TglRenderMaterial is an array element, so its size is a stride. It must be 32 bytes with no padding.");
+TGL_STATIC_ASSERT(offsetof(TglRenderMaterial, colour) == 0u, "TglRenderMaterial::colour must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglRenderMaterial, index_of_refraction) == 12u, "TglRenderMaterial::index_of_refraction must sit at offset 12.");
+TGL_STATIC_ASSERT(offsetof(TglRenderMaterial, emission) == 16u, "TglRenderMaterial::emission must sit at offset 16.");
+TGL_STATIC_ASSERT(offsetof(TglRenderMaterial, transmission) == 28u, "TglRenderMaterial::transmission must sit at offset 28.");
+
+TGL_STATIC_ASSERT(sizeof(TglRenderTriangle) == 16u, "TglRenderTriangle is an array element, so its size is a stride. It must be 16 bytes with no padding.");
+TGL_STATIC_ASSERT(offsetof(TglRenderTriangle, vertices) == 0u, "TglRenderTriangle::vertices must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglRenderTriangle, material) == 12u, "TglRenderTriangle::material must sit at offset 12.");
+
+TGL_STATIC_ASSERT(sizeof(TglRenderModel) == 40u, "TglRenderModel must be 40 bytes with no padding beyond its named padding member.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, vertex_positions) == 0u, "TglRenderModel::vertex_positions must sit at offset 0.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, triangles) == 8u, "TglRenderModel::triangles must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, materials) == 16u, "TglRenderModel::materials must sit at offset 16.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, vertex_count) == 24u, "TglRenderModel::vertex_count must sit at offset 24.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, triangle_count) == 28u, "TglRenderModel::triangle_count must sit at offset 28.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, material_count) == 32u, "TglRenderModel::material_count must sit at offset 32.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, padding0) == 36u, "TglRenderModel::padding0 must sit at offset 36.");
 
 TGL_STATIC_ASSERT(sizeof(TglEyeView) == 16u, "TglEyeView is an array element, so its size is a stride. It must be 16 bytes.");
 TGL_STATIC_ASSERT(offsetof(TglEyeView, samples) == 0u, "TglEyeView::samples must sit at offset 0.");

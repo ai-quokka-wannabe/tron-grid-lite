@@ -63,9 +63,10 @@ void tglBrokenLibraryInit(const TglLibraryInfo* info) TGL_NOEXCEPT
     (void)info;
 }
 
-TglProgram* tglBrokenProgramRez(const TglCreatureDesc* desc) TGL_NOEXCEPT
+TglProgram* tglBrokenProgramRez(const TglCreatureDesc* desc, TglRenderModel* model) TGL_NOEXCEPT
 {
     (void)desc;
+    (void)model;
     return (TglProgram*)&g_creature_state;
 }
 

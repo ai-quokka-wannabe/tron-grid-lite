@@ -76,6 +76,8 @@ set(TGL_DRIVER_PROGRAM_VARIANTS
     excessive
     silent
     refuses_rez
+    modelled
+    misshapen
 )
 
 foreach(variant IN LISTS TGL_DRIVER_PROGRAM_VARIANTS)

@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A Program brings its own body: the render model crosses the ABI at rez.** The one field in the
+  interface a Program authors rather than receives, and the inversion is deliberate — the Grid
+  decides what a body can do and sense, because capability is physics; what a body looks like
+  lives with the creature's own repository, because a Grid that carried every creature's mesh
+  would couple its releases to every body ever modelled. `program_rez` gains a `TglRenderModel`
+  out-parameter (ABI version 3): vertices, triangles and materials in the Grid's own continuous
+  mirror/glow/glass model, every array borrowed for the call exactly as the descriptor's arrays
+  are in the other direction, zeroed by the Grid first so a Program that offers nothing has no
+  visible body — which is a legitimate body and today's default. The Grid validates the whole
+  model before accepting any of it: an index out of range, a non-finite value, a triangle with no
+  area or an index of refraction Snell's law cannot bend refuses the rez outright and derezzes
+  the handle it already holds, because a silent repair would ship a body its author never saw and
+  a poisoned hierarchy fails somewhere else entirely. The accepted copy lives on the creature in
+  the ABI's own element types; staging it into the world — the instance, the per-tick transform,
+  the senses seeing it — is deliberately the next etape rather than a promise made early. Two new
+  fixtures drive the seam: `tgl_driver_modelled` offers a four-vertex pyramid with a glowing tail,
+  and `tgl_driver_misshapen` offers the same body with one flank naming vertex nine of a model
+  with four, which must refuse the whole rez rather than keep the salvageable part. Both checks
+  were broken deliberately once — salvage-instead-of-refuse, and a copy that loses its materials —
+  and each round discriminated exactly its own test. Riding along: `docs/PROGRAM_INTERFACE.md`'s
+  Vtable section had drifted three ways at once (a version constant under its old name pinned at
+  1, a vtable listing without its header members, and a claim that no padding members are written
+  by hand); the listing is gone in favour of the header, per the document's own rule.
+
 - **Echolocation: a creature's call sounds on the Grid.** The point-source half of hearing, built
   the moment its written trigger fired — ACOUSTICS.md deferred it against "the vocalisation action
   lands in the ABI", and the action was already there. `Acoustics::deliverCall` enumerates what a
