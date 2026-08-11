@@ -76,7 +76,7 @@ namespace Acoustics
 
         //! True when nothing stands between two points held apart in open air. The epsilon keeps a
         //! probe from striking the very surface one of its endpoints was nudged off.
-        [[nodiscard]] bool segmentClear(const BvhLib::Scene& scene, const MathLib::Vec3& from, const MathLib::Vec3& to)
+        [[nodiscard]] bool segmentClear(const BvhLib::Scene& scene, const MathLib::Vec3& from, const MathLib::Vec3& to, uint32_t skip_a, uint32_t skip_b)
         {
             const MathLib::Vec3 offset{to - from};
             const float length{std::sqrt(offset.dot(offset))};
@@ -85,7 +85,7 @@ namespace Acoustics
             }
 
             const MathLib::Vec3 direction{offset * (1.0f / length)};
-            return !BvhLib::intersectScene(scene, from, direction, length - SURFACE_EPSILON).valid;
+            return !BvhLib::intersectScene(scene, from, direction, length - SURFACE_EPSILON, skip_a, skip_b).valid;
         }
 
         /*!
@@ -98,7 +98,8 @@ namespace Acoustics
             rather than merely pass through the point, or a wall standing on a terrace would
             answer for the terrace with a vertical mirror's arithmetic applied to a horizontal one.
         */
-        [[nodiscard]] bool mirrorPointStands(const BvhLib::Scene& scene, const MathLib::Vec3& from, const MathLib::Vec3& point, const MathLib::Vec3& plane_normal)
+        [[nodiscard]] bool mirrorPointStands(const BvhLib::Scene& scene, const MathLib::Vec3& from, const MathLib::Vec3& point, const MathLib::Vec3& plane_normal,
+            uint32_t skip_a, uint32_t skip_b)
         {
             const MathLib::Vec3 offset{point - from};
             const float length{std::sqrt(offset.dot(offset))};
@@ -107,7 +108,7 @@ namespace Acoustics
             }
 
             const MathLib::Vec3 direction{offset * (1.0f / length)};
-            const BvhLib::Hit hit{BvhLib::intersectScene(scene, from, direction, length + SURFACE_EPSILON)};
+            const BvhLib::Hit hit{BvhLib::intersectScene(scene, from, direction, length + SURFACE_EPSILON, skip_a, skip_b)};
             if (!hit.valid || (std::fabs(hit.distance - length) > SURFACE_EPSILON)) {
                 return false;
             }
@@ -174,13 +175,13 @@ namespace Acoustics
                 return;
             }
 
-            if (!mirrorPointStands(scene, source, mirror.point, plane_normal)) {
+            if (!mirrorPointStands(scene, source, mirror.point, plane_normal, config.caller_instance, config.listener_instance)) {
                 return;
             }
 
             const float side{plane_normal.dot(source - mirror.point)};
             const MathLib::Vec3 nudged{mirror.point + (plane_normal * ((side > 0.0f) ? SURFACE_EPSILON : -SURFACE_EPSILON))};
-            if (!segmentClear(scene, nudged, ear)) {
+            if (!segmentClear(scene, nudged, ear, config.caller_instance, config.listener_instance)) {
                 return;
             }
 
@@ -274,7 +275,7 @@ namespace Acoustics
                     break;
                 }
 
-                const BvhLib::Hit hit{BvhLib::intersectScene(scene, origin, direction, remaining)};
+                const BvhLib::Hit hit{BvhLib::intersectScene(scene, origin, direction, remaining, config.skip_instance)};
                 if (!hit.valid) {
                     break; // Escaped. The Grid is an open plane, so most rays end here.
                 }
@@ -366,12 +367,12 @@ namespace Acoustics
             uint32_t sample_count{1u};
 
             if ((config.source_radius_metres <= 0.0f) || (config.occlusion_sample_count <= 1u)) {
-                clear_count = segmentClear(scene, ear, source) ? 1u : 0u;
+                clear_count = segmentClear(scene, ear, source, config.caller_instance, config.listener_instance) ? 1u : 0u;
             } else {
                 sample_count = config.occlusion_sample_count;
                 for (uint32_t sample{0u}; sample < sample_count; ++sample) {
                     const MathLib::Vec3 probe{source + (fibonacciDirection(sample, sample_count) * config.source_radius_metres)};
-                    if (segmentClear(scene, ear, probe)) {
+                    if (segmentClear(scene, ear, probe, config.caller_instance, config.listener_instance)) {
                         ++clear_count;
                     }
                 }

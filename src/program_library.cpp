@@ -465,12 +465,41 @@ namespace ProgramLib
         return listings;
     }
 
+    namespace
+    {
+
+        /*!
+            Whether a Program library is live in this process. One per run, enforced rather than
+            assumed.
+
+            The rule is not squeamishness about dlopen: it is what the run's claims stand on. The
+            replay claim is per (seed, initial state, input log) with one tick loop driving one
+            roster; TglLibraryInfo::creature_count is promised exact for the whole run; and every
+            threading promise in the ABI names one fixed roster thread. A second live library would
+            put two Programs' process-wide state — locales, signal handlers, allocators, GPU
+            runtimes a Qt GUI drags in — into one address space with no rule about who wins.
+            Sequential loads are legitimate and stay so: --list-programs probes candidates one at a
+            time, each unloaded before the next is opened.
+
+            A plain bool rather than an atomic, deliberately: every load and unload happens on the
+            roster thread, the same serial thread the ABI fixes for the whole run, and an atomic
+            here would imply a concurrency this class refuses to have.
+        */
+        bool g_library_live{false};
+
+    } // namespace
+
     Library::Library(const std::filesystem::path& directory, std::string_view identifier, const TglLibraryInfo& info) :
         m_identifier(identifier)
     {
+        if (g_library_live) {
+            throw std::runtime_error{"The Grid hosts one Program library per run, and one is already loaded. Derez it before loading \"" + m_identifier + "\"."};
+        }
+
         HandleGuard handle{nullptr};
         m_vtable = validate(directory, identifier, handle);
         m_handle = handle.release();
+        g_library_live = true;
 
         // Last, because until now the library could still be refused, and library_init is the point
         // at which a Program is entitled to assume it has been accepted.
@@ -479,6 +508,11 @@ namespace ProgramLib
 
     Library::~Library()
     {
+        // Whatever else the teardown does, the process may host another library afterwards: the
+        // slot frees even if shutdown or unload misbehaves, because a wedged library is not
+        // improved by refusing its successor.
+        g_library_live = false;
+
         /*
             A destructor is implicitly noexcept, so anything that escapes here terminates the process
             outright with no handler anywhere able to intervene. Neither call below is meant to throw

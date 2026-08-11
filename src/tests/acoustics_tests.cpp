@@ -672,6 +672,93 @@ TEST_CASE(a_delivery_is_bit_identical_between_runs)
     TEST_CHECK(first.bins == second.bins);
 }
 
+TEST_CASE(an_ear_sealed_in_anothers_hull_is_deaf_until_the_hull_is_its_own)
+{
+    /*
+        A closed tetrahedron around the ear, over a singing floor. Sealed in somebody else's hull
+        the ear is deaf — every gather ray dies inside a silent shell — and that is honest
+        occlusion. Sealed in its *own* hull it must hear the world anyway, because ears sit on
+        bodies, and a body that deafened its own ears would end hearing the moment bodies became
+        real. The skip is the difference, and this is the test that keeps it one.
+    */
+    std::vector<BvhLib::Triangle> floor_triangles;
+    appendHorizontalQuad(floor_triangles, 0.0f, 200.0f, MATERIAL_NEON_PRIMARY);
+    BvhLib::Bvh floor_bvh{BvhLib::build(std::move(floor_triangles))};
+
+    // Alternate corners of a cube: a tetrahedron with the origin strictly inside.
+    const std::array<MathLib::Vec3, 4u> corners{
+        MathLib::Vec3{0.15f, 0.15f, 0.15f}, MathLib::Vec3{0.15f, -0.15f, -0.15f}, MathLib::Vec3{-0.15f, 0.15f, -0.15f}, MathLib::Vec3{-0.15f, -0.15f, 0.15f}};
+    const std::array<std::array<uint32_t, 3u>, 4u> faces{{{0u, 1u, 2u}, {0u, 3u, 1u}, {0u, 2u, 3u}, {1u, 3u, 2u}}};
+
+    std::vector<BvhLib::Triangle> hull_triangles;
+    for (const std::array<uint32_t, 3u>& face : faces) {
+        const MathLib::Vec3& a{corners[face[0]]};
+        const MathLib::Vec3& b{corners[face[1]]};
+        const MathLib::Vec3& c{corners[face[2]]};
+        hull_triangles.push_back(BvhLib::Triangle{.v0 = a, .material = MATERIAL_FLOOR, .edge1 = b - a, .padding0 = 0u, .edge2 = c - a, .padding1 = 0u});
+    }
+    BvhLib::Bvh hull_bvh{BvhLib::build(std::move(hull_triangles))};
+
+    const MathLib::Vec3 ear{0.0f, 1.0f, 0.0f};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(floor_bvh, 0u, MathLib::Mat4::identity()));
+    scene.instances.push_back(BvhLib::makeInstance(hull_bvh, 1u, MathLib::Mat4::translate(ear)));
+    scene.geometries.push_back(std::move(floor_bvh));
+    scene.geometries.push_back(std::move(hull_bvh));
+
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
+
+    Acoustics::GatherConfig sealed{plainConfig()};
+    const Acoustics::ImpulseResponse deaf{Acoustics::gather(scene, strengths, ear, sealed)};
+
+    Acoustics::GatherConfig own_hull{plainConfig()};
+    own_hull.skip_instance = 1u;
+    const Acoustics::ImpulseResponse hearing{Acoustics::gather(scene, strengths, ear, own_hull)};
+    TEST_CHECK(hearing.total() > 0.0f);
+
+    /*
+        A hundredfold quieter rather than silent, because a sealed hull is sealed only up to the
+        surface epsilon: a reflected ray nudged off a hit within a millimetre of a corner can
+        restart on the far side of the adjacent face and escape. A handful of the two thousand
+        directions do, and that is the reflection machinery being honest about its epsilon rather
+        than the seal failing. The ordering is the claim; the skip is the difference.
+    */
+    TEST_CHECK(deaf.total() < (hearing.total() / 100.0f));
+}
+
+TEST_CASE(a_call_from_inside_a_hull_is_gagged_unless_the_hull_is_the_callers)
+{
+    // The same tetrahedron, now around the caller. A voice inside somebody else's hull is gagged,
+    // which is honest; a voice inside its own body must carry, because that is where voices live.
+    const std::array<MathLib::Vec3, 4u> corners{
+        MathLib::Vec3{0.15f, 0.15f, 0.15f}, MathLib::Vec3{0.15f, -0.15f, -0.15f}, MathLib::Vec3{-0.15f, 0.15f, -0.15f}, MathLib::Vec3{-0.15f, -0.15f, 0.15f}};
+    const std::array<std::array<uint32_t, 3u>, 4u> faces{{{0u, 1u, 2u}, {0u, 3u, 1u}, {0u, 2u, 3u}, {1u, 3u, 2u}}};
+
+    std::vector<BvhLib::Triangle> hull_triangles;
+    for (const std::array<uint32_t, 3u>& face : faces) {
+        const MathLib::Vec3& a{corners[face[0]]};
+        const MathLib::Vec3& b{corners[face[1]]};
+        const MathLib::Vec3& c{corners[face[2]]};
+        hull_triangles.push_back(BvhLib::Triangle{.v0 = a, .material = MATERIAL_PILLAR, .edge1 = b - a, .padding0 = 0u, .edge2 = c - a, .padding1 = 0u});
+    }
+    BvhLib::Bvh hull_bvh{BvhLib::build(std::move(hull_triangles))};
+
+    BvhLib::Scene scene{};
+    scene.instances.push_back(BvhLib::makeInstance(hull_bvh, 0u, MathLib::Mat4::translate(CALL_SOURCE)));
+    scene.geometries.push_back(std::move(hull_bvh));
+
+    const Acoustics::ImpulseResponse gagged{Acoustics::deliverCall(scene, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+    TEST_CHECK(gagged.total() == 0.0f);
+
+    Acoustics::CallConfig own_body{plainCallConfig()};
+    own_body.caller_instance = 0u;
+    const Acoustics::ImpulseResponse carried{Acoustics::deliverCall(scene, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, CALL_EAR, own_body)};
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        TEST_CHECK_CLOSE(carried.at(band, binOf(3.6f)), DIRECT_ENERGY, 1e-7f);
+    }
+}
+
 TEST_CASE(outward_box_faces_face_outward_and_omit_the_bottom)
 {
     const MathLib::Vec3 centre{1.0f, 2.0f, 3.0f};

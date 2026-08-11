@@ -16,6 +16,7 @@
 
 #include "acoustics.hpp"
 #include "roster.hpp"
+#include "stage.hpp"
 
 #include <bvh/bvh.hpp>
 #include <math/vector.hpp>
@@ -41,6 +42,20 @@ public:
     RadianceSolver& operator=(const RadianceSolver&) = delete;
     RadianceSolver(RadianceSolver&&) = delete;
     RadianceSolver& operator=(RadianceSolver&&) = delete;
+
+    /*!
+        Replaces the placements the next solves trace against.
+
+        The per-tick half of the world: geometry never moves in the shared buffers once uploaded,
+        so a tick owes the solver only these records — including any the caller has blanked to a
+        zero node count, which is how a creature's own body is made invisible to its own eyes
+        without the shader learning a skip. The default does nothing, which is correct for a
+        solver whose arithmetic has no instances, and for a run whose placements never move.
+    */
+    virtual void stage(const std::vector<BvhLib::InstanceRecord>& instances)
+    {
+        (void)instances;
+    }
 
     /*!
         Traces one batch of sample rays and returns linear radiance per ray.
@@ -94,8 +109,13 @@ public:
                honest default for a scene nobody described.
         \param radiance_solver Answers eye and irradiance rays. May be null, in which case a body
                declaring either sense is refused. Borrowed; must outlive this source.
+        \param stage The creatures' standing in the scene. May be null for a run whose bodies never
+               move and never occlude — every test that predates bodies. When present, `scene` must
+               be the stage's own scene, because the instances this source skips are indices into
+               it. Borrowed; must outlive this source.
     */
-    GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, Acoustics::Reflectors reflectors = {}, RadianceSolver* radiance_solver = nullptr);
+    GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, Acoustics::Reflectors reflectors = {}, RadianceSolver* radiance_solver = nullptr,
+        Stage* stage = nullptr);
 
     /*!
         Collects the tick's calls: who is sounding, from where, and how loudly.
@@ -161,10 +181,11 @@ private:
         std::vector<AlignedResponse> delivered;
     };
 
-    //! One call sounding this tick: where it left from, and how loudly.
+    //! One call sounding this tick: where it left from, how loudly, and whose body to see through.
     struct Call {
         MathLib::Vec3 position{};
         float strength{0.0f};
+        uint32_t caller_instance{BvhLib::NO_INSTANCE};
     };
 
     //! Four floats at the alignment `TglEyeView::samples` promises; eye storage is a vector of these.
@@ -195,6 +216,17 @@ private:
     std::vector<float> m_source_strengths; //!< Acoustic strength per material slot.
     Acoustics::Reflectors m_reflectors; //!< Mirror planes for a call's early reflections.
     RadianceSolver* m_radiance_solver; //!< Answers eye and irradiance rays. Non-owning; may be null.
+    Stage* m_stage; //!< The bodies' standing in the scene. Non-owning; may be null.
+
+    /*!
+        True while any body has moved since the last tick, which stales every traced-sense cache.
+
+        The caches key on the listener's own pose because that used to be everything a solve read;
+        a body standing in the scene is read too, so a tick on which one moved must re-solve even
+        for a listener that held still. Bodiless rosters never set it, and pay nothing.
+    */
+    bool m_bodies_moved{false};
+    std::vector<RosterLib::Pose> m_last_body_poses; //!< One per modelled creature, in roster order.
 
     std::vector<CreatureEars> m_ear_states; //!< Found by linear search; a roster is a handful of creatures.
     std::vector<CreatureVision> m_vision_states;

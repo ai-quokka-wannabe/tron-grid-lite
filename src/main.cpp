@@ -41,6 +41,7 @@
 #include "roster.hpp"
 #include "senses.hpp"
 #include "senses_tracer.hpp"
+#include "stage.hpp"
 #include "program_library.hpp"
 #include "spectator.hpp"
 #include "surface.hpp"
@@ -995,7 +996,7 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
         rays.push_back(MathLib::Vec4::fromVec3(Acoustics::fibonacciDirection(index, FAN_COUNT), 0.0f));
     }
 
-    SensesTracer senses_tracer{device, world, materials, FAN_COUNT, (shader_directory / "senses.spv").string(), logger};
+    SensesTracer senses_tracer{device, world, materials, BvhLib::flatten(scene).instances, FAN_COUNT, (shader_directory / "senses.spv").string(), logger};
     const std::vector<MathLib::Vec4> measured{senses_tracer.solve(rays, 1u)};
 
     float host_total{0.0f};
@@ -1072,20 +1073,26 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     with, and the Program decides what to do about it. No window, no swapchain, no presentation —
     a device with no monitor attached is a perfectly good Grid.
 */
-[[nodiscard]] int runProgramTicks(const Device& device, const World& world, const BvhLib::Bvh& bvh, const std::string& program_identifier, uint32_t ticks,
+[[nodiscard]] int runProgramTicks(const Device& device, const BvhLib::Bvh& bvh, const std::string& program_identifier, uint32_t ticks,
     const std::filesystem::path& shader_directory, LoggingLib::Logger& logger)
 {
     const std::filesystem::path directory{ProgramLib::defaultDirectory()};
-
-    BvhLib::Scene scene{};
-    scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, MathLib::Mat4::identity()));
-    scene.geometries.push_back(bvh);
 
     // The ground the bodies stand on is the analytic surface the floor triangles were generated
     // from: physics collides against the truth rather than against its tessellation.
     RosterLib::Roster roster{directory, program_identifier, 1u, [](float x, float z) {
                                  return gridMeshHeight(x, z, GRID_FLOOR_CONFIG);
                              }};
+
+    /*
+        The stage is assembled after the roster, because the bodies are the Programs' to offer:
+        rez decides what stands on the Grid, and only then does the world know its whole geometry.
+        The device upload happens once, here — a rigid body's hierarchy is built at rez and only
+        its placement ever moves again, so nothing below this line grows.
+    */
+    Stage stage{bvh, makeMaterials(), roster.creatures()};
+    const BvhLib::FlatScene flat{stage.flatten()};
+    const World world{device, flat, logger};
 
     // Sized from the roster actually rezzed rather than guessed: every eye sample plus every
     // irradiance direction of the hungriest body is what one solve carries.
@@ -1098,8 +1105,8 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
         max_rays = std::max(max_rays, body_rays);
     }
 
-    SensesTracer senses_tracer{device, world, makeMaterials(), max_rays, (shader_directory / "senses.spv").string(), logger};
-    GridSensesSource senses_source{scene, Acoustics::makeAcousticSourceStrengths(), makeGridReflectors(), &senses_tracer};
+    SensesTracer senses_tracer{device, world, stage.materials(), flat.instances, max_rays, (shader_directory / "senses.spv").string(), logger};
+    GridSensesSource senses_source{stage.scene(), stage.acousticStrengths(), makeGridReflectors(), &senses_tracer, &stage};
 
     for (uint32_t index{0u}; index < ticks; ++index) {
         roster.tick(senses_source);
@@ -1747,8 +1754,6 @@ int main(int argc, char** argv)
         // its own output folder.
         const std::filesystem::path shader_directory{executableDirectory()};
 
-        const World world{device, bvh, logger};
-
         // The acoustic checks need neither the tracer nor post-processing — only the Grid, a device
         // and acoustics.spv. A check on hearing should not depend on sight, so it runs before the
         // visual passes are built rather than after.
@@ -1788,10 +1793,16 @@ int main(int argc, char** argv)
         }
 
         // The Program run: everything above this line was the Grid coming up, and everything the
-        // debug window would add below it is deliberately absent.
+        // debug window would add below it is deliberately absent. It builds its own world, because
+        // what stands on the Grid is not known until the roster has rezzed and the Programs have
+        // offered their bodies.
         if (!program_identifier.empty()) {
-            return runProgramTicks(device, world, bvh, program_identifier, ticks, shader_directory, logger);
+            return runProgramTicks(device, bvh, program_identifier, ticks, shader_directory, logger);
         }
+
+        // The window's world: the bare Grid, uploaded once. With --window there are no creatures,
+        // so nothing here ever moves.
+        const World world{device, bvh, logger};
 
         Tracer tracer{device, world, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
         PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};

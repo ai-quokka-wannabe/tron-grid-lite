@@ -183,9 +183,15 @@ TEST_CASE(a_body_declaring_eyes_is_refused_when_no_solver_is_attached)
 namespace
 {
 
-    //! Answers every ray from its direction alone, so a test can predict each sample exactly.
+    //! Answers every ray from its direction alone, so a test can predict each sample exactly —
+    //! and remembers the placements it was last staged with, so a test can watch the self blank.
     class FakeSolver final : public RadianceSolver {
     public:
+        void stage(const std::vector<BvhLib::InstanceRecord>& instances) override
+        {
+            staged = instances;
+        }
+
         [[nodiscard]] std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t) override
         {
             ++calls;
@@ -199,6 +205,7 @@ namespace
         }
 
         uint32_t calls{0u};
+        std::vector<BvhLib::InstanceRecord> staged;
     };
 
     constexpr std::array<float, 3u> FORWARD_DIRECTION{0.0f, 0.0f, -1.0f};
@@ -371,6 +378,103 @@ TEST_CASE(a_call_reaches_every_ear_and_the_caller_hears_itself_first)
     for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
         TEST_CHECK(own.ears[0].energy[band * Acoustics::BIN_COUNT] == 1.0f);
     }
+}
+
+TEST_CASE(a_standing_body_blocks_the_hum_and_a_moving_one_stales_the_cache)
+{
+    /*
+        Two claims in one scene, because the second is only observable through the first. A body
+        standing between an ear and the singing floor shadows the hum — occlusion is most of what
+        a body is for. And when that body moves, a *stationary* listener must hear the change: the
+        hum cache keys on the listener's own pose, so without the bodies-moved staleness it would
+        happily replay a world that no longer exists.
+    */
+    const MathLib::Vec3 a{-2.0f, 0.0f, -2.0f};
+    const MathLib::Vec3 b{2.0f, 0.0f, -2.0f};
+    const MathLib::Vec3 c{-2.0f, 0.0f, 2.0f};
+    const MathLib::Vec3 d{2.0f, 0.0f, 2.0f};
+    std::vector<BvhLib::Triangle> floor_triangles;
+    floor_triangles.push_back(BvhLib::Triangle{.v0 = a, .material = 0u, .edge1 = c - a, .padding0 = 0u, .edge2 = b - a, .padding1 = 0u});
+    floor_triangles.push_back(BvhLib::Triangle{.v0 = b, .material = 0u, .edge1 = c - b, .padding0 = 0u, .edge2 = d - b, .padding1 = 0u});
+
+    const std::array<TglEarDesc, 1u> ears{earAt(0.0f, 0.0f, 0.0f)};
+    RosterLib::Creature listener{hearingCreature(ears.data(), 1u)};
+
+    // The blocker's body is a broad horizontal shade, wider than the floor below it: rezzed far
+    // away first, so the baseline is an unshaded hum.
+    RosterLib::Creature blocker{};
+    blocker.body.creature_id = 9u;
+    blocker.pose.position = MathLib::Vec3{100.0f, 0.5f, 0.0f};
+    blocker.model.vertex_positions = {
+        MathLib::Vec3{-3.0f, 0.0f, -3.0f}, MathLib::Vec3{3.0f, 0.0f, -3.0f}, MathLib::Vec3{-3.0f, 0.0f, 3.0f}, MathLib::Vec3{3.0f, 0.0f, 3.0f}};
+    blocker.model.triangles = {TglRenderTriangle{{0u, 2u, 1u}, 0u}, TglRenderTriangle{{1u, 2u, 3u}, 0u}};
+    blocker.model.materials = {TglRenderMaterial{{0.0f, 0.0f, 0.0f}, 1.5f, {0.0f, 0.0f, 0.0f}, 0.0f}};
+
+    std::vector<RosterLib::Creature> creatures;
+    creatures.push_back(listener);
+    creatures.push_back(blocker);
+
+    Stage stage{BvhLib::build(std::move(floor_triangles)), {Material{}}, creatures};
+    GridSensesSource source{stage.scene(), unitStrengths(), {}, nullptr, &stage};
+
+    source.beginTick(creatures);
+    TglSenses clear_sky{};
+    source.fill(creatures[0], clear_sky);
+    std::array<float, Acoustics::BAND_COUNT * Acoustics::BIN_COUNT> baseline{};
+    std::memcpy(baseline.data(), clear_sky.ears[0].energy, sizeof(baseline));
+    TEST_CHECK(totalEnergy(clear_sky.ears[0]) > 0.0f); // The comparison has something to compare.
+
+    // The blocker slides under the listener. Every path from ear to floor now crosses its body.
+    creatures[1].pose.position = MathLib::Vec3{0.0f, 0.5f, 0.0f};
+    source.beginTick(creatures);
+    TglSenses shaded{};
+    source.fill(creatures[0], shaded);
+    TEST_CHECK(totalEnergy(shaded.ears[0]) == 0.0f);
+
+    // And away again: bit-identical to the baseline, or the staleness handling re-solved wrongly.
+    creatures[1].pose.position = MathLib::Vec3{100.0f, 0.5f, 0.0f};
+    source.beginTick(creatures);
+    TglSenses cleared{};
+    source.fill(creatures[0], cleared);
+    TEST_CHECK(std::memcmp(baseline.data(), cleared.ears[0].energy, sizeof(baseline)) == 0);
+}
+
+TEST_CASE(a_creatures_own_body_is_blanked_for_its_own_eyes)
+{
+    // The device-side spelling of the self skip: the records handed to the solver carry the whole
+    // roster, with the looking creature's own body at a zero node count — the flat form of "not
+    // there" the shader already honours, so no shader ever learns a special case.
+    RosterLib::Creature seer{};
+    seer.body.creature_id = 7u;
+    seer.pose.position = MathLib::Vec3{0.0f, 1.0f, 0.0f};
+    seer.model.vertex_positions = {MathLib::Vec3{-0.1f, 0.0f, -0.1f}, MathLib::Vec3{0.1f, 0.0f, -0.1f}, MathLib::Vec3{0.0f, 0.1f, 0.1f}};
+    seer.model.triangles = {TglRenderTriangle{{0u, 1u, 2u}, 0u}};
+    seer.model.materials = {TglRenderMaterial{{0.1f, 0.1f, 0.1f}, 1.5f, {0.0f, 0.0f, 0.0f}, 0.0f}};
+
+    const std::array<TglEyeDesc, 1u> eyes{eyeOf(FORWARD_DIRECTION.data(), 1u, 1u)};
+    seer.body.eyes = eyes.data();
+    seer.body.eye_count = 1u;
+
+    std::vector<RosterLib::Creature> creatures;
+    creatures.push_back(seer);
+
+    const MathLib::Vec3 a{-2.0f, 0.0f, -2.0f};
+    const MathLib::Vec3 b{2.0f, 0.0f, -2.0f};
+    const MathLib::Vec3 c{-2.0f, 0.0f, 2.0f};
+    std::vector<BvhLib::Triangle> floor_triangles;
+    floor_triangles.push_back(BvhLib::Triangle{.v0 = a, .material = 0u, .edge1 = c - a, .padding0 = 0u, .edge2 = b - a, .padding1 = 0u});
+
+    Stage stage{BvhLib::build(std::move(floor_triangles)), {Material{}}, creatures};
+    FakeSolver solver;
+    GridSensesSource source{stage.scene(), unitStrengths(), {}, &solver, &stage};
+
+    source.beginTick(creatures);
+    TglSenses senses{};
+    source.fill(creatures[0], senses);
+
+    TEST_CHECK_EQUAL(solver.staged.size(), 2u);
+    TEST_CHECK(solver.staged[0].node_count > 0u); // The Grid stands.
+    TEST_CHECK_EQUAL(solver.staged[1].node_count, 0u); // The seer's own body does not, to the seer.
 }
 
 TEST_CASE(the_hum_cache_survives_a_call_and_a_silent_tick_reads_pure_hum)

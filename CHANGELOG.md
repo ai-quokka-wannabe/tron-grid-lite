@@ -9,6 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Creatures stand on the Grid: accepted bodies join the world, and every sense meets them.** The
+  staging half of the render model. A new `Stage` assembles the scene once — the Grid at the
+  identity, one hierarchy per modelled creature built at rez, one material table with every body's
+  slots appended and its triangle indices rewritten to global, acoustic strengths extended by
+  written zeros because a hull reflects and does not sing — and per tick moves only placements,
+  through the same `flattenInstance` the whole `flatten` is now written in terms of. The senses
+  pass keeps its own host-visible instance buffer refreshed per solve, so the `World` stays the
+  immutable upload it always was and the window's static path never learns any of this. Bodies are
+  real to every sense: another creature's hull shadows the hum, blocks a call's paths, and stands
+  in an eye's view. A creature's *own* body is excluded from its own senses — its record blanked
+  to a zero node count for its eyes (the flat spelling of a skip the shader already honoured, so
+  no shader changed), its instance skipped for its ears and its voice through
+  `BvhLib::intersectScene`'s new two-instance skip — because ears sit on bodies and voices leave
+  from inside them, and a hull that blocked its own sensors would deafen and gag the body it
+  belongs to. The traced-sense caches learned honesty about other bodies: a tick on which any body
+  moved stales every cache, so a stationary listener hears a walker pass — pinned by a test in
+  which a body slides under a listener, silences its floor, moves away, and the returning hum is
+  bit-identical to the baseline. Four breakage rounds — placements frozen, the self-blank dropped,
+  the staleness dropped, the gather's skip ignored — each turned exactly its own tests red. The
+  reference render digest was re-recorded byte-identical after the `World` refactor, and
+  `--verify-acoustics`, `--verify-scene` and `--verify-senses` pass on hardware.
+
+- **One Program library per run, as a mechanism rather than a habit.** `ProgramLib::Library` now
+  refuses to load while another library is live in the process, with the reason: the replay claim
+  names one tick loop driving one roster, `TglLibraryInfo::creature_count` is promised exact for
+  the run, and a second library would put two Programs' process-wide state — locales, signal
+  handlers, whatever a GUI toolkit drags in — into one address space with no rule about who wins.
+  Sequential loads stay legitimate, which is what `--list-programs` does probing its candidates
+  one at a time. The guard immediately caught its first double-load: the Etape 16 hash test ran
+  two rosters side by side, and its restructuring into two whole sequential runs is the stronger
+  check anyway — the second run now reproduces the first across a full library shutdown and
+  reload, which is the shape an actual replay has. The `--program` with `--window` refusal was
+  re-verified while the invariant was under the lamp: it stands ahead of window creation, and the
+  listing and probe modes both return before a window can exist, so no Program code ever shares a
+  process with a swapchain.
+
 - **A Program brings its own body: the render model crosses the ABI at rez.** The one field in the
   interface a Program authors rather than receives, and the inversion is deliberate — the Grid
   decides what a body can do and sense, because capability is physics; what a body looks like

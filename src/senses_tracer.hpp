@@ -46,14 +46,27 @@ class SensesTracer final : public RadianceSolver {
 public:
     /*!
         \param device Logical device.
-        \param world The Grid's geometry, already resident on the device.
+        \param world The Grid's geometry — nodes and triangles — already resident on the device.
         \param materials The optical material table, uploaded here for the shader to shade with.
+        \param initial_instances The placements to trace against until `stage` replaces them, and
+               the capacity every later staging is bounded by: the roster is fixed at startup, so
+               the placement count never grows after construction. Must not be empty.
         \param max_rays Most sample rays one solve may carry. Sizes the two host-visible buffers.
         \param shader_path Path to `senses.spv`.
         \param logger Logger for the allocation report.
     */
-    SensesTracer(const Device& device, const World& world, const std::vector<Material>& materials, uint32_t max_rays, const std::string& shader_path,
-        LoggingLib::Logger& logger);
+    SensesTracer(const Device& device, const World& world, const std::vector<Material>& materials, const std::vector<BvhLib::InstanceRecord>& initial_instances,
+        uint32_t max_rays, const std::string& shader_path, LoggingLib::Logger& logger);
+
+    /*!
+        Replaces the placements the next solves trace against.
+
+        A memcpy into a host-visible buffer, because this happens per creature per tick: the world's
+        own instance buffer stays the static upload the window renders from, and this pass owns the
+        moving copy. Bounded by the construction-time count — a roster is fixed at startup, so more
+        placements than were built for is a caller error and refused loudly.
+    */
+    void stage(const std::vector<BvhLib::InstanceRecord>& instances) override;
 
     /*!
         Traces one batch of sample rays and returns linear radiance per ray.
@@ -69,16 +82,20 @@ private:
     const World* m_world; //!< Non-owning.
 
     uint32_t m_max_rays; //!< Capacity of the ray and result buffers.
+    uint32_t m_instance_capacity; //!< Placements the instance buffer was sized for.
+    uint32_t m_instance_count; //!< Placements the next solve traces against.
 
     MemoryArena m_device_arena; //!< Holds the material table.
-    MemoryArena m_host_arena; //!< Holds the two mapped buffers below.
+    MemoryArena m_host_arena; //!< Holds the mapped buffers below.
 
     VulkanHelpers::DeviceBuffer m_materials; //!< The optical material table on the device.
 
     vk::raii::Buffer m_rays{nullptr}; //!< Sample rays, written by the host each solve.
     vk::raii::Buffer m_results{nullptr}; //!< Radiance per ray, read by the host each solve.
+    vk::raii::Buffer m_instances{nullptr}; //!< Placements, rewritten by `stage` as bodies move.
     void* m_rays_mapped{nullptr};
     void* m_results_mapped{nullptr};
+    void* m_instances_mapped{nullptr};
 
     vk::raii::DescriptorSetLayout m_set_layout{nullptr};
     vk::raii::DescriptorPool m_descriptor_pool{nullptr};
