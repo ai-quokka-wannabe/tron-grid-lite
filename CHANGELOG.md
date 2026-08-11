@@ -363,6 +363,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Program ABI's supported C standard is C17, the one complementary to C++20.** C17 —
+  ISO/IEC 9899:2018, also written C18 — is the C standard C++20 itself names as its library
+  baseline, so the Grid's side and a C Program's side now quote one era of the language rather
+  than two. Since C17 is C11 with defect fixes and no new syntax, nothing about the header moved:
+  the fingerprint holds, no consumer's toolchain is dropped (MSVC ships full `/std:c17`), and the
+  header still compiles as far back as C99 through its assertion fallback, because a vendored
+  header should not dictate a toolchain it does not have to. The fixture Programs and the manifest
+  tool now build at `C_STANDARD 17`, so the supported combination is the one CI actually
+  exercises: C99 fallback, C17 Program, C++20 Grid.
+
 - **`std::numbers` replaces hand-written mathematical constants where the bits agree.** The
   acoustic two-pi and the first body's right-angle turn bound are now spelled from the C++20
   standard constants — bit-identical to the literals they replace, so no gather, digest or hash

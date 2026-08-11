@@ -1,7 +1,8 @@
 # Compiling the header is most of the test, because every layout fact it depends on is a static
 # assertion inside it. So each target below is a check, and the three of them cover the three
-# combinations that differ: C99 (the assertion fallback), C11 (a Program, exported) and C++20 (the
-# Grid's own side).
+# combinations that differ: C99 (the assertion fallback), C17 (a Program, exported — the C standard
+# C++20's own library baseline names, so both sides of the boundary quote one era of the language)
+# and C++20 (the Grid's own side).
 
 # C99 reaches TGL_STATIC_ASSERT's negative-array-size fallback, which nothing else here compiles.
 # C_STANDARD_REQUIRED is deliberately left off: MSVC has no /std:c99, and its default C mode reaches
@@ -16,7 +17,7 @@ set_target_properties(program_abi_c99 PROPERTIES C_STANDARD 99)
 # also the fixture the loader will need something to load.
 add_library(tgl_test_program SHARED test_program.c)
 target_link_libraries(tgl_test_program PRIVATE program_abi)
-set_target_properties(tgl_test_program PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+set_target_properties(tgl_test_program PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON)
 
 # The Grid resolves an identifier to exactly one filename: `<name>.dll` on Windows, `lib<name>.so` on
 # Linux. CMake agrees on Linux and disagrees on Windows under MinGW, which prefixes shared libraries
@@ -54,7 +55,7 @@ foreach(variant IN LISTS TGL_BROKEN_PROGRAM_VARIANTS)
     add_library(tgl_broken_${variant} SHARED broken_program.c)
     target_link_libraries(tgl_broken_${variant} PRIVATE program_abi)
     target_compile_definitions(tgl_broken_${variant} PRIVATE TGL_BROKEN_${variant_macro})
-    set_target_properties(tgl_broken_${variant} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+    set_target_properties(tgl_broken_${variant} PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON)
 
     # Beside the good fixture, so one directory holds every Program the loader tests resolve, and
     # named the way the Grid resolves names rather than the way the toolchain would prefer.
@@ -86,7 +87,7 @@ foreach(variant IN LISTS TGL_DRIVER_PROGRAM_VARIANTS)
     target_link_libraries(tgl_driver_${variant} PRIVATE program_abi)
     target_compile_definitions(tgl_driver_${variant} PRIVATE TGL_DRIVER_${variant_macro})
     set_target_properties(tgl_driver_${variant} PROPERTIES
-        C_STANDARD 11
+        C_STANDARD 17
         C_STANDARD_REQUIRED ON
         PREFIX "${TGL_PROGRAM_LIBRARY_PREFIX}"
         LIBRARY_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:tgl_test_program>"

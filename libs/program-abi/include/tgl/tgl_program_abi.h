@@ -94,8 +94,11 @@ extern "C"
 #define TGL_NOEXCEPT
 #endif
 
-/*! Compile-time assertion. C11 or C++11 gives a readable diagnostic; the C99 fallback reports a
-    negative array size, which is correct and unpleasant. C11 is the supported path. */
+/*! Compile-time assertion. C11 or later and C++11 or later give a readable diagnostic; the C99
+    fallback reports a negative array size, which is correct and unpleasant. The supported path is
+    C17 — ISO/IEC 9899:2018, also written C18 — because that is the C standard C++20 itself names
+    as its library baseline, so the Grid's side and a C Program's side quote one era of the
+    language rather than two. */
 #if defined(__cplusplus)
 #define TGL_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
 #elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)

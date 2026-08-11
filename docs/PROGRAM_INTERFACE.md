@@ -182,15 +182,19 @@ true for one creature and false for the rest.
 
 ### Rules
 
-- **Plain C only.** The header is compilable as C99. No C++ types, no exceptions, no RTTI, no
-  templates, no `std::` anything crosses the boundary. A Program may be written in C++, Rust, Zig or
-  anything else that can emit C-linkage exports, but the ABI itself is C.
+- **Plain C only.** The supported standard is C17 — ISO/IEC 9899:2018, also written C18 — chosen
+  because it is the C standard C++20 itself names as its library baseline, so the Grid's side and a
+  C Program's side quote one era of the language rather than two. The header still compiles as far
+  back as C99 through its assertion fallback, because a vendored header should not dictate a
+  toolchain it does not have to. No C++ types, no exceptions, no RTTI, no templates, no `std::`
+  anything crosses the boundary. A Program may be written in C++, Rust, Zig or anything else that
+  can emit C-linkage exports, but the ABI itself is C.
 - **No exceptions across the boundary.** A Program written in C++ must catch everything at its own
   export boundary. An exception unwinding into the Grid is undefined behaviour and will very likely
   terminate the process. [STYLE.md](../STYLE.md) § Error Handling states the same rule from the
   Grid's side and asks this header to enforce it rather than assert it: `noexcept` on a vtable
   member is part of the pointer's *type* from C++17 onward, so a C++ Program that omits it fails to
-  compile instead of being asked politely. Spelling that in a header which must also compile as C99
+  compile instead of being asked politely. Spelling that in a header which must also compile as plain C
   costs one macro expanding to nothing on the C side — the only compiler-conditional construct the
   header would contain, and the only available mechanism that makes the rule unrepresentable to
   break.
