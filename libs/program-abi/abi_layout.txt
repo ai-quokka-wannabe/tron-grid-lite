@@ -15,7 +15,7 @@
 #
 # No struct here contains padding, so a struct's members always account for all of it.
 
-abi-version 3
+abi-version 4
 pointer-size 8
 
 struct TglLibraryInfo 8 4

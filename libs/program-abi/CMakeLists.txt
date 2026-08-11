@@ -18,7 +18,7 @@ add_subdirectory(tests)
 # Built as C11 so it can ask the compiler for _Alignof, and given the same offsets a Program sees.
 add_executable(tgl_abi_manifest tools/abi_manifest.c)
 target_link_libraries(tgl_abi_manifest PRIVATE program_abi)
-set_target_properties(tgl_abi_manifest PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
+set_target_properties(tgl_abi_manifest PROPERTIES C_STANDARD 17 C_STANDARD_REQUIRED ON)
 
 # Microsoft deprecates fopen in favour of fopen_s, which is not a function the C standard has. Clang
 # in clang-cl mode honours that deprecation and -Werror turns it into an error, while this repository

@@ -52,7 +52,7 @@ extern "C"
     produces exactly the silent memory corruption the number exists to prevent, and produces it
     without failing anywhere.
 */
-#define TGL_ABI_VERSION 3u
+#define TGL_ABI_VERSION 4u
 
 /* ================================================================================================
    Toolchain glue
@@ -94,16 +94,18 @@ extern "C"
 #define TGL_NOEXCEPT
 #endif
 
-/*! Compile-time assertion. C11 or C++11 gives a readable diagnostic; the C99 fallback reports a
-    negative array size, which is correct and unpleasant. C11 is the supported path. */
+/*! Compile-time assertion. The supported C standard is C17 — ISO/IEC 9899:2018, also written
+    C18 — because that is the C standard C++20 itself names as its library baseline, so the Grid's
+    side and a C Program's side quote one era of the language rather than two. Anything older is
+    refused outright rather than served by a fallback: a pre-C11 toolchain cannot check this
+    header's layout assertions readably, and an ABI header that cannot check its own layout is a
+    memory corruption with documentation. */
 #if defined(__cplusplus)
 #define TGL_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
 #elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
 #define TGL_STATIC_ASSERT(cond, msg) _Static_assert(cond, msg)
 #else
-#define TGL_ASSERT_CAT2_(a, b) a##b
-#define TGL_ASSERT_CAT_(a, b) TGL_ASSERT_CAT2_(a, b)
-#define TGL_STATIC_ASSERT(cond, msg) typedef char TGL_ASSERT_CAT_(tgl_static_assert_, __LINE__)[(cond) ? 1 : -1]
+#error "The Program ABI requires C17 or later (C++11 or later on the C++ side). There is deliberately no pre-C11 fallback."
 #endif
 
 /*! Size of one member without an instance to hand. Unevaluated, so the null pointer is never
