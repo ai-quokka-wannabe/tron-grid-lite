@@ -501,8 +501,12 @@ typedef struct TglActions {
 
         A call, not a channel: the Grid emits a single burst from the creature's own position and it
         is over. No duration, spectrum or waveform, because there is no waveform anywhere on the
-        Grid. The body's descriptor carries what its voice sounds like; this says only whether it was
-        used, and how hard. */
+        Grid. What a voice sounds like is a fact about the body, authored on the Grid's side of this
+        boundary as the ears are; this says only whether the voice was used, and how hard.
+
+        Like every action it is staged: the call sounds on the next tick, and that tick's ear views
+        carry its whole response — the caller's own ears included, loudest and first, which is the
+        only readback the voice has or needs. */
     float vocalisation_strength;
 } TglActions;
 

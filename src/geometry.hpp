@@ -195,6 +195,26 @@ struct NeonGrid {
 [[nodiscard]] float gridSurfaceHeight(float world_x, float world_z, const GridFloorConfig& config);
 
 /*!
+    Returns every height the terraced relief can quantise to, ascending.
+
+    The flat planes of the floor, as data: `gridSurfaceHeight` snaps its relief to
+    `floor(relief * terraces) / terraces`, so the surface is piecewise flat at exactly these
+    heights, and anything that enumerates horizontal reflectors — the acoustic image-source
+    delivery is the consumer this exists for — must agree with that arithmetic rather than
+    restate it. The list is the *possible* levels: the top one requires the noise to reach
+    exactly one and the shipped landscape never does, which costs its consumer one candidate
+    that never validates rather than an echo that never arrives.
+
+    A smooth relief (`relief_terraces` of zero) has no flat level anywhere and returns an empty
+    list. A flat floor (zero amplitude, zero wavelength or zero octaves) is one level at
+    `config.height`.
+
+    \param config Floor dimensions and relief.
+    \return World-space Y of each possible terrace level, ascending.
+*/
+[[nodiscard]] std::vector<float> gridTerraceLevels(const GridFloorConfig& config);
+
+/*!
     Returns the height of the floor **as it is actually drawn**, at a world-space position.
 
     This is not the same thing as `gridSurfaceHeight`, and the difference is the whole reason this

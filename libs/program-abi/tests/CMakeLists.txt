@@ -66,11 +66,13 @@ foreach(variant IN LISTS TGL_BROKEN_PROGRAM_VARIANTS)
 endforeach()
 
 # Programs that are correct and that drive a body, so the tick loop can be watched from outside
-# rather than assumed: one asks for something a body can do, one turns while it walks, one asks for
-# far more than any body can, one asks for nothing at all, and one declines to rez.
+# rather than assumed: one asks for something a body can do, one turns while it walks, one calls
+# every tick, one asks for far more than any body can, one asks for nothing at all, and one
+# declines to rez.
 set(TGL_DRIVER_PROGRAM_VARIANTS
     steady
     turning
+    calling
     excessive
     silent
     refuses_rez

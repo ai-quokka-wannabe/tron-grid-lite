@@ -223,7 +223,7 @@ TEST_CASE(eyes_and_irradiance_are_filled_from_the_solver)
 {
     const BvhLib::Scene scene{singingFloorScene()};
     FakeSolver solver;
-    GridSensesSource source{scene, unitStrengths(), &solver};
+    GridSensesSource source{scene, unitStrengths(), {}, &solver};
 
     // One scalar eye looking forward, one three-band eye looking right, and four sphere samples.
     const std::array<TglEyeDesc, 2u> eyes{eyeOf(FORWARD_DIRECTION.data(), 1u, 1u), eyeOf(RIGHT_DIRECTION.data(), 1u, 3u)};
@@ -271,7 +271,7 @@ TEST_CASE(the_solver_is_asked_once_while_the_pose_holds)
     */
     const BvhLib::Scene scene{singingFloorScene()};
     FakeSolver solver;
-    GridSensesSource source{scene, unitStrengths(), &solver};
+    GridSensesSource source{scene, unitStrengths(), {}, &solver};
 
     const std::array<TglEyeDesc, 1u> eyes{eyeOf(FORWARD_DIRECTION.data(), 1u, 1u)};
 
@@ -303,6 +303,111 @@ TEST_CASE(an_ear_asking_for_a_shape_the_gather_does_not_produce_is_refused)
 
     TglSenses senses{};
     TEST_CHECK_THROWS(source.fill(creature, senses));
+}
+
+// ---------------------------------------------------------------------------------------------
+// Calls through the seam: a vocalisation lands in every ear, on top of the hum
+// ---------------------------------------------------------------------------------------------
+
+namespace
+{
+
+    //! Returns the bin a path of the given length lands in.
+    [[nodiscard]] uint32_t callBinOf(float path_metres)
+    {
+        return static_cast<uint32_t>(path_metres / (Acoustics::SPEED_OF_SOUND * Acoustics::BIN_SECONDS));
+    }
+
+} // namespace
+
+TEST_CASE(a_call_reaches_every_ear_and_the_caller_hears_itself_first)
+{
+    const BvhLib::Scene scene{singingFloorScene()};
+    GridSensesSource source{scene, unitStrengths()};
+
+    const std::array<TglEarDesc, 1u> ears{earAt(0.0f, 0.0f, 0.0f)};
+
+    // The caller stands at the origin's station; the listener 3.6 m away — bin 10 at 343 m/s.
+    RosterLib::Creature caller{hearingCreature(ears.data(), 1u)};
+    caller.body.creature_id = 7u;
+    RosterLib::Creature listener{hearingCreature(ears.data(), 1u)};
+    listener.body.creature_id = 8u;
+    listener.pose.position = MathLib::Vec3{3.6f, 1.0f, 0.0f};
+
+    // The hum alone, before anything sounds.
+    TglSenses quiet{};
+    source.fill(listener, quiet);
+    std::array<float, Acoustics::BAND_COUNT * Acoustics::BIN_COUNT> hum_only{};
+    std::memcpy(hum_only.data(), quiet.ears[0].energy, sizeof(hum_only));
+
+    // Physics would have set this from the staged action; the tests are the physics here.
+    caller.vocalisation = 1.0f;
+    std::vector<RosterLib::Creature> roster;
+    roster.push_back(caller);
+    roster.push_back(listener);
+    source.beginTick(roster);
+
+    // The listener's ear reads the hum plus exactly one new arrival, in the bin the distance
+    // dictates. Everything outside that bin is untouched, which is the additivity claim.
+    TglSenses heard{};
+    source.fill(listener, heard);
+    const uint32_t direct_bin{callBinOf(3.6f)};
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        const uint32_t index{(band * Acoustics::BIN_COUNT) + direct_bin};
+        TEST_CHECK_CLOSE(heard.ears[0].energy[index] - hum_only[index], 1.0f / (3.6f * 3.6f), 1e-6f);
+    }
+    for (uint32_t index{0u}; index < hum_only.size(); ++index) {
+        if ((index % Acoustics::BIN_COUNT) != direct_bin) {
+            TEST_CHECK(heard.ears[0].energy[index] == hum_only[index]);
+        }
+    }
+
+    // The caller's own ear sits on the source, so its call arrives in bin zero at full strength —
+    // hearing yourself speak is the proprioception the voice gets. Bin zero is the call alone: the
+    // nearest singing surface is a full metre below, which is bin two, so nothing of the hum can
+    // stand in the call's bin and the equality is exact.
+    TglSenses own{};
+    source.fill(caller, own);
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        TEST_CHECK(own.ears[0].energy[band * Acoustics::BIN_COUNT] == 1.0f);
+    }
+}
+
+TEST_CASE(the_hum_cache_survives_a_call_and_a_silent_tick_reads_pure_hum)
+{
+    const BvhLib::Scene scene{singingFloorScene()};
+    GridSensesSource source{scene, unitStrengths()};
+
+    const std::array<TglEarDesc, 1u> ears{earAt(0.0f, 0.0f, 0.0f)};
+    RosterLib::Creature creature{hearingCreature(ears.data(), 1u)};
+
+    // The hum alone.
+    TglSenses before{};
+    source.fill(creature, before);
+    std::array<float, Acoustics::BAND_COUNT * Acoustics::BIN_COUNT> hum_only{};
+    std::memcpy(hum_only.data(), before.ears[0].energy, sizeof(hum_only));
+
+    // A tick with a call: the delivered response must differ — the comparison has to have
+    // something to compare — but the cache underneath it must not learn the call.
+    creature.vocalisation = 0.5f;
+    std::vector<RosterLib::Creature> roster;
+    roster.push_back(creature);
+    source.beginTick(roster);
+
+    TglSenses during{};
+    source.fill(creature, during);
+    TEST_CHECK(std::memcmp(hum_only.data(), during.ears[0].energy, sizeof(hum_only)) != 0);
+
+    // A silent tick after: bit-identical to the original hum, or the call leaked into the cache
+    // and a stationary ear would replay it for ever.
+    creature.vocalisation = 0.0f;
+    roster.clear();
+    roster.push_back(creature);
+    source.beginTick(roster);
+
+    TglSenses after{};
+    source.fill(creature, after);
+    TEST_CHECK(std::memcmp(hum_only.data(), after.ears[0].energy, sizeof(hum_only)) == 0);
 }
 
 int main()

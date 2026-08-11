@@ -19,11 +19,24 @@
 #include <string>
 #include <utility>
 
-GridSensesSource::GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, RadianceSolver* radiance_solver) :
+GridSensesSource::GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, Acoustics::Reflectors reflectors, RadianceSolver* radiance_solver) :
     m_scene(scene),
     m_source_strengths(std::move(source_strengths)),
+    m_reflectors(std::move(reflectors)),
     m_radiance_solver(radiance_solver)
 {
+}
+
+void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatures)
+{
+    m_calls.clear();
+    for (const RosterLib::Creature& creature : creatures) {
+        if (creature.vocalisation > 0.0f) {
+            // The call leaves from the body's own position, exactly as the ABI documents at
+            // TglActions::vocalisation_strength.
+            m_calls.push_back(Call{.position = creature.pose.position, .strength = creature.vocalisation});
+        }
+    }
 }
 
 GridSensesSource::CreatureEars& GridSensesSource::earStateFor(uint64_t creature_id, uint32_t ear_count)
@@ -38,6 +51,7 @@ GridSensesSource::CreatureEars& GridSensesSource::earStateFor(uint64_t creature_
     state.creature_id = creature_id;
     state.keys.resize(ear_count);
     state.responses.resize(ear_count);
+    state.delivered.resize(ear_count);
     m_ear_states.push_back(std::move(state));
     return m_ear_states.back();
 }
@@ -121,7 +135,40 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
             cached.solved = true;
         }
 
-        m_ear_views[index] = TglEarView{.energy = stored.energy.data(), .band_count = ear.band_count, .bin_count = ear.bin_count};
+        const float* delivery{stored.energy.data()};
+        if (!m_calls.empty()) {
+            /*
+                A tick with calls is delivered from scratch storage: the cached hum, and then every
+                call's own arrivals added bin for bin — the caller's included, which is both how a
+                creature hears itself speak and the outward leg of its echoes. The cache itself is
+                never written, so a stationary ear on the next silent tick reads exactly the
+                gather again.
+            */
+            AlignedResponse& scratch{state.delivered[index]};
+            scratch.energy = stored.energy;
+
+            Acoustics::CallConfig call_config{};
+            /*
+                The call spectrum stays at the unit default for the same reason the hum's does: the
+                first body's voice is white across the first body's bands. A preset body with a
+                real voice resolves its own spectrum, and that resolver arrives with it.
+            */
+            for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+                call_config.air_absorption_db_per_km[band] = ear.air_absorption_db_per_km[band];
+            }
+            call_config.source_radius_metres = RosterLib::BODY_HALF_HEIGHT;
+
+            for (const Call& call : m_calls) {
+                const Acoustics::ImpulseResponse arrivals{Acoustics::deliverCall(m_scene, m_reflectors, call.position, call.strength, world, call_config)};
+                for (size_t bin{0u}; bin < arrivals.bins.size(); ++bin) {
+                    scratch.energy[bin] += arrivals.bins[bin];
+                }
+            }
+
+            delivery = scratch.energy.data();
+        }
+
+        m_ear_views[index] = TglEarView{.energy = delivery, .band_count = ear.band_count, .bin_count = ear.bin_count};
     }
 
     senses.ears = m_ear_views.data();

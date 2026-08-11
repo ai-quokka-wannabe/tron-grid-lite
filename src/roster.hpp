@@ -160,6 +160,22 @@ namespace RosterLib
         SensesSource(SensesSource&&) = delete;
         SensesSource& operator=(SensesSource&&) = delete;
 
+        /*!
+            Announces the tick's roster-wide context before any creature is filled.
+
+            Called once per tick, after physics has advanced every body and before the first
+            `fill`. A fill sees one listener, but some of what a listener senses is a fact about
+            the whole roster — who is calling this tick, and eventually where every body stands —
+            so the source reads it here, from a roster physics has finished with, rather than
+            piecing it together from per-creature calls whose staged state is being overwritten as
+            the Programs run. The default does nothing, which is the correct behaviour for a source
+            with no cross-creature senses.
+        */
+        virtual void beginTick(const std::vector<Creature>& creatures)
+        {
+            (void)creatures;
+        }
+
         //! Fills eyes, ears and irradiance for one creature. The kinematic senses are already set.
         virtual void fill(const Creature& creature, TglSenses& senses) = 0;
 
@@ -200,6 +216,13 @@ namespace RosterLib
         //! and it disagrees with what was asked for whenever a bound bit or the feet left the floor.
         float forward_speed{0.0f};
         float turn_rate{0.0f};
+
+        //! What the voice is doing this tick: the loudness of the call sounding now, zero for a
+        //! silent body. An actuator like the two above, set by physics from the staged intent so
+        //! that every ear on the roster hears one consistent tick — but with no traction condition,
+        //! because a body calls as well in flight as standing. There is no proprioceptive readback
+        //! for it: the caller hears its own call, which is the readback an animal actually has.
+        float vocalisation{0.0f};
 
         /*!
             The intent physics acts on next tick, already sanitised and clamped.
@@ -248,8 +271,10 @@ namespace RosterLib
             One tick, in the lifecycle's documented order.
 
             Physics advances first, once for every body on the roster, acting on the intent staged
-            last tick. Then each creature in roster order receives its senses — the bodily ones
-            here, the traced ones from `senses_source` — its Program is called, and its actions are
+            last tick. The senses source is then told the settled roster through `beginTick` — the
+            calls sounding this tick are a fact about everyone, settled before anyone listens.
+            Then each creature in roster order receives its senses — the bodily ones here, the
+            traced ones from `senses_source` — its Program is called, and its actions are
             sanitised, clamped and staged for the next tick. An action therefore takes effect on
             the next tick for every creature alike, which is the promise
             `docs/PROGRAM_INTERFACE.md` § Lifecycle makes.

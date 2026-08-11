@@ -70,7 +70,10 @@ inline constexpr uint32_t SENSES_MAX_BOUNCES{6u};
     **Ears are answered on the host**, by the same `Acoustics::gather` the verification modes hold
     the device to. That is deliberate rather than provisional: the gather is a pure function, its
     output is already the ABI's band-major shape, and a host answer keeps the ear half of the tick
-    loop runnable on a machine with no device at all.
+    loop runnable on a machine with no device at all. Calls ride the same path: every vocalisation
+    sounding this tick is delivered onto every ear's gathered hum by `Acoustics::deliverCall`,
+    caller's own ears included — which is how a creature hears itself, and the whole of what
+    echolocation is.
 
     **Eyes and irradiance are answered by the `RadianceSolver`** — one flat batch of sample rays
     per creature per pose, eye samples first and irradiance directions after, all traced by the
@@ -86,10 +89,24 @@ public:
         \param scene The Grid. Borrowed; must outlive this source.
         \param source_strengths Acoustic source strength per material slot, as
                `Acoustics::makeAcousticSourceStrengths` builds it. Taken by value and kept.
+        \param reflectors Mirror planes a call's early reflections are enumerated against. Taken by
+               value and kept. An empty set is a Grid whose calls echo off nothing, which is the
+               honest default for a scene nobody described.
         \param radiance_solver Answers eye and irradiance rays. May be null, in which case a body
                declaring either sense is refused. Borrowed; must outlive this source.
     */
-    GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, RadianceSolver* radiance_solver = nullptr);
+    GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, Acoustics::Reflectors reflectors = {}, RadianceSolver* radiance_solver = nullptr);
+
+    /*!
+        Collects the tick's calls: who is sounding, from where, and how loudly.
+
+        Read from the roster physics has settled rather than from staged intent, because staged
+        copies are overwritten one by one as Programs run and a mid-loop read would hear a tick
+        that never happened. Cheap by construction — a handful of comparisons — and cleared every
+        tick, so a tick nobody announces is a silent one, which keeps every fill outside a roster
+        exactly as it was before calls existed.
+    */
+    void beginTick(const std::vector<RosterLib::Creature>& creatures) override;
 
     /*!
         Fills the traced senses for one creature.
@@ -99,6 +116,12 @@ public:
         placement, so while the pose has not changed the cached answer is not an approximation of
         the right one — it *is* the right one. The Grid and the configs are fixed for this source's
         lifetime, which leaves the pose as the whole key, compared exactly.
+
+        Calls are the deliberate exception to the caching: they are events rather than state, so
+        on a tick with any call sounding, every ear receives its cached hum plus every call's
+        delivery, computed fresh — an enumeration of a few dozen candidates per call, against the
+        gather's thousands of rays. The hum cache itself is never written to by a call, which is
+        what keeps the skip licence exact.
     */
     void fill(const RosterLib::Creature& creature, TglSenses& senses) override;
 
@@ -125,11 +148,23 @@ private:
         Keys and responses are parallel vectors rather than one struct, because a struct holding an
         over-aligned member is padded to that alignment and MSVC reports the padding as a warning
         this repository builds with as an error.
+
+        `responses` is the hum cache and only ever holds a pure gather; `delivered` is scratch for
+        ticks with calls, holding hum plus deliveries. Two buffers rather than one, because a call
+        written into the cache would be replayed to a stationary ear for ever — the skip licence is
+        exact only while the cached answer is exactly the gather's.
     */
     struct CreatureEars {
         uint64_t creature_id{0u};
         std::vector<EarKey> keys;
         std::vector<AlignedResponse> responses;
+        std::vector<AlignedResponse> delivered;
+    };
+
+    //! One call sounding this tick: where it left from, and how loudly.
+    struct Call {
+        MathLib::Vec3 position{};
+        float strength{0.0f};
     };
 
     //! Four floats at the alignment `TglEyeView::samples` promises; eye storage is a vector of these.
@@ -158,10 +193,12 @@ private:
 
     const BvhLib::Scene& m_scene; //!< The Grid. Non-owning.
     std::vector<float> m_source_strengths; //!< Acoustic strength per material slot.
+    Acoustics::Reflectors m_reflectors; //!< Mirror planes for a call's early reflections.
     RadianceSolver* m_radiance_solver; //!< Answers eye and irradiance rays. Non-owning; may be null.
 
     std::vector<CreatureEars> m_ear_states; //!< Found by linear search; a roster is a handful of creatures.
     std::vector<CreatureVision> m_vision_states;
     std::vector<TglEarView> m_ear_views; //!< Wired into TglSenses; overwritten by the next fill.
     std::vector<TglEyeView> m_eye_views;
+    std::vector<Call> m_calls; //!< The calls sounding this tick. Rebuilt by every beginTick.
 };

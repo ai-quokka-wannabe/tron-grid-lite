@@ -18,6 +18,7 @@
 
 #include <array>
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 
@@ -137,7 +138,7 @@ namespace
             seconds, which is slow enough to read tick by tick while the loop is being trusted.
         */
         desc.max_forward_speed = 1.0f;
-        desc.max_turn_rate = 1.5707964f;
+        desc.max_turn_rate = std::numbers::pi_v<float> / 2.0f;
         desc.max_vocalisation_strength = 1.0f;
 
         return desc;
@@ -296,6 +297,14 @@ namespace RosterLib
             creature.turn_rate = creature.staged.desired_turn_rate;
         }
 
+        // The voice has no traction condition: a body calls as well in flight as standing, so the
+        // staged loudness simply is what the voice does this tick. Setting it here, in the physics
+        // pass that runs for the whole roster before any senses are filled, is what gives every
+        // ear one consistent answer to who is calling — the staged copies are overwritten one by
+        // one as the Programs run, and anything reading them mid-loop would hear a tick that never
+        // happened.
+        creature.vocalisation = creature.staged.vocalisation_strength;
+
         float x{position_before.x};
         float z{position_before.z};
         const float yaw_before{creature.pose.yaw};
@@ -430,6 +439,11 @@ namespace RosterLib
         for (Creature& creature : m_creatures) {
             stepBody(creature, m_ground);
         }
+
+        // Physics has settled, so the roster is now one consistent tick: whoever is calling is
+        // calling for everyone. The source reads that context here, once, rather than
+        // per-creature, because a fill sees one listener and a call concerns them all.
+        senses_source.beginTick(m_creatures);
 
         for (Creature& creature : m_creatures) {
             TglSenses senses{};
