@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string_view>
 #include <vector>
 
@@ -50,6 +51,40 @@ namespace RosterLib
 
     //! The same fact as an integer, for anything that wants to say "per second" without dividing.
     inline constexpr uint32_t TICKS_PER_SECOND{32u};
+
+    //! Gravity, metres per second squared. The number the ABI states an otolith at rest reads.
+    inline constexpr float GRAVITY{9.81f};
+
+    //! The first body's mass in kilograms. One, so that an impulse in newton-seconds is legible as
+    //! the velocity change it delivers.
+    inline constexpr float BODY_MASS_KG{1.0f};
+
+    //! Half the body's height, metres: how far its origin stands above what it stands on.
+    inline constexpr float BODY_HALF_HEIGHT{0.05f};
+
+    //! Half the body's length along its own Z, metres. The ears and eyes at ±0.2 sit just inside.
+    inline constexpr float BODY_HALF_LENGTH{0.215f};
+
+    /*!
+        Tallest rise the body walks up rather than walks into, metres.
+
+        Twice the body's half height — ankle height. A terrace riser above this is a wall: the
+        horizontal motion is cancelled and the body feels the stop as a contact on its front face,
+        which is what makes the lattice's steps something a creature can feel rather than glide over.
+    */
+    inline constexpr float CLIMB_LIMIT_METRES{0.1f};
+
+    /*!
+        Height of the ground under a point, in world metres.
+
+        A function rather than geometry, because the Grid's floor is an analytic surface before it
+        is triangles — `gridMeshHeight` is the ground truth the floor mesh was generated from, and
+        physics collides against the truth rather than against its tessellation. The run mode binds
+        the Grid's own surface; tests bind whatever terrain the case needs. The roster promises to
+        call it only with finite coordinates, and expects the same value for the same input every
+        time — replay stands on that.
+    */
+    using GroundFunction = std::function<float(float x, float z)>;
 
     static_assert(TICK_SECONDS * static_cast<float>(TICKS_PER_SECOND) == 1.0f,
         "The tick length and the tick rate are two spellings of one number and have drifted apart. Both must be exact in binary32.");
@@ -153,11 +188,31 @@ namespace RosterLib
 
         Pose pose{};
 
-        //! What the actuators are actually doing, after clamping. This is the proprioception a
-        //! Program reads back, and it disagrees with what was asked for whenever a bound bit.
+        //! World-frame velocity, physics-owned. Vertical is gravity's; horizontal is traction's
+        //! while the body stands on something and momentum's while it does not.
+        MathLib::Vec3 velocity{};
+
+        //! True while the body stands on the ground. Traction is a fact about contact: intent
+        //! moves the body only while this is true.
+        bool grounded{false};
+
+        //! What the actuators are actually doing. This is the proprioception a Program reads back,
+        //! and it disagrees with what was asked for whenever a bound bit or the feet left the floor.
         float forward_speed{0.0f};
-        float vertical_speed{0.0f};
         float turn_rate{0.0f};
+
+        /*!
+            The intent physics acts on next tick, already sanitised and clamped.
+
+            Staged rather than applied, because the lifecycle promises that an action takes effect
+            on the next tick for every creature alike — applying inside the Program loop would let
+            the first creature's action move the world before the last creature's call.
+        */
+        TglActions staged{};
+
+        //! What the body felt this tick, in body frame: the otolith's reading, and every contact.
+        MathLib::Vec3 specific_force{};
+        std::vector<TglContact> contacts;
     };
 
     /*!
@@ -177,9 +232,10 @@ namespace RosterLib
             \param directory Directory the Grid trusts to hold Program libraries.
             \param identifier Name of the Program, not a path.
             \param creature_count How many bodies it will drive. At least one.
+            \param ground Height of the ground under a point. Bodies rez standing on it.
             \throws std::runtime_error if the library will not load, or if a rez returns NULL.
         */
-        Roster(const std::filesystem::path& directory, std::string_view identifier, uint32_t creature_count);
+        Roster(const std::filesystem::path& directory, std::string_view identifier, uint32_t creature_count, GroundFunction ground);
 
         ~Roster();
 
@@ -189,12 +245,14 @@ namespace RosterLib
         Roster& operator=(Roster&&) = delete;
 
         /*!
-            Gives every creature one turn, in roster order.
+            One tick, in the lifecycle's documented order.
 
-            Senses are assembled — the kinematic ones here, the traced ones by `senses_source` — the
-            Program is called, its actions are sanitised and clamped, and the body is moved. Nothing
-            here consults another creature's state, so roster order is not yet load-bearing — and
-            the moment it would be, that is a change worth arguing about rather than discovering.
+            Physics advances first, once for every body on the roster, acting on the intent staged
+            last tick. Then each creature in roster order receives its senses — the bodily ones
+            here, the traced ones from `senses_source` — its Program is called, and its actions are
+            sanitised, clamped and staged for the next tick. An action therefore takes effect on
+            the next tick for every creature alike, which is the promise
+            `docs/PROGRAM_INTERFACE.md` § Lifecycle makes.
 
             \param senses_source Fills eyes, ears and irradiance per creature. Storage it wires in
                    is valid for that creature's `program_tick` call only.
@@ -208,6 +266,7 @@ namespace RosterLib
 
     private:
         ProgramLib::Library m_library;
+        GroundFunction m_ground;
         std::vector<Creature> m_creatures;
         uint64_t m_tick{0u};
     };

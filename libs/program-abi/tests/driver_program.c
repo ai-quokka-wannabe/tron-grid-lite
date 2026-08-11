@@ -61,15 +61,18 @@ static void programTick(TglProgram* program, const TglSenses* senses, TglActions
     (void)senses;
 
 #if defined(TGL_DRIVER_EXCESSIVE)
-    /* Everything a body will refuse, in one call. Half a metre per second is within reach and ten is
-       not; a hundred radians a second is not; a vertical speed this body cannot produce at all; a
-       negative loudness, which is not a quieter sound but a meaningless one; and a NaN, which is the
-       one that matters because an unsanitised NaN becomes a NaN position and then a traversal that
-       does not terminate. */
+    /* Everything a body will refuse, in one call. Ten metres per second is beyond this body's reach;
+       a NaN turn rate is the one that matters, because an unsanitised NaN becomes a NaN yaw and then
+       a position that poisons everything after it; and a negative loudness is not a quieter sound
+       but a meaningless one. */
     actions->desired_forward_speed = 10.0f;
-    actions->desired_turn_rate = 100.0f;
-    actions->desired_vertical_speed = nanf("");
+    actions->desired_turn_rate = nanf("");
     actions->vocalisation_strength = -5.0f;
+#elif defined(TGL_DRIVER_TURNING)
+    /* Walks and turns at once, which is what exercises the arc: a body doing both traces a circle,
+       and the physics step owes it the exact one. Half speed, an eighth of a turn per second. */
+    actions->desired_forward_speed = 0.5f;
+    actions->desired_turn_rate = 0.78539816f;
 #elif defined(TGL_DRIVER_SILENT)
     /* Writes nothing at all, which is legitimate: the Grid zeroes the actions before every call, so
        a Program with nothing to say coasts to a stop rather than repeating itself. */

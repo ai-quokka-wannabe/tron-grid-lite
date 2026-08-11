@@ -17,6 +17,8 @@
 #include <testing/testing.hpp>
 
 #include <cmath>
+#include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <limits>
 #include <string>
@@ -61,10 +63,20 @@ namespace
         TglCreatureDesc desc{};
         desc.max_forward_speed = MAX_FORWARD_SPEED;
         desc.max_turn_rate = MAX_TURN_RATE;
-        desc.max_vertical_speed = 0.0f;
         desc.max_vocalisation_strength = 1.0f;
         return desc;
     }
+
+    //! The terrain every behaviour test stands on unless it says otherwise: flat, at height zero.
+    [[nodiscard]] RosterLib::GroundFunction flatGround()
+    {
+        return [](float, float) {
+            return 0.0f;
+        };
+    }
+
+    //! Where a body's origin sits when standing on flat ground.
+    constexpr float STANDING_Y{RosterLib::BODY_HALF_HEIGHT};
 
 } // namespace
 
@@ -102,13 +114,16 @@ TEST_CASE(a_request_beyond_the_body_is_clamped_in_both_directions)
 TEST_CASE(a_bound_of_zero_removes_the_actuator_entirely)
 {
     // How a body without an actuator is expressed: not a missing field, but a bound of zero. A
-    // Program asking to climb is told no by the same mechanism that tells it how fast it may walk.
+    // voiceless body asking to call is told no by the same mechanism that tells it how loud it may.
+    TglCreatureDesc voiceless{boundedBody()};
+    voiceless.max_vocalisation_strength = 0.0f;
+
     TglActions actions{};
-    actions.desired_vertical_speed = 5.0f;
+    actions.vocalisation_strength = 5.0f;
 
-    RosterLib::sanitiseAndClamp(actions, boundedBody());
+    RosterLib::sanitiseAndClamp(actions, voiceless);
 
-    TEST_CHECK(near(actions.desired_vertical_speed, 0.0f));
+    TEST_CHECK(near(actions.vocalisation_strength, 0.0f));
 }
 
 TEST_CASE(a_non_finite_request_becomes_zero_rather_than_propagating)
@@ -128,14 +143,12 @@ TEST_CASE(a_non_finite_request_becomes_zero_rather_than_propagating)
     TglActions actions{};
     actions.desired_forward_speed = std::numeric_limits<float>::quiet_NaN();
     actions.desired_turn_rate = std::numeric_limits<float>::infinity();
-    actions.desired_vertical_speed = -std::numeric_limits<float>::infinity();
     actions.vocalisation_strength = std::numeric_limits<float>::quiet_NaN();
 
     RosterLib::sanitiseAndClamp(actions, boundedBody());
 
     TEST_CHECK(std::isfinite(actions.desired_forward_speed));
     TEST_CHECK(std::isfinite(actions.desired_turn_rate));
-    TEST_CHECK(std::isfinite(actions.desired_vertical_speed));
     TEST_CHECK(std::isfinite(actions.vocalisation_strength));
     TEST_CHECK(near(actions.desired_forward_speed, 0.0f));
     TEST_CHECK(near(actions.vocalisation_strength, 0.0f));
@@ -221,7 +234,7 @@ TEST_CASE(the_senses_source_is_asked_once_per_creature_per_tick)
     };
 
     CountingSource source;
-    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 3u};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 3u, flatGround()};
     roster.tick(source);
     roster.tick(source);
 
@@ -245,74 +258,93 @@ TEST_CASE(a_steady_program_moves_its_body_exactly_where_it_asked)
         tick is 0.015625 m a tick, and both are representable in binary32, so thirty-two of them is
         half a metre to the last bit. At 25 or 50 Hz this assertion would need a tolerance, and the
         tolerance would be hiding the drift rather than measuring it.
-    */
-    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u};
 
-    for (uint32_t index{0u}; index < RosterLib::TICKS_PER_SECOND; ++index) {
+        Thirty-three ticks for those thirty-two steps, and the difference is the lifecycle: an
+        action takes effect on the next tick, so the first tick stages the intent and the second is
+        the first that moves. A test that forgot this would be measuring the staging delay and
+        calling it drift.
+    */
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, flatGround()};
+
+    for (uint32_t index{0u}; index < (RosterLib::TICKS_PER_SECOND + 1u); ++index) {
         roster.tick(nullSenses());
     }
 
     const RosterLib::Creature& creature{roster.creatures().front()};
 
-    TEST_CHECK_EQUAL(roster.tickCount(), static_cast<uint64_t>(RosterLib::TICKS_PER_SECOND));
+    TEST_CHECK_EQUAL(roster.tickCount(), static_cast<uint64_t>(RosterLib::TICKS_PER_SECOND) + 1u);
     TEST_CHECK_EQUAL(creature.pose.position.z, -0.5f);
     TEST_CHECK_EQUAL(creature.pose.position.x, 0.0f);
-    TEST_CHECK_EQUAL(creature.pose.position.y, 0.0f);
+    TEST_CHECK_EQUAL(creature.pose.position.y, STANDING_Y);
     TEST_CHECK_EQUAL(creature.pose.yaw, 0.0f);
 }
 
 TEST_CASE(a_program_asking_for_more_than_its_body_has_gets_the_body)
 {
     /*
-        The same loop with a Program that asks for ten metres a second, a hundred radians a second, a
-        NaN vertical speed and a negative shout. What arrives at the pose is the body's own limits,
-        and nothing that is not a number reaches it.
+        Two ticks with a Program that asks for ten metres a second, a NaN turn and a negative shout:
+        one to stage the intent, one for physics to act on it. What arrives at the actuators is the
+        body's own limits, and nothing that is not a number reaches the pose.
     */
-    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u, flatGround()};
+    roster.tick(nullSenses());
     roster.tick(nullSenses());
 
     const RosterLib::Creature& creature{roster.creatures().front()};
 
     TEST_CHECK(near(creature.forward_speed, MAX_FORWARD_SPEED));
-    TEST_CHECK(near(creature.turn_rate, MAX_TURN_RATE));
-    TEST_CHECK(near(creature.vertical_speed, 0.0f));
+
+    // A NaN request becomes zero rather than a bound: the creature walks straight, not in the
+    // tightest circle its body allows.
+    TEST_CHECK_EQUAL(creature.turn_rate, 0.0f);
 
     TEST_CHECK(std::isfinite(creature.pose.position.x));
     TEST_CHECK(std::isfinite(creature.pose.position.y));
     TEST_CHECK(std::isfinite(creature.pose.position.z));
     TEST_CHECK(std::isfinite(creature.pose.yaw));
 
-    // It asked to climb and the body cannot, so it is exactly as high as it started.
-    TEST_CHECK_EQUAL(creature.pose.position.y, 0.0f);
+    // Nothing lifts a walking body off flat ground.
+    TEST_CHECK_EQUAL(creature.pose.position.y, STANDING_Y);
 }
 
-TEST_CASE(a_turning_body_moves_along_the_arc_it_is_on_rather_than_the_one_it_has_left)
+TEST_CASE(a_turning_body_moves_along_the_exact_arc)
 {
     /*
-        The yaw is integrated before the step, and after a single tick the difference is exact rather
-        than a matter of degree. Turning left and moving, the new heading has a negative X component,
-        so the body leaves the axis immediately. Integrating the yaw *after* the step would send that
-        first tick straight down -Z and leave X at exactly zero, and every later tick would trail the
-        heading by one.
+        A body walking at constant speed while turning at constant rate traces a circle, and the
+        step integrates it in closed form — so the position after any number of ticks must lie on
+        that circle exactly, not near it. The circle's centre sits a radius to the body's left of
+        where it started: at s = 0.5 m/s and ω = 0.78539816 rad/s the radius is s/ω, and turning
+        left from a -Z heading puts the centre at (-r, 0, 0).
 
-        Written because mutation found it: swapping the two lines left every other test in this file
-        green.
+        A chord-walking integrator — turn, then move straight — drifts off this circle a little
+        every tick, always outward. The assertion is on the radius staying put, which is the
+        property the closed form has and the chord does not.
     */
-    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u};
-    roster.tick(nullSenses());
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_turning", 1u, flatGround()};
+
+    constexpr float SPEED{0.5f};
+    constexpr float TURN{0.78539816f};
+    constexpr float RADIUS{SPEED / TURN};
+
+    for (uint32_t index{0u}; index < 64u; ++index) {
+        roster.tick(nullSenses());
+    }
 
     const RosterLib::Creature& creature{roster.creatures().front()};
 
     TEST_CHECK(creature.pose.yaw > 0.0f);
     TEST_CHECK(creature.pose.position.x < 0.0f);
-    TEST_CHECK(creature.pose.position.z < 0.0f);
+
+    const float dx{creature.pose.position.x - (-RADIUS)};
+    const float dz{creature.pose.position.z - 0.0f};
+    TEST_CHECK_CLOSE(std::sqrt((dx * dx) + (dz * dz)), RADIUS, 1e-4f);
 }
 
 TEST_CASE(a_program_that_writes_nothing_leaves_its_body_still)
 {
     // The Grid zeroes the actions before every call, so silence is a stop rather than a repeat of
     // whatever was last asked for or whatever happened to be on the stack.
-    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_silent", 1u};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_silent", 1u, flatGround()};
 
     for (uint32_t index{0u}; index < 10u; ++index) {
         roster.tick(nullSenses());
@@ -321,7 +353,7 @@ TEST_CASE(a_program_that_writes_nothing_leaves_its_body_still)
     const RosterLib::Creature& creature{roster.creatures().front()};
 
     TEST_CHECK_EQUAL(creature.pose.position.x, 0.0f);
-    TEST_CHECK_EQUAL(creature.pose.position.y, 0.0f);
+    TEST_CHECK_EQUAL(creature.pose.position.y, STANDING_Y);
     TEST_CHECK_EQUAL(creature.pose.position.z, 0.0f);
     TEST_CHECK_EQUAL(creature.forward_speed, 0.0f);
 }
@@ -333,7 +365,8 @@ TEST_CASE(proprioception_reports_what_the_body_did_rather_than_what_was_asked)
         the request and the report is the only way a Program learns its own limits, and reporting the
         request back would make a body indistinguishable from a faster one.
     */
-    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_excessive", 1u, flatGround()};
+    roster.tick(nullSenses());
     roster.tick(nullSenses());
 
     TEST_CHECK(near(roster.creatures().front().forward_speed, MAX_FORWARD_SPEED));
@@ -346,7 +379,7 @@ TEST_CASE(a_program_that_declines_to_rez_stops_the_roster)
     // program_tick with a pointer the Program never issued.
     std::string message;
     try {
-        RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_refuses_rez", 1u};
+        RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_refuses_rez", 1u, flatGround()};
         roster.tick(nullSenses());
     } catch (const std::runtime_error& error) {
         message = error.what();
@@ -358,7 +391,8 @@ TEST_CASE(a_program_that_declines_to_rez_stops_the_roster)
 
 TEST_CASE(every_creature_in_a_roster_gets_its_own_turn_and_its_own_seed)
 {
-    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 3u};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 3u, flatGround()};
+    roster.tick(nullSenses());
     roster.tick(nullSenses());
 
     const std::vector<RosterLib::Creature>& creatures{roster.creatures()};
@@ -384,6 +418,183 @@ TEST_CASE(the_tick_length_is_exact_and_is_what_a_program_is_told)
     // 145 hours of ticks, still exact. The property 25 Hz and 50 Hz do not have.
     const float far_out{static_cast<float>(16u * 1024u * 1024u) * RosterLib::TICK_SECONDS};
     TEST_CHECK_EQUAL(far_out, 524288.0f);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Gravity, contacts, friction
+// ---------------------------------------------------------------------------------------------
+
+TEST_CASE(a_standing_body_feels_the_floor_every_tick)
+{
+    /*
+        The support impulse is not an event, it is the floor holding the body up: mass times gravity
+        times the tick, under the feet, every tick the body stands. Exact, because every factor is
+        representable and the product is one multiply.
+    */
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_silent", 1u, flatGround()};
+    roster.tick(nullSenses());
+
+    const RosterLib::Creature& creature{roster.creatures().front()};
+
+    TEST_CHECK_EQUAL(creature.contacts.size(), static_cast<size_t>(1u));
+    TEST_CHECK_EQUAL(creature.contacts[0].position[1], -RosterLib::BODY_HALF_HEIGHT);
+    TEST_CHECK_CLOSE(creature.contacts[0].impulse[1], RosterLib::BODY_MASS_KG * RosterLib::GRAVITY * RosterLib::TICK_SECONDS, 1e-6f);
+
+    // At rest the otolith reads gravity pointing up through the body: the floor pushing back.
+    TEST_CHECK_CLOSE(creature.specific_force.y, RosterLib::GRAVITY, 1e-4f);
+    TEST_CHECK_CLOSE(creature.specific_force.x, 0.0f, 1e-4f);
+    TEST_CHECK_CLOSE(creature.specific_force.z, 0.0f, 1e-4f);
+}
+
+TEST_CASE(a_body_that_walks_off_an_edge_falls_and_feels_nothing)
+{
+    // A cliff across the path: solid ground until z = -0.3, a five-metre drop beyond it.
+    RosterLib::GroundFunction cliff{[](float, float z) {
+        return (z > -0.3f) ? 0.0f : -5.0f;
+    }};
+
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, cliff};
+
+    // At half a metre a second the edge is about 20 ticks out; by 40 the body is over it.
+    for (uint32_t index{0u}; index < 40u; ++index) {
+        roster.tick(nullSenses());
+    }
+
+    const RosterLib::Creature& creature{roster.creatures().front()};
+
+    TEST_CHECK(!creature.grounded);
+    TEST_CHECK(creature.velocity.y < 0.0f);
+    TEST_CHECK(creature.pose.position.y < STANDING_Y);
+
+    // Falling is the one state in which a body touches nothing and feels nothing: no contacts, and
+    // an otolith reading of zero, which is why falling reads as weightless.
+    TEST_CHECK_EQUAL(creature.contacts.size(), static_cast<size_t>(0u));
+    const float felt{std::sqrt((creature.specific_force.x * creature.specific_force.x) + (creature.specific_force.y * creature.specific_force.y)
+        + (creature.specific_force.z * creature.specific_force.z))};
+    TEST_CHECK(felt < 0.1f);
+}
+
+TEST_CASE(a_falling_body_lands_with_a_thump_the_floor_alone_cannot_explain)
+{
+    RosterLib::GroundFunction cliff{[](float, float z) {
+        return (z > -0.3f) ? 0.0f : -5.0f;
+    }};
+
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, cliff};
+
+    // Long enough to walk off and complete the metre of fall: a metre takes about 0.45 s, so by
+    // 96 ticks the body has been standing on the lower terrace for a while.
+    bool landed_hard{false};
+    const float support_alone{RosterLib::BODY_MASS_KG * RosterLib::GRAVITY * RosterLib::TICK_SECONDS};
+    for (uint32_t index{0u}; index < 96u; ++index) {
+        roster.tick(nullSenses());
+        const RosterLib::Creature& creature{roster.creatures().front()};
+        for (const TglContact& contact : creature.contacts) {
+            if (contact.impulse[1] > (support_alone * 2.0f)) {
+                landed_hard = true;
+            }
+        }
+    }
+
+    const RosterLib::Creature& creature{roster.creatures().front()};
+    TEST_CHECK(landed_hard);
+    TEST_CHECK(creature.grounded);
+    TEST_CHECK_CLOSE(creature.pose.position.y, -5.0f + RosterLib::BODY_HALF_HEIGHT, 1e-3f);
+}
+
+TEST_CASE(a_terrace_riser_is_a_wall_the_body_feels_on_its_face)
+{
+    // A step up taller than ankle height, across the path.
+    RosterLib::GroundFunction step{[](float, float z) {
+        return (z > -0.3f) ? 0.0f : 1.0f;
+    }};
+
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, step};
+
+    bool felt_wall{false};
+    for (uint32_t index{0u}; index < 40u; ++index) {
+        roster.tick(nullSenses());
+        const RosterLib::Creature& creature{roster.creatures().front()};
+        for (const TglContact& contact : creature.contacts) {
+            if ((contact.position[2] == -RosterLib::BODY_HALF_LENGTH) && (contact.impulse[2] > 0.0f)) {
+                felt_wall = true;
+            }
+        }
+    }
+
+    const RosterLib::Creature& creature{roster.creatures().front()};
+
+    TEST_CHECK(felt_wall);
+
+    // Stopped at the wall rather than climbing it or passing through, still on the low side.
+    TEST_CHECK(creature.pose.position.z > -0.35f);
+    TEST_CHECK_EQUAL(creature.pose.position.y, STANDING_Y);
+    TEST_CHECK_EQUAL(creature.forward_speed, 0.0f);
+}
+
+TEST_CASE(the_same_run_hashes_bit_identically_twice)
+{
+    /*
+        Etape 16's determinism check, firing on every push with no device: the world tick is claimed
+        reproducible on one build and one machine, so two identical rosters over identical terrain
+        must produce bit-identical state at every tick. FNV-1a over the bytes of every body's pose,
+        velocity and actuators — a hash because the failure this hunts is a single stray bit from
+        uninitialised state or order-dependent arithmetic, which a tolerance would forgive.
+
+        Cross-platform golden values are deliberately not asserted: yaw goes through sin and cos,
+        and no two libms agree in the last bit. The claim is per build, and so is the check.
+    */
+    const auto hashRoster = [](RosterLib::Roster& roster) {
+        uint64_t hash{14695981039346656037ull};
+        const auto mix = [&hash](float value) {
+            uint32_t bits{0u};
+            std::memcpy(&bits, &value, sizeof(bits));
+            for (uint32_t byte{0u}; byte < 4u; ++byte) {
+                hash ^= (bits >> (byte * 8u)) & 0xFFu;
+                hash *= 1099511628211ull;
+            }
+        };
+        for (const RosterLib::Creature& creature : roster.creatures()) {
+            mix(creature.pose.position.x);
+            mix(creature.pose.position.y);
+            mix(creature.pose.position.z);
+            mix(creature.pose.yaw);
+            mix(creature.velocity.x);
+            mix(creature.velocity.y);
+            mix(creature.velocity.z);
+            mix(creature.forward_speed);
+            mix(creature.turn_rate);
+        }
+        return hash;
+    };
+
+    RosterLib::GroundFunction terraced{[](float, float z) {
+        return (z > -1.0f) ? 0.0f : -0.5f;
+    }};
+
+    RosterLib::Roster first{fixtureDirectory(), "tgl_driver_turning", 3u, terraced};
+    RosterLib::Roster second{fixtureDirectory(), "tgl_driver_turning", 3u, terraced};
+
+    uint64_t first_hash_at_start{0u};
+    bool anything_moved{false};
+
+    for (uint32_t index{0u}; index < 128u; ++index) {
+        first.tick(nullSenses());
+        second.tick(nullSenses());
+
+        const uint64_t first_hash{hashRoster(first)};
+        const uint64_t second_hash{hashRoster(second)};
+        TEST_CHECK_EQUAL(first_hash, second_hash);
+
+        if (index == 0u) {
+            first_hash_at_start = first_hash;
+        } else if (first_hash != first_hash_at_start) {
+            anything_moved = true;
+        }
+    }
+
+    // The floor under the comparison: two frozen worlds also agree perfectly, about nothing.
+    TEST_CHECK(anything_moved);
 }
 
 int main()

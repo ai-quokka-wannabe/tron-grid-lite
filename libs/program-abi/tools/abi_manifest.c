@@ -82,8 +82,8 @@
     X(TglCreatureDesc, max_contact_count) \
     X(TglCreatureDesc, max_forward_speed) \
     X(TglCreatureDesc, max_turn_rate) \
-    X(TglCreatureDesc, max_vertical_speed) \
-    X(TglCreatureDesc, max_vocalisation_strength)
+    X(TglCreatureDesc, max_vocalisation_strength) \
+    X(TglCreatureDesc, padding0)
 
 #define TGL_EYE_VIEW_MEMBERS(X) \
     X(TglEyeView, samples) \
@@ -118,7 +118,6 @@
 #define TGL_ACTIONS_MEMBERS(X) \
     X(TglActions, desired_forward_speed) \
     X(TglActions, desired_turn_rate) \
-    X(TglActions, desired_vertical_speed) \
     X(TglActions, vocalisation_strength)
 
 #define TGL_PROGRAM_VTABLE_MEMBERS(X) \
