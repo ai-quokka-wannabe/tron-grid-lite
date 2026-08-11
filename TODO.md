@@ -325,7 +325,9 @@ sensor interface plugs in, and physics is what makes the senses stop being const
 - [x] Publish the ABI layout as data, so a binding in any language can check itself
 - [x] One body with no physics — a transform that changes between ticks
 - [x] Fill the senses from the tracers that already exist
-- [ ] Physics: gravity, contacts, friction
+- [x] Physics: gravity, contacts, friction — analytic where a closed form exists (ballistic
+      flight, the turning arc), impulses at the contacts, the ground as the analytic function the
+      floor was generated from, and the lifecycle's stage-then-act order made real
 - [ ] A remote-operated demo Program with its own telemetry GUI
 
 ### What is left of the thirteen defects in `docs/PROGRAM_INTERFACE.md`
@@ -417,11 +419,13 @@ to be a GPU**, which closes most of this etape and leaves one item behind.
 - [x] Error-path tests that need no device. `SpirvLib` is the first: the SPIR-V reader moved out from
       behind a Vulkan header into `src/spirv.hpp`, which mentions no Vulkan type, so its six guards
       are testable by a target linking `testing` alone. Five of the six are confirmed by mutation.
-- [ ] A per-tick physics state hash: N ticks from a fixed roster and a fixed action stream, hashing
-      every body. It needs no device, so it runs under `ctest` on every push. `src/tests/` already
-      compiles renderer translation units into GPU-free targets and CI already runs `ctest` on
-      `ubuntu-latest`, so the mechanism exists before the subsystem does. It would be the first
-      determinism check here that fires without being remembered.
+- [x] A per-tick physics state hash: two identical rosters over identical terrain, ticked side by
+      side, must hash bit-identically at every tick — FNV-1a over every body's pose, velocity and
+      actuators, in `roster_tests`, under `ctest` on every push. Cross-platform golden values are
+      deliberately not asserted: yaw goes through `sin` and `cos` and no two libms agree in the
+      last bit, so the claim is per build and so is the check. Broken deliberately once with an
+      address-derived perturbation, which it caught — the first determinism check here that fires
+      without being remembered, doing exactly that.
 - [x] Lavapipe as a CI device. It satisfies everything this renderer asks for — Vulkan 1.3, dynamic
       rendering, synchronisation2, a graphics family that dispatches compute — and answers each
       comparison in about a second. `--verify-acoustics`, `--verify-scene` and `--verify-senses` now

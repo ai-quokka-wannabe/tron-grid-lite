@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A creature is subject to the Grid: gravity, contacts and friction.** The tick loop grew its
+  physics step, and the integration policy is worth stating because it was chosen rather than
+  defaulted: **analytic where a closed form exists, symplectic where it does not, impulses at the
+  non-smooth points.** Ballistic flight uses the exact constant-gravity solution — which is also
+  precisely what velocity-Verlet produces for a constant force, so the closed form and the
+  symplectic scheme coincide with zero error — and a body walking while turning follows the exact
+  circular arc, replacing a chord-walking approximation that measured 7.8 mm of drift in two
+  seconds. Traction is a fact about contact: intent moves the body only while it stands on
+  something, a body that walks off a terrace falls, feels nothing on the way down (the otolith
+  honestly reads zero in free fall), and lands with a thump the support impulse alone cannot
+  explain. A standing body feels the floor every tick — mass times gravity times the tick, under
+  its feet — and a riser above ankle height is a wall felt on the front face, which makes the
+  lattice something a creature can count. Physics collides against `gridMeshHeight`, the analytic
+  truth the floor triangles were generated from, through a ground-function seam the tests bind
+  synthetic terrain into. The lifecycle's documented order became real: physics advances first for
+  the whole roster on the intent staged last tick, so an action takes effect next tick for every
+  creature alike — pinned by a test that read -0.515625 instead of -0.5 the moment the order was
+  deliberately broken. `TglActions::desired_vertical_speed` and its bound retired with the ABI at
+  version 2: height is physics' business now, and a vertical actuator clamped to zero for every
+  plausible body was a field the Grid read and nothing could act on. Etape 16's per-tick state
+  hash runs under ctest on every push and caught a deliberately injected address-dependent bit.
+
 - **A creature sees the Grid, and the sensor interface is filled.** The second half of the senses:
   `senses.slang` answers one radiance question per sample ray — eye samples and irradiance
   directions in one flat buffer, because both are the same question — through the very `radiance`

@@ -15,7 +15,7 @@
 #
 # No struct here contains padding, so a struct's members always account for all of it.
 
-abi-version 1
+abi-version 2
 pointer-size 8
 
 struct TglLibraryInfo 8 4
@@ -49,8 +49,8 @@ member TglCreatureDesc irradiance_sample_count 40 4
 member TglCreatureDesc max_contact_count 44 4
 member TglCreatureDesc max_forward_speed 48 4
 member TglCreatureDesc max_turn_rate 52 4
-member TglCreatureDesc max_vertical_speed 56 4
-member TglCreatureDesc max_vocalisation_strength 60 4
+member TglCreatureDesc max_vocalisation_strength 56 4
+member TglCreatureDesc padding0 60 4
 
 struct TglEyeView 16 8
 member TglEyeView samples 0 8
@@ -82,11 +82,10 @@ member TglSenses specific_force 60 12
 member TglSenses angular_velocity 72 12
 member TglSenses irradiance 84 4
 
-struct TglActions 16 4
+struct TglActions 12 4
 member TglActions desired_forward_speed 0 4
 member TglActions desired_turn_rate 4 4
-member TglActions desired_vertical_speed 8 4
-member TglActions vocalisation_strength 12 4
+member TglActions vocalisation_strength 8 4
 
 struct TglProgramVTable 48 8
 member TglProgramVTable struct_size 0 4

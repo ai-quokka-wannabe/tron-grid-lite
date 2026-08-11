@@ -1029,7 +1029,11 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, MathLib::Mat4::identity()));
     scene.geometries.push_back(bvh);
 
-    RosterLib::Roster roster{directory, program_identifier, 1u};
+    // The ground the bodies stand on is the analytic surface the floor triangles were generated
+    // from: physics collides against the truth rather than against its tessellation.
+    RosterLib::Roster roster{directory, program_identifier, 1u, [](float x, float z) {
+                                 return gridMeshHeight(x, z, GRID_FLOOR_CONFIG);
+                             }};
 
     // Sized from the roster actually rezzed rather than guessed: every eye sample plus every
     // irradiance direction of the hungriest body is what one solve carries.

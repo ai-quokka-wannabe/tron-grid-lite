@@ -52,7 +52,7 @@ extern "C"
     produces exactly the silent memory corruption the number exists to prevent, and produces it
     without failing anywhere.
 */
-#define TGL_ABI_VERSION 1u
+#define TGL_ABI_VERSION 2u
 
 /* ================================================================================================
    Toolchain glue
@@ -315,8 +315,12 @@ typedef struct TglCreatureDesc {
         about the Grid. A bound of zero means the body has no such actuator. */
     float max_forward_speed;
     float max_turn_rate;
-    float max_vertical_speed;
     float max_vocalisation_strength;
+
+    /*! Unused; present so the struct's members account for all of its bytes, which is what the
+        padding assertions below demand. Alignment padding, not a reserved capability: the next
+        four-byte member simply takes this slot. */
+    uint32_t padding0;
 } TglCreatureDesc;
 
 /* ================================================================================================
@@ -477,15 +481,19 @@ typedef struct TglSenses {
     a BVH traversal that does not terminate.
 */
 typedef struct TglActions {
-    /*! Metres per second along -Z. Negative reverses. Clamped to +/- max_forward_speed. */
+    /*! Metres per second along -Z. Negative reverses. Clamped to +/- max_forward_speed. Traction
+        is a fact about contact: the intent moves the body only while it stands on something, and a
+        body in flight keeps the velocity it left the ground with. */
     float desired_forward_speed;
 
     /*! Radians per second about +Y, right-handed, so positive turns to the creature's left seen from
         above. Clamped to +/- max_turn_rate. */
     float desired_turn_rate;
 
-    /*! Metres per second along +Y. Clamped to +/- max_vertical_speed. */
-    float desired_vertical_speed;
+    /*! There is deliberately no vertical intent. Height is physics' business — gravity, the floor
+        and whatever the body ran off — and on a Grid with no water and nothing climbable a vertical
+        actuator clamped to zero for every plausible body was a field the Grid read and nothing
+        could act on. `TglSenses::body_vertical_speed` still reports what gravity is doing. */
 
     /*! Loudness of one call emitted this tick, in the unit TglEarView::energy uses: relative to a
         primary neon tube, whose authored strength is 1.0 by definition. Zero is silent, a negative
@@ -607,9 +615,9 @@ TGL_STATIC_ASSERT(TGL_SUM6(TglEyeDesc, sample_directions, sample_acceptance_angl
 TGL_STATIC_ASSERT(TGL_SUM6(TglEarDesc, band_edges_hz, air_absorption_db_per_km, position, band_count, bin_count, bin_seconds) == sizeof(TglEarDesc),
     "TglEarDesc has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM12(TglCreatureDesc, creature_id, random_seed, eyes, ears, eye_count, ear_count, irradiance_sample_count, max_contact_count, max_forward_speed,
-                      max_turn_rate, max_vertical_speed, max_vocalisation_strength)
+                      max_turn_rate, max_vocalisation_strength, padding0)
         == sizeof(TglCreatureDesc),
-    "TglCreatureDesc has padding: a member changed width.");
+    "TglCreatureDesc has padding beyond its named padding member: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM3(TglEyeView, samples, sample_count, channels) == sizeof(TglEyeView), "TglEyeView has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM3(TglEarView, energy, band_count, bin_count) == sizeof(TglEarView), "TglEarView has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM2(TglContact, position, impulse) == sizeof(TglContact), "TglContact has padding: a member changed width.");
@@ -617,7 +625,7 @@ TGL_STATIC_ASSERT(TGL_SUM14(TglSenses, tick, eyes, ears, contacts, eye_count, ea
                       body_turn_rate, specific_force, angular_velocity, irradiance)
         == sizeof(TglSenses),
     "TglSenses has padding: a member changed width.");
-TGL_STATIC_ASSERT(TGL_SUM4(TglActions, desired_forward_speed, desired_turn_rate, desired_vertical_speed, vocalisation_strength) == sizeof(TglActions),
+TGL_STATIC_ASSERT(TGL_SUM3(TglActions, desired_forward_speed, desired_turn_rate, vocalisation_strength) == sizeof(TglActions),
     "TglActions has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM7(TglProgramVTable, struct_size, abi_version, library_init, program_rez, program_tick, program_derez, library_shutdown)
         == sizeof(TglProgramVTable),
@@ -653,8 +661,8 @@ TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, irradiance_sample_count) == 40u, "Tg
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_contact_count) == 44u, "TglCreatureDesc::max_contact_count must sit at offset 44.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_forward_speed) == 48u, "TglCreatureDesc::max_forward_speed must sit at offset 48.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_turn_rate) == 52u, "TglCreatureDesc::max_turn_rate must sit at offset 52.");
-TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_vertical_speed) == 56u, "TglCreatureDesc::max_vertical_speed must sit at offset 56.");
-TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_vocalisation_strength) == 60u, "TglCreatureDesc::max_vocalisation_strength must sit at offset 60.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_vocalisation_strength) == 56u, "TglCreatureDesc::max_vocalisation_strength must sit at offset 56.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, padding0) == 60u, "TglCreatureDesc::padding0 must sit at offset 60.");
 
 TGL_STATIC_ASSERT(sizeof(TglEyeView) == 16u, "TglEyeView is an array element, so its size is a stride. It must be 16 bytes.");
 TGL_STATIC_ASSERT(offsetof(TglEyeView, samples) == 0u, "TglEyeView::samples must sit at offset 0.");
@@ -686,11 +694,10 @@ TGL_STATIC_ASSERT(offsetof(TglSenses, specific_force) == 60u, "TglSenses::specif
 TGL_STATIC_ASSERT(offsetof(TglSenses, angular_velocity) == 72u, "TglSenses::angular_velocity must sit at offset 72.");
 TGL_STATIC_ASSERT(offsetof(TglSenses, irradiance) == 84u, "TglSenses::irradiance must sit at offset 84.");
 
-TGL_STATIC_ASSERT(sizeof(TglActions) == 16u, "TglActions must be 16 bytes.");
+TGL_STATIC_ASSERT(sizeof(TglActions) == 12u, "TglActions must be 12 bytes.");
 TGL_STATIC_ASSERT(offsetof(TglActions, desired_forward_speed) == 0u, "TglActions::desired_forward_speed must sit at offset 0.");
 TGL_STATIC_ASSERT(offsetof(TglActions, desired_turn_rate) == 4u, "TglActions::desired_turn_rate must sit at offset 4.");
-TGL_STATIC_ASSERT(offsetof(TglActions, desired_vertical_speed) == 8u, "TglActions::desired_vertical_speed must sit at offset 8.");
-TGL_STATIC_ASSERT(offsetof(TglActions, vocalisation_strength) == 12u, "TglActions::vocalisation_strength must sit at offset 12.");
+TGL_STATIC_ASSERT(offsetof(TglActions, vocalisation_strength) == 8u, "TglActions::vocalisation_strength must sit at offset 8.");
 
 TGL_STATIC_ASSERT(sizeof(TglProgramVTable) >= TGL_PROGRAM_VTABLE_MIN_SIZE, "TglProgramVTable must be at least TGL_PROGRAM_VTABLE_MIN_SIZE bytes.");
 TGL_STATIC_ASSERT(offsetof(TglProgramVTable, struct_size) == 0u, "TglProgramVTable::struct_size must be first, for ever.");
