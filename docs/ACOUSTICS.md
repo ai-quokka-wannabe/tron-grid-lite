@@ -842,12 +842,13 @@ along with the rest of the interface. The reasoning behind each member lives in
 [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md) § Hearing; what this document owes them is the acoustics
 underneath, which is everything above.
 
-Two consequences of the model are worth restating where the model is derived. **An ear is a point
-with no axis**, because the gather casts a full spherical set from it and every surface is a perfect
-acoustic mirror, so there is no directivity term for an axis to feed. And **the reference level is the
-primary neon tube**, whose authored strength is 1.0 by definition — not the emitting source's own
-energy, because a bin holds the sum of everything that arrived within it and a sum over 16,640 tubes
-has no single source to be relative to.
+Two consequences of the model are worth deriving where the model is. **An ear is a point with no
+axis**, because the gather casts a full spherical set from it and every surface is a perfect
+acoustic mirror, so there is no directivity term for an axis to feed. And **the reference level —
+defined normatively in the header at `TglEarView::energy` as the primary neon tube, 1.0 by
+definition — cannot be the emitting source's own energy**, because a bin holds the sum of
+everything that arrived within it and a sum over 16,640 tubes has no single source to be relative
+to. This is the derivation of that definition, not a second statement of it.
 
 An `ear_count` of zero is a legitimate body, and is the correct specification for all three insect
 presets. The direction of control is the same as for eyes: **the Grid decides how many ears a body
