@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A creature sees the Grid, and the sensor interface is filled.** The second half of the senses:
+  `senses.slang` answers one radiance question per sample ray — eye samples and irradiance
+  directions in one flat buffer, because both are the same question — through the very `radiance`
+  in `grid_optics` the User's window renders with, so what a creature sees cannot drift from what
+  the User would see standing in the same place. `SensesTracer` owns the pipeline and a synchronous
+  one-shot solve with the same host-visibility barrier the acoustic pass records;
+  `GridSensesSource` builds the rays from the pose, maps channels (three-band verbatim, scalar as
+  the equal-weight intensity), computes irradiance as the mean over the fixed Fibonacci set, and
+  keys the whole visual solve on the pose exactly — a stationary creature re-traces nothing. The
+  seam stays Vulkan-free through a `RadianceSolver` interface, which is what lets the GPU-free
+  tests drive the entire eye path with arithmetic instead of a device. The first body opens two
+  one-sample, one-channel eyes at its head and tail stations and integrates sixty-four sphere
+  samples of warmth. `--verify-senses` holds the pass to a host-computable specification — at one
+  bounce the Whitted walk collapses to the emission of the first hit, and the two sides agree
+  exactly, 512 rays, zero disagreement — and runs in CI beside the other two verification modes.
+  It was watched fail first: with the ray buffer's origin and direction swapped, the device answered
+  zero everywhere and the check said so. The `--program --ticks` run now needs a device (its eyes
+  do) and never a window, and Etape 13's "fill the senses from the tracers that already exist" box
+  is ticked.
+
 - **A creature hears the Grid.** The first traced sense crosses the ABI: the roster gained a senses
   seam — a `SensesSource` the run mode hands in, so the tick loop stays free of Vulkan and of the
   Grid alike — and `GridSensesSource` fills `TglEarView`s from `Acoustics::gather`, the same host

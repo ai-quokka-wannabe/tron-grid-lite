@@ -211,11 +211,13 @@ TEST_CASE(the_senses_source_is_asked_once_per_creature_per_tick)
             ++calls;
             saw_dt = (senses.dt_seconds == RosterLib::TICK_SECONDS);
             saw_ears_declared = (creature.body.ear_count == 2u) && (creature.body.ears != nullptr);
+            saw_eyes_declared = (creature.body.eye_count == 2u) && (creature.body.eyes != nullptr) && (creature.body.irradiance_sample_count == 64u);
         }
 
         uint32_t calls{0u};
         bool saw_dt{false};
         bool saw_ears_declared{false};
+        bool saw_eyes_declared{false};
     };
 
     CountingSource source;
@@ -226,9 +228,10 @@ TEST_CASE(the_senses_source_is_asked_once_per_creature_per_tick)
     TEST_CHECK_EQUAL(source.calls, 6u);
     TEST_CHECK(source.saw_dt);
 
-    // The first body now declares two ears, whose descriptors must survive past the rez call —
-    // the roster's copy carries pointers, and this is where they are proven still valid.
+    // The first body declares two ears and two eyes, whose descriptors must survive past the rez
+    // call — the roster's copy carries pointers, and this is where they are proven still valid.
     TEST_CHECK(source.saw_ears_declared);
+    TEST_CHECK(source.saw_eyes_declared);
 }
 
 // ---------------------------------------------------------------------------------------------

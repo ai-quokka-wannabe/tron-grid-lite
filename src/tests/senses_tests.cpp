@@ -168,7 +168,7 @@ TEST_CASE(a_stationary_creature_hears_bit_identically)
     TEST_CHECK(std::memcmp(first_energy.data(), second.ears[0].energy, sizeof(first_energy)) == 0);
 }
 
-TEST_CASE(a_body_declaring_eyes_is_refused_rather_than_left_unseeing)
+TEST_CASE(a_body_declaring_eyes_is_refused_when_no_solver_is_attached)
 {
     const BvhLib::Scene scene{singingFloorScene()};
     GridSensesSource source{scene, unitStrengths()};
@@ -178,6 +178,117 @@ TEST_CASE(a_body_declaring_eyes_is_refused_rather_than_left_unseeing)
 
     TglSenses senses{};
     TEST_CHECK_THROWS(source.fill(creature, senses));
+}
+
+namespace
+{
+
+    //! Answers every ray from its direction alone, so a test can predict each sample exactly.
+    class FakeSolver final : public RadianceSolver {
+    public:
+        [[nodiscard]] std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t) override
+        {
+            ++calls;
+            std::vector<MathLib::Vec4> out;
+            out.reserve(rays.size() / 2u);
+            for (std::size_t index{0u}; index < rays.size(); index += 2u) {
+                const MathLib::Vec4& direction{rays[index + 1u]};
+                out.push_back(MathLib::Vec4{std::fabs(direction.x), std::fabs(direction.y), std::fabs(direction.z), 0.0f});
+            }
+            return out;
+        }
+
+        uint32_t calls{0u};
+    };
+
+    constexpr std::array<float, 3u> FORWARD_DIRECTION{0.0f, 0.0f, -1.0f};
+    constexpr std::array<float, 3u> RIGHT_DIRECTION{1.0f, 0.0f, 0.0f};
+    constexpr std::array<float, 1u> ONE_ACCEPTANCE{0.5f};
+
+    [[nodiscard]] TglEyeDesc eyeOf(const float* directions, uint32_t sample_count, uint32_t channels)
+    {
+        return TglEyeDesc{
+            .sample_directions = directions,
+            .sample_acceptance_angles = ONE_ACCEPTANCE.data(),
+            .position = {0.0f, 0.1f, -0.2f},
+            .sample_count = sample_count,
+            .channels = channels,
+            .quantisation_bits = 0u,
+        };
+    }
+
+} // namespace
+
+TEST_CASE(eyes_and_irradiance_are_filled_from_the_solver)
+{
+    const BvhLib::Scene scene{singingFloorScene()};
+    FakeSolver solver;
+    GridSensesSource source{scene, unitStrengths(), &solver};
+
+    // One scalar eye looking forward, one three-band eye looking right, and four sphere samples.
+    const std::array<TglEyeDesc, 2u> eyes{eyeOf(FORWARD_DIRECTION.data(), 1u, 1u), eyeOf(RIGHT_DIRECTION.data(), 1u, 3u)};
+
+    RosterLib::Creature creature{hearingCreature(nullptr, 0u)};
+    creature.body.eyes = eyes.data();
+    creature.body.eye_count = 2u;
+    creature.body.irradiance_sample_count = 4u;
+
+    TglSenses senses{};
+    source.fill(creature, senses);
+
+    TEST_CHECK_EQUAL(senses.eye_count, 2u);
+    TEST_CHECK(senses.eyes != nullptr);
+
+    // The scalar eye weights the three bands equally: |0| + |0| + |-1| over three.
+    const TglEyeView& scalar_eye{senses.eyes[0]};
+    TEST_CHECK_EQUAL(scalar_eye.sample_count, 1u);
+    TEST_CHECK_EQUAL(scalar_eye.channels, 1u);
+    TEST_CHECK_EQUAL(reinterpret_cast<uintptr_t>(scalar_eye.samples) % 16u, static_cast<uintptr_t>(0u));
+    TEST_CHECK_CLOSE(scalar_eye.samples[0], 1.0f / 3.0f, 1e-6f);
+
+    // The three-band eye receives the solver's answer verbatim.
+    const TglEyeView& banded_eye{senses.eyes[1]};
+    TEST_CHECK_EQUAL(banded_eye.channels, 3u);
+    TEST_CHECK_CLOSE(banded_eye.samples[0], 1.0f, 1e-6f);
+    TEST_CHECK_CLOSE(banded_eye.samples[1], 0.0f, 1e-6f);
+    TEST_CHECK_CLOSE(banded_eye.samples[2], 0.0f, 1e-6f);
+
+    // Irradiance is the mean over the fixed Fibonacci set of the per-direction intensity.
+    float expected{0.0f};
+    for (uint32_t sample{0u}; sample < 4u; ++sample) {
+        const MathLib::Vec3 direction{Acoustics::fibonacciDirection(sample, 4u)};
+        expected += (std::fabs(direction.x) + std::fabs(direction.y) + std::fabs(direction.z)) / 3.0f;
+    }
+    TEST_CHECK_CLOSE(senses.irradiance, expected / 4.0f, 1e-5f);
+}
+
+TEST_CASE(the_solver_is_asked_once_while_the_pose_holds)
+{
+    /*
+        The keyed skip, from the outside: a stationary creature's vision is a pure function of a
+        pose that has not changed, so the second fill must reuse the first solve — and a moved
+        creature must not.
+    */
+    const BvhLib::Scene scene{singingFloorScene()};
+    FakeSolver solver;
+    GridSensesSource source{scene, unitStrengths(), &solver};
+
+    const std::array<TglEyeDesc, 1u> eyes{eyeOf(FORWARD_DIRECTION.data(), 1u, 1u)};
+
+    RosterLib::Creature creature{hearingCreature(nullptr, 0u)};
+    creature.body.eyes = eyes.data();
+    creature.body.eye_count = 1u;
+
+    TglSenses first{};
+    source.fill(creature, first);
+    TglSenses second{};
+    source.fill(creature, second);
+    TEST_CHECK_EQUAL(solver.calls, 1u);
+
+    creature.pose.yaw = 0.5f;
+    TglSenses third{};
+    source.fill(creature, third);
+    TEST_CHECK_EQUAL(solver.calls, 2u);
 }
 
 TEST_CASE(an_ear_asking_for_a_shape_the_gather_does_not_produce_is_refused)

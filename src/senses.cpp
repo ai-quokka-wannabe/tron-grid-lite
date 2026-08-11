@@ -19,13 +19,14 @@
 #include <string>
 #include <utility>
 
-GridSensesSource::GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths) :
+GridSensesSource::GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, RadianceSolver* radiance_solver) :
     m_scene(scene),
-    m_source_strengths(std::move(source_strengths))
+    m_source_strengths(std::move(source_strengths)),
+    m_radiance_solver(radiance_solver)
 {
 }
 
-GridSensesSource::CreatureEars& GridSensesSource::stateFor(uint64_t creature_id, uint32_t ear_count)
+GridSensesSource::CreatureEars& GridSensesSource::earStateFor(uint64_t creature_id, uint32_t ear_count)
 {
     for (CreatureEars& state : m_ear_states) {
         if (state.creature_id == creature_id) {
@@ -41,21 +42,48 @@ GridSensesSource::CreatureEars& GridSensesSource::stateFor(uint64_t creature_id,
     return m_ear_states.back();
 }
 
+GridSensesSource::CreatureVision& GridSensesSource::visionStateFor(const TglCreatureDesc& body)
+{
+    for (CreatureVision& state : m_vision_states) {
+        if (state.creature_id == body.creature_id) {
+            return state;
+        }
+    }
+
+    CreatureVision state{};
+    state.creature_id = body.creature_id;
+    state.eye_samples.resize(body.eye_count);
+    for (uint32_t eye{0u}; eye < body.eye_count; ++eye) {
+        const TglEyeDesc& desc{body.eyes[eye]};
+        const uint32_t floats{desc.sample_count * desc.channels};
+        state.eye_samples[eye].resize((floats + 3u) / 4u);
+    }
+    m_vision_states.push_back(std::move(state));
+    return m_vision_states.back();
+}
+
 void GridSensesSource::fill(const RosterLib::Creature& creature, TglSenses& senses)
 {
     const TglCreatureDesc& body{creature.body};
 
-    if (body.eye_count != 0u || body.irradiance_sample_count != 0u) {
+    if ((body.eye_count != 0u || body.irradiance_sample_count != 0u) && (m_radiance_solver == nullptr)) {
         // Refused loudly rather than silently unseeing: a Program would receive zeroed vision and
         // have no way to tell a dark Grid from an unbuilt sense.
-        throw std::runtime_error{"Eyes and irradiance are not filled yet; this body declares senses the Grid cannot yet answer."};
+        throw std::runtime_error{"This body declares eyes or irradiance and no radiance solver is attached."};
     }
 
+    fillEars(creature, senses);
+    fillVision(creature, senses);
+}
+
+void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& senses)
+{
+    const TglCreatureDesc& body{creature.body};
     if (body.ear_count == 0u) {
         return;
     }
 
-    CreatureEars& state{stateFor(body.creature_id, body.ear_count)};
+    CreatureEars& state{earStateFor(body.creature_id, body.ear_count)};
     m_ear_views.resize(body.ear_count);
 
     for (uint32_t index{0u}; index < body.ear_count; ++index) {
@@ -98,4 +126,109 @@ void GridSensesSource::fill(const RosterLib::Creature& creature, TglSenses& sens
 
     senses.ears = m_ear_views.data();
     senses.ear_count = body.ear_count;
+}
+
+void GridSensesSource::fillVision(const RosterLib::Creature& creature, TglSenses& senses)
+{
+    const TglCreatureDesc& body{creature.body};
+    if ((body.eye_count == 0u) && (body.irradiance_sample_count == 0u)) {
+        return;
+    }
+
+    CreatureVision& state{visionStateFor(body)};
+
+    const bool pose_changed{(!state.solved) || (!(state.position == creature.pose.position)) || (state.yaw != creature.pose.yaw)};
+    if (pose_changed) {
+        /*
+            One flat batch for everything this creature sees: eye samples first, in eye order and
+            sample order, then the irradiance directions. The solver neither knows nor cares which
+            is which, because both are the same question.
+        */
+        size_t ray_total{static_cast<size_t>(body.irradiance_sample_count)};
+        for (uint32_t eye{0u}; eye < body.eye_count; ++eye) {
+            ray_total += body.eyes[eye].sample_count;
+        }
+
+        std::vector<MathLib::Vec4> rays;
+        rays.reserve(2u * ray_total);
+
+        for (uint32_t eye{0u}; eye < body.eye_count; ++eye) {
+            const TglEyeDesc& desc{body.eyes[eye]};
+
+            if ((desc.channels != 1u) && (desc.channels != 3u)) {
+                // A channel weighting beyond a scalar and the renderer's own three bands belongs to
+                // a preset body that does not exist yet, and would be filled with invented numbers.
+                throw std::runtime_error{"Eye " + std::to_string(eye) + " asks for " + std::to_string(desc.channels) + " channels; the Grid answers 1 or 3."};
+            }
+            if (desc.sample_count == 0u) {
+                throw std::runtime_error{"Eye " + std::to_string(eye) + " declares no samples; an eye that cannot see is not an eye."};
+            }
+
+            const MathLib::Vec3 origin{RosterLib::worldFromBody(creature.pose, MathLib::Vec3{desc.position[0], desc.position[1], desc.position[2]})};
+            for (uint32_t sample{0u}; sample < desc.sample_count; ++sample) {
+                const MathLib::Vec3 body_direction{
+                    desc.sample_directions[(sample * 3u) + 0u], desc.sample_directions[(sample * 3u) + 1u], desc.sample_directions[(sample * 3u) + 2u]};
+                rays.push_back(MathLib::Vec4::fromVec3(origin, 0.0f));
+                rays.push_back(MathLib::Vec4::fromVec3(RosterLib::worldDirectionFromBody(creature.pose, body_direction), 0.0f));
+            }
+        }
+
+        /*
+            Irradiance directions are the fixed spherical Fibonacci set in world space, exactly as
+            the ABI documents — deliberately not rotated with the body, since a sphere integral has
+            no facing.
+        */
+        const MathLib::Vec3 centre{RosterLib::worldFromBody(creature.pose, MathLib::Vec3{0.0f, 0.0f, 0.0f})};
+        for (uint32_t sample{0u}; sample < body.irradiance_sample_count; ++sample) {
+            rays.push_back(MathLib::Vec4::fromVec3(centre, 0.0f));
+            rays.push_back(MathLib::Vec4::fromVec3(Acoustics::fibonacciDirection(sample, body.irradiance_sample_count), 0.0f));
+        }
+
+        const std::vector<MathLib::Vec4> radiance{m_radiance_solver->solve(rays, SENSES_MAX_BOUNCES)};
+
+        size_t next{0u};
+        for (uint32_t eye{0u}; eye < body.eye_count; ++eye) {
+            const TglEyeDesc& desc{body.eyes[eye]};
+            float* const samples{state.eye_samples[eye].front().v};
+
+            for (uint32_t sample{0u}; sample < desc.sample_count; ++sample) {
+                const MathLib::Vec4& answer{radiance[next]};
+                ++next;
+
+                if (desc.channels == 3u) {
+                    samples[(sample * 3u) + 0u] = answer.x;
+                    samples[(sample * 3u) + 1u] = answer.y;
+                    samples[(sample * 3u) + 2u] = answer.z;
+                } else {
+                    // A scalar photoreceptor weights the renderer's three bands equally: intensity,
+                    // with no colour opinion the body's descriptor did not state.
+                    samples[sample] = (answer.x + answer.y + answer.z) / 3.0f;
+                }
+            }
+        }
+
+        float irradiance_total{0.0f};
+        for (uint32_t sample{0u}; sample < body.irradiance_sample_count; ++sample) {
+            const MathLib::Vec4& answer{radiance[next]};
+            ++next;
+            irradiance_total += (answer.x + answer.y + answer.z) / 3.0f;
+        }
+        state.irradiance = (body.irradiance_sample_count == 0u) ? 0.0f : (irradiance_total / static_cast<float>(body.irradiance_sample_count));
+
+        state.position = creature.pose.position;
+        state.yaw = creature.pose.yaw;
+        state.solved = true;
+    }
+
+    if (body.eye_count != 0u) {
+        m_eye_views.resize(body.eye_count);
+        for (uint32_t eye{0u}; eye < body.eye_count; ++eye) {
+            const TglEyeDesc& desc{body.eyes[eye]};
+            m_eye_views[eye] = TglEyeView{.samples = state.eye_samples[eye].front().v, .sample_count = desc.sample_count, .channels = desc.channels};
+        }
+        senses.eyes = m_eye_views.data();
+        senses.eye_count = body.eye_count;
+    }
+
+    senses.irradiance = state.irradiance;
 }

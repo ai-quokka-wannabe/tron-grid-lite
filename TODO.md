@@ -324,7 +324,7 @@ sensor interface plugs in, and physics is what makes the senses stop being const
 - [x] `--list-programs` — what is installed, and which of it would load
 - [x] Publish the ABI layout as data, so a binding in any language can check itself
 - [x] One body with no physics — a transform that changes between ticks
-- [ ] Fill the senses from the tracers that already exist
+- [x] Fill the senses from the tracers that already exist
 - [ ] Physics: gravity, contacts, friction
 - [ ] A remote-operated demo Program with its own telemetry GUI
 
@@ -418,9 +418,9 @@ to be a GPU**, which closes most of this etape and leaves one item behind.
       `ubuntu-latest`, so the mechanism exists before the subsystem does. It would be the first
       determinism check here that fires without being remembered.
 - [x] Lavapipe as a CI device. It satisfies everything this renderer asks for — Vulkan 1.3, dynamic
-      rendering, synchronisation2, a graphics family that dispatches compute — and answers both
-      comparisons in about a second each. `--verify-acoustics` and `--verify-scene` now run on every
-      push and gate the success job.
+      rendering, synchronisation2, a graphics family that dispatches compute — and answers each
+      comparison in about a second. `--verify-acoustics`, `--verify-scene` and `--verify-senses` now
+      run on every push and gate the success job.
 
 **The recorded render is deliberately not part of that job**, and the reason is worth keeping.
 Lavapipe renders reproducibly — the twelve-frame recipe gives the same digest twice running, in one
