@@ -1,5 +1,18 @@
 # TronGrid Lite
 
+**Greetings, Programs!**
+
+> The Grid. A digital frontier. I tried to picture clusters of information as they moved through
+> the computer. What did they look like? Ships? Motorcycles? Were the circuits like freeways? I
+> kept dreaming of a world I thought I'd never see. And then, one day... I got in.
+>
+> — Kevin Flynn, *Tron: Legacy*
+
+The aim of this project is to make Flynn's grand vision become reality: a cyberworld of glass
+and neon, populated by real, thinking AI creatures — the digital frontier built not as a film
+set but as a running system. He kept dreaming of a world he thought he'd never see; we are
+building it one honest subsystem at a time.
+
 A deliberately simple Vulkan renderer for the Tron aesthetic — clean geometry, emissive
 materials, perfectly reflective surfaces, neon glow against infinite black.
 

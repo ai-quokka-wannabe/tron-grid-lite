@@ -9,6 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`docs/TOPOLOGY.md`: the Grid becomes a world — the role-delegation blueprint for the
+  three-process architecture.** One authoritative, deviceless world server — **Master Control**,
+  capitalised as the being it is, `master-control` naming only its eventual repository — with
+  TronGrid Lite as a pure client in two roles — a
+  headless creature host computing its one creature's senses beside its one Program DLL, and a
+  spectator with a window, speakers and a free-flight camera — and the User only ever visiting.
+  Every delegation in the document is justified by a named industry practice or a named disaster
+  it avoids, distilled from a five-brief audit of shipped-MMO engineering (server authority and
+  the client-trust failure canon; transport and replication practice from Quake 3 to Minecraft;
+  spectator and networked-audio architecture; and the programmable-creature lineage from Core
+  War through .NET Terrarium to Screeps) archived as research briefs 11–15 beside the earlier
+  ones. The audit's headline: the existing lifecycle is already more orthodox than several
+  shipped MMOs — staged actions are the 1500-Archers command-turn at a one-tick horizon, so a
+  LAN round trip hides inside semantics the ABI has documented since physics landed; zeroed
+  actions already define packet loss as coasting; and the twelve-byte action uplink is an
+  EVE-ESI-grade read/write asymmetry. The blueprint fixes the v1 protocol (TCP with NODELAY,
+  tick-stamped latest-wins messages, fingerprint handshake refusal, full-snapshot broadcast,
+  length-validated framing gold-plated on day one, dual state-and-input logs with a periodic
+  state hash — Etape 16 promoted to the world), scopes the replay claim honestly (the world
+  replays; the minds do not), writes the tick-overrun sentence before it is needed (dt is
+  sacred; the wall clock is the degree of freedom), states the sense-integrity trust stance
+  verbatim with its revisit triggers, and defers the entire internet-security tier behind one
+  trigger: the first connection that is not 127.0.0.1. The four remaining calls were delegated
+  by the owner and taken in the grand vision's favour: authority confirmed, TCP first with the
+  UDP triggers standing, the world roster dynamic from day one — a world that must restart to
+  admit a newcomer is a session, and the Grid is not a session — and the defer list blessed as
+  written. The README also now opens the only way this project could: **Greetings, Programs!**
+
 - **The risers stand vertical, and a creature can range a wall with its own voice.** The drawn
   floor stopped being a corner-sampled heightfield: every cell now stands flat at the level of its
   own centre, joined by genuinely vertical walls wherever neighbours differ — 655 of them on the
