@@ -328,15 +328,24 @@ boundary the network slides into; the world-definition constants must leave `mai
 anonymous namespace for any second consumer to exist; and `src/` finally has the second consumer
 that justifies the library target its own test files have been working around.
 
-## Decisions the owner has not yet taken
+## The four decisions, taken
 
-Recorded in the Etape 13 manner — settled conditionally, awaiting the word:
+The owner delegated these four calls to the implementation (2026-08-11) with one standing
+instruction — follow the grand vision — and the grand vision is what each answer serves: a
+persistent world of AI creatures that strangers' machines eventually join, watched by humans who
+only ever visit.
 
-1. **Authority model** — server owns physics and truth, clients own perception, as this whole
-   document assumes. The audit endorses it unanimously; it awaits explicit confirmation.
-2. **TCP-first transport** — recommended above with the UDP trigger written; awaiting the word.
-3. **Dynamic world roster** — hosts joining and leaving a running world (a stage-rebuild moment
-   per join), versus a v1 whose world roster is fixed when the server starts and late arrivals
-   may only spectate. The audit mildly favours dynamic-from-day-one because late-join is not a
-   special case in the protocol; the simpler v1 is also defensible.
-4. **The defer list** — the table above, blessed or amended.
+1. **Authority model: confirmed as written.** Master Control owns physics and truth; clients own
+   perception. A world many hosts share has exactly one way to stay one world, and every surveyed
+   alternative is a named disaster above.
+2. **Transport: TCP first**, with the UDP triggers as written. The vision needs the protocol's
+   *semantics* to be datagram-shaped — tick-stamped, latest-wins, self-contained — and they are;
+   the socket underneath is swappable the day a measurement demands it.
+3. **World roster: dynamic from day one.** Hosts join and leave a running world; a join is a
+   `REZ` broadcast and a stage rebuild, a leave is a `DEREZ`, and late arrival is not a special
+   case because the protocol never made it one. This is the call the vision decides outright: a
+   world that must be restarted to admit a newcomer is a session, and the Grid is not a session.
+4. **The defer list: blessed as written.** Every deferral above keeps its trigger, and the
+   triggers are the vision's own milestones — the first foreign connection, the first stranger's
+   host, the first competitive stake — so deferring now and building at the trigger *is* the
+   convergence path, not a detour from it.

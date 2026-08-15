@@ -31,7 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   replays; the minds do not), writes the tick-overrun sentence before it is needed (dt is
   sacred; the wall clock is the degree of freedom), states the sense-integrity trust stance
   verbatim with its revisit triggers, and defers the entire internet-security tier behind one
-  trigger: the first connection that is not 127.0.0.1.
+  trigger: the first connection that is not 127.0.0.1. The four remaining calls were delegated
+  by the owner and taken in the grand vision's favour: authority confirmed, TCP first with the
+  UDP triggers standing, the world roster dynamic from day one — a world that must restart to
+  admit a newcomer is a session, and the Grid is not a session — and the defer list blessed as
+  written. The README also now opens the only way this project could: **Greetings, Programs!**
 
 - **The risers stand vertical, and a creature can range a wall with its own voice.** The drawn
   floor stopped being a corner-sampled heightfield: every cell now stands flat at the level of its

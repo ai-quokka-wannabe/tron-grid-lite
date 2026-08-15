@@ -1,5 +1,7 @@
 # TronGrid Lite
 
+**Greetings, Programs!**
+
 A deliberately simple Vulkan renderer for the Tron aesthetic — clean geometry, emissive
 materials, perfectly reflective surfaces, neon glow against infinite black.
 
