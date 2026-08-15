@@ -10,8 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`docs/TOPOLOGY.md`: the Grid becomes a world — the role-delegation blueprint for the
-  three-process architecture.** One authoritative, deviceless world server (`master-control`,
-  its own repository when the time comes), TronGrid Lite as a pure client in two roles — a
+  three-process architecture.** One authoritative, deviceless world server — **Master Control**,
+  capitalised as the being it is, `master-control` naming only its eventual repository — with
+  TronGrid Lite as a pure client in two roles — a
   headless creature host computing its one creature's senses beside its one Program DLL, and a
   spectator with a window, speakers and a free-flight camera — and the User only ever visiting.
   Every delegation in the document is justified by a named industry practice or a named disaster

@@ -12,7 +12,7 @@ lineage from Core War through Screeps — archived as research briefs 11 to 15 i
 records for earlier research. This file carries the conclusions; the briefs carry the citations in
 full.
 
-Everything below currently lives, and is built, in this repository. The world server will
+Everything below currently lives, and is built, in this repository. Master Control will
 eventually move to its own repository (`master-control`), and pieces of this one will follow their
 owners out; until that day this repository is the single home, and extraction is a decision
 recorded in [The three repositories](#the-three-repositories) rather than a prerequisite.
@@ -24,7 +24,7 @@ recorded in [The three repositories](#the-three-repositories) rather than a prer
 Three operating-system processes and one loaded library, all on one machine for now:
 
 ```text
-                       master-control
+                       Master Control
                 (the world server; pure cmd,
                  deviceless, authoritative)
                      /              \
@@ -40,6 +40,10 @@ Three operating-system processes and one loaded library, all on one machine for 
                                GUI for control and
                                senses telemetry)
 ```
+
+The world server is **Master Control** — capitalised as the being it is on the Grid, exactly as
+Program and User are; `master-control` in lower case names only its repository. The film's tyrant,
+redeemed by good engineering: it holds authority so that every Program's world is fair.
 
 The User floats through the Grid with a window and speakers and owes the world nothing. The
 creature host is a senses-and-brain terminal with no window at all. The server is the world. A
@@ -82,14 +86,14 @@ so the long-term lever is sending less, not hiding better.
 
 | Responsibility | Block | Why — the practice or the disaster |
 |---|---|---|
-| Physics, contacts, ground truth | master-control | The authoritative-server doctrine (Sweeney, Koster); every client-physics failure surveyed (Fall Guys, The Division) |
-| Poses, velocities, actuators of record | master-control | Exclusive write access per entity (the SpatialOS formalisation) |
-| The tick counter, as u64 | master-control | Sim time derived as `tick × dt`, never float-accumulated; the tick-indexed log is the replay |
-| Action validation (sanitise, clamp, dedupe by tick, sender-owns-creature) | master-control | The host's copy is convenience; the server's copy is the law. Battlecode's meter exploits show the validator itself needs adversarial tests |
-| The RNG of record | master-control | Synchronised seeds were mandatory even in 1500 Archers; client entropy never enters the world |
-| The action log and the state log | master-control | StarCraft/Factorio (input replay) and Overwatch/SourceTV (state-stream replay) — both, because inputs pin the binary while state survives version drift |
-| Tick pacing against the wall clock | master-control | dt is sacred; the wall clock is the degree of freedom. On overrun, later ticks run late — simulation time never stretches (EVE dilates, Minecraft skips, Screeps floats; all chose "never bend dt") |
-| Session join/leave, rez-time model intake and re-validation | master-control | `copyValidatedModel`'s logic runs where the roster-of-record lives; a model blob is the one variable-size client input — the Dark Souls III RCE shape — so its caps and index checks are server-side law |
+| Physics, contacts, ground truth | Master Control | The authoritative-server doctrine (Sweeney, Koster); every client-physics failure surveyed (Fall Guys, The Division) |
+| Poses, velocities, actuators of record | Master Control | Exclusive write access per entity (the SpatialOS formalisation) |
+| The tick counter, as u64 | Master Control | Sim time derived as `tick × dt`, never float-accumulated; the tick-indexed log is the replay |
+| Action validation (sanitise, clamp, dedupe by tick, sender-owns-creature) | Master Control | The host's copy is convenience; the server's copy is the law. Battlecode's meter exploits show the validator itself needs adversarial tests |
+| The RNG of record | Master Control | Synchronised seeds were mandatory even in 1500 Archers; client entropy never enters the world |
+| The action log and the state log | Master Control | StarCraft/Factorio (input replay) and Overwatch/SourceTV (state-stream replay) — both, because inputs pin the binary while state survives version drift |
+| Tick pacing against the wall clock | Master Control | dt is sacred; the wall clock is the degree of freedom. On overrun, later ticks run late — simulation time never stretches (EVE dilates, Minecraft skips, Screeps floats; all chose "never bend dt") |
+| Session join/leave, rez-time model intake and re-validation | Master Control | `copyValidatedModel`'s logic runs where the roster-of-record lives; a model blob is the one variable-size client input — the Dark Souls III RCE shape — so its caps and index checks are server-side law |
 | GPU sense rendering (eyes, irradiance) | creature host | The hardware is there; senses are advisory input to the local brain, never reported upstream as fact |
 | Acoustic sense synthesis (ears, calls) | creature host | Host-side today by the same delegation — with the deviation honestly recorded below |
 | Calling `program_tick`; the DLL's whole lifecycle | creature host | One DLL per process (the existing `ProgramLib` guard becomes the process boundary); BWAPI's entire competitive history ran brains in-process on the operator's own machine |
@@ -105,7 +109,7 @@ so the long-term lever is sending less, not hiding better.
 The existing lifecycle survives networking almost untouched, because its two properties were
 accidentally network-shaped from the start:
 
-1. **master-control** steps physics for the whole roster from the actions staged last tick
+1. **Master Control** steps physics for the whole roster from the actions staged last tick
    (`stepBody` is already a free function of a creature and the ground), then broadcasts
    `TICK_STATE`: every creature's pose, velocity and actuators, tick-stamped.
 2. **Every client** receives the settled world — the network delivering exactly what
@@ -114,7 +118,7 @@ accidentally network-shaped from the start:
 3. **The creature host** updates its stage, renders its creature's senses from authoritative
    tick-N state (never interpolated — a brain fed fabricated poses is the divergence class the
    audit warns about), calls `program_tick`, and sends `ACTIONS` tagged for tick N+1.
-4. **master-control** accepts the latest actions with tick ≤ N+1 as it steps; anything arriving
+4. **Master Control** accepts the latest actions with tick ≤ N+1 as it steps; anything arriving
    later is discarded. A missing action means the creature coasts — which is not a networking
    policy but the ABI's existing sentence: a Program that writes nothing coasts.
 
