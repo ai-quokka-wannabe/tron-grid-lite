@@ -2,6 +2,11 @@
 
 **Greetings, Programs!**
 
+The aim of this project is to make Flynn's grand vision become reality: a cyberworld of glass
+and neon, populated by real, thinking AI creatures — the digital frontier built not as a film
+set but as a running system. He kept dreaming of a world he thought he'd never see; we are
+building it one honest subsystem at a time.
+
 A deliberately simple Vulkan renderer for the Tron aesthetic — clean geometry, emissive
 materials, perfectly reflective surfaces, neon glow against infinite black.
 
