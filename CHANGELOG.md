@@ -391,6 +391,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The docs now know the world grew: coherence across the constellation.** The README's
+  vocabulary table gains **Master Control** and **the wire**; a **The Four Repositories** section
+  — the same heading every sibling README now carries — places the flagship among
+  `master-control`, `link` and `rc-worm` and points at TOPOLOGY.md rather than copying it;
+  TOPOLOGY.md itself joins the Documentation table it was missing from; STYLE.md § Tron Naming
+  rules on Master Control's capitalisation the way it already ruled on Program and User, and
+  rules out *MCP*; and the roadmap now says what comes after Phase 6 by pointing at the
+  blueprint. The same pass gave link its README and TODO, and master-control its first
+  documentation — each repository pointing at the one authority rather than growing a copy of it.
+
 - **The protocol library's home is the `link` repository, not a future `libs/` sibling here.**
   The owner's call, taken with the wire's shape: Rust behind a plain C ABI, `std` only with zero
   third-party crates, one `cdylib` that Master Control and every TronGrid Lite instance load as
