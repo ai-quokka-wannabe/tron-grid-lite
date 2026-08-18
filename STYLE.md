@@ -574,8 +574,8 @@ npx markdownlint-cli2 "**/*.md"
 
 ## Tron Naming
 
-The Grid, the Programs that live on it and the User who watches it are named by a settled
-vocabulary. Recorded here are only the rulings that a future reviewer, spell-checker or linter would
+The Grid, the Programs that live on it, the User who watches it and Master Control that will
+govern the world are named by a settled vocabulary. Recorded here are only the rulings that a future reviewer, spell-checker or linter would
 otherwise "correct" into something wrong.
 
 **The governing principle, which decides the cases not listed:** Tron words name events on the Grid;
@@ -584,8 +584,9 @@ happen on the Grid. `library_init` and `library_shutdown` are `LoadLibrary`/`dlo
 `FreeLibrary`/`dlclose` — facts about Windows and Linux rather than about the Grid — and keep their
 plain names.
 
-**Capitalisation:** *Program* and *User* are capitalised when they are the Tron terms, because they
-name kinds of being in this world. They are lowercase when they are ordinary English:
+**Capitalisation:** *Program*, *User* and *Master Control* are capitalised when they are the Tron
+terms, because they name kinds of being in this world. They are lowercase when they are ordinary
+English:
 
 | Text | Reading |
 |------|---------|
@@ -594,8 +595,10 @@ name kinds of being in this world. They are lowercase when they are ordinary Eng
 | a Program is rezzed onto the Grid | The Tron term |
 | the user runs `tools/record_flyby.py` | Whoever is at the keyboard |
 | the User watches through the window | The Tron term |
+| Master Control validates every staged action | The Tron term — the world server as a being |
+| `master-control` names the server's repository | The repository name — lowercase, hyphenated |
 
-Three rulings, so that nothing corrects them back:
+Four rulings, so that nothing corrects them back:
 
 1. Tron's *Program* is a proper noun and keeps the American single-m spelling. British *programme*
    is a different word and stays British. Both appear in this repository legitimately, and neither
@@ -606,6 +609,10 @@ Three rulings, so that nothing corrects them back:
    "de-resolution" is not used in prose here. "Resolution" is used throughout these documents in the
    pixel sense, and in a ray tracer a reader who half-recognises the word would read "rez" as a
    resolution setting.
+4. *Master Control* is the being and takes both capitals; `master-control`, lowercase and
+   hyphenated, names only its repository. The film's Master Control Program contracts to
+   *Master Control* in prose here and never to *MCP* — an initialism that today reads as an
+   unrelated protocol's name before it reads as the tyrant's.
 
 ---
 

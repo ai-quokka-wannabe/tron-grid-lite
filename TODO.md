@@ -16,6 +16,10 @@ when satisfied; a finished etape collapses to one line, because what it *decided
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | **Done** |
 | 6     | Programs                      | Creature sensor interface plugs in | Pending |
 
+What comes after Phase 6 — Master Control's heartbeat, the wire, the spectator — is blueprinted in
+[docs/TOPOLOGY.md](docs/TOPOLOGY.md) and staged in the `master-control` and `link` repositories'
+own TODO files: the world grows here first, per the extraction order recorded there.
+
 ## Completed etapes
 
 Eleven etapes, all boxes ticked. They are collapsed to one line each because a finished checklist is

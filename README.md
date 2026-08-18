@@ -61,6 +61,8 @@ through the API — but you are missing out.
 | senses | What a creature perceives during a tick |
 | actions | What a Program asks its creature's body to do |
 | rez / derez | A Program arriving on the Grid, and leaving it |
+| Master Control | The world server — the one authority every running instance of the Grid will answer to. Blueprint today: [docs/TOPOLOGY.md](docs/TOPOLOGY.md) |
+| the wire | The protocol between Master Control and the Grid's instances — [the link repository](https://github.com/ai-quokka-wannabe/link) |
 
 ## Status
 
@@ -74,6 +76,17 @@ against delay — at an ear. One Grid, two senses, one traversal.
 
 What remains is Phase 6: the interface a Program plugs into, so that something can finally perceive
 any of it.
+
+## The Four Repositories
+
+The Grid is one repository of four. This one is the flagship — the renderer, the senses, both
+client roles, and the ground where every subsystem grows before it moves out.
+[master-control](https://github.com/ai-quokka-wannabe/master-control) is the world server the
+blueprint builds towards; [the link repository](https://github.com/ai-quokka-wannabe/link) is the
+wire — the protocol library the server and every client load as the same shared binary; and
+[rc-worm](https://github.com/ai-quokka-wannabe/rc-worm) is the first Program. Who owns what, and
+why every delegation is the way it is, lives in [docs/TOPOLOGY.md](docs/TOPOLOGY.md) — one table,
+kept in one place, pointed at from everywhere.
 
 ## Choosing a GPU
 
@@ -273,6 +286,7 @@ tracing, 1980 edition, running in compute.
 | [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
 | [docs/ACOUSTICS.md](docs/ACOUSTICS.md) | How hearing works on the Grid, and the decisions behind it |
 | [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md) | The plugin contract between the Grid and a Program |
+| [docs/TOPOLOGY.md](docs/TOPOLOGY.md) | How the Grid becomes a world: the four repositories, the three processes and the wire, on audited MMO practice |
 | [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | What research labs build in this area, and what is genuinely unusual here |
 | [docs/research/](docs/research/) | Literature surveys and citations that design decisions rest on |
 | [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) | Setting up a development environment |
