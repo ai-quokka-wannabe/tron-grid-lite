@@ -12,10 +12,12 @@ lineage from Core War through Screeps — archived as research briefs 11 to 15 i
 records for earlier research. This file carries the conclusions; the briefs carry the citations in
 full.
 
-Everything below currently lives, and is built, in this repository. Master Control will
-eventually move to its own repository (`master-control`), and pieces of this one will follow their
-owners out; until that day this repository is the single home, and extraction is a decision
-recorded in [The three repositories](#the-three-repositories) rather than a prerequisite.
+Everything below lives, and is built, in this repository, with one exception: the protocol
+library grows in its own repository (`link`), because the wire between two repositories should
+live in neither. Master Control will eventually move to its own repository (`master-control`),
+and pieces of this one will follow their owners out; until that day this repository is the single
+home of everything else, and extraction is a decision recorded in
+[The four repositories](#the-four-repositories) rather than a prerequisite.
 
 ---
 
@@ -314,13 +316,23 @@ The claims survive networking and come out sharper, provided they are stated pre
 | Audio beyond parametric pings (HRTF, Doppler, occlusion) | The spectator's ears caring, which is a taste decision, not a measurement |
 | WebAssembly brain tier, out-of-process DLL runner | The first community brain from outside the circle of trust |
 
-## The three repositories
+## The four repositories
 
 | Repository | Eventually owns | Today |
 |---|---|---|
-| **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Cloned, empty. Receives no commits until the owner says so |
-| **tron-grid-lite** | The client in both roles, the senses, the renderer, the protocol library, the shared world-definition and physics code the server consumes | Everything, including the server's future flesh — this document, the protocol, and the split seams all land here first |
-| **rc-worm** | The first brain: the DLL, its Qt telemetry GUI, eventually the Blender body | Cloned, parked at the owner's word |
+| **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Created; settings mirrored from this repository. Receives no commits until the owner says so |
+| **link** | The wire: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary — Rust behind a plain C ABI, `std` only, zero third-party crates | Created; settings mirrored; scaffolded. The wire contract is its first etape |
+| **tron-grid-lite** | The client in both roles, the senses, the renderer, the shared world-definition and physics code the server consumes | Everything else, including the server's future flesh — this document and the split seams land here first |
+| **rc-worm** | The first brain: the DLL, its Qt telemetry GUI, eventually the Blender body | Cloned, parked until master-control and link have solid foundations |
+
+The protocol went to its own repository for three reasons with names. The parser is the attack
+surface — the Dark Souls III remote-code execution and the CS:GO pre-auth overflows were
+memory-safety bugs in C++ packet parsers, which is why the one component that eats hostile bytes
+is the organisation's one memory-safe-language component. One implementation loaded by both ends
+cannot drift — the duplicated-fact doctrine applied at repository scale, the same reasoning
+`static_assert` applies at header scale. And a contract between two parties should live with
+neither party — the Program ABI already established that shape inside this repository, and the
+wire is the same kind of thing between repositories.
 
 The audit's codebase brief (research-archive brief 11) maps the split seam by seam: `stepBody` is
 already a free function of a creature and the ground; `beginTick` is already the settled-roster
