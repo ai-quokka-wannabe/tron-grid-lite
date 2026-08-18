@@ -391,6 +391,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The protocol library's home is the `link` repository, not a future `libs/` sibling here.**
+  The owner's call, taken with the wire's shape: Rust behind a plain C ABI, `std` only with zero
+  third-party crates, one `cdylib` that Master Control and every TronGrid Lite instance load as
+  the same binary. The reasons carry names — the parser is the attack surface the audit warned
+  about (the Dark Souls III and CS:GO parser holes were memory-safety bugs in exactly this code),
+  one implementation loaded by both ends cannot drift, and a contract between two repositories
+  should live in neither, as the Program ABI already demonstrates inside this one. TOPOLOGY.md's
+  repository table now records four repositories, and the new one was born with this repository's
+  settings mirrored onto it, ruleset for ruleset, before any content landed.
+
 - **The Program ABI's C standard is C17, the one complementary to C++20 — and nothing older.**
   C17 — ISO/IEC 9899:2018, also written C18 — is the C standard C++20 itself names as its library
   baseline, so the Grid's side and a C Program's side now quote one era of the language rather
