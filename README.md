@@ -98,8 +98,8 @@ discrete device.
 
 ```text
 Vulkan devices on this machine: 2.
-  [0] AMD Radeon(TM) Graphics — integrated, Vulkan 1.3.260 — USABLE, score 1000. Run with --gpu 0.
-  [1] NVIDIA GeForce GTX 1650 Ti — discrete, Vulkan 1.4.341 — USABLE, score 10000. Run with --gpu 1.
+  [0] Intel(R) RaptorLake-S Mobile Graphics Controller — integrated, Vulkan 1.4.323 — USABLE, score 1000. Run with --gpu 0.
+  [1] NVIDIA GeForce RTX 4090 Laptop GPU — discrete, Vulkan 1.4.341 — USABLE, score 10000. Run with --gpu 1.
 ```
 
 Both of those are exercised on every change worth the name. **Pixels are bit-identical on one
@@ -128,10 +128,10 @@ Grid would accept:
 
 ```text
 Programs in .../programs: 3.
-  quokka - USABLE, ABI version 1, vtable 48 bytes. Run with --program quokka.
-  worm-v2 - USABLE, ABI version 1, vtable 48 bytes. Run with --program worm-v2.
-  old-worm - UNUSABLE. Program "old-worm": was built against ABI version 2 and this Grid speaks
-             version 1. Rebuild the Program against this header.
+  tgl_broken_wrong_version - UNUSABLE. Program "tgl_broken_wrong_version": was built against
+             ABI version 5 and this Grid speaks version 4. Rebuild the Program against this header.
+  tgl_driver_modelled - USABLE, ABI version 4, vtable 48 bytes. Run with --program tgl_driver_modelled.
+  tgl_driver_steady - USABLE, ABI version 4, vtable 48 bytes. Run with --program tgl_driver_steady.
 ```
 
 A Program built against an older ABI is a stale file that looks exactly like a current one, and only
@@ -148,17 +148,19 @@ creature pack can write.
 
 ## Checking it
 
-Three modes answer a question rather than drawing a picture. Each needs a device but none needs a
-display, and **the two verification modes run in CI on every push** against lavapipe, Mesa's software
-Vulkan driver — so a traversal regression is caught by a machine rather than by somebody remembering
-to look. Only `--benchmark` still wants real hardware, which is right: it measures a GPU.
+The modes below answer a question rather than drawing a picture. The three `--verify` modes and
+`--benchmark` need a device but no display, and **the verification modes run in CI on every push**
+against lavapipe, Mesa's software Vulkan driver — so a traversal regression is caught by a machine
+rather than by somebody remembering to look. Only `--benchmark` still wants real hardware, which is
+right: it measures a GPU. The Program modes at the end of the table need no device at all.
 
-All three also run over SSH or on a machine with no monitor attached.
+All of them also run over SSH or on a machine with no monitor attached.
 
 | Command | Question |
 |---------|----------|
 | `--verify-acoustics` | Do the acoustic shader and the host gather agree? |
 | `--verify-scene` | Do they still agree with the Grid placed at an angle, where transform arithmetic can actually be wrong? |
+| `--verify-senses` | Does a creature's eye agree with the host's first hit? At one bounce the walk collapses, so the agreement is exact. |
 | `--benchmark` | What does each GPU pass cost? |
 | `--program <name>` | Is that library something the Grid could run? Needs no device at all. |
 | `--list-programs` | Which Programs are installed, and which of them would load? Also needs no device. |

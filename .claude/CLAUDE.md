@@ -174,7 +174,8 @@ measured. See [PROGRAM_INTERFACE.md](../docs/PROGRAM_INTERFACE.md) § Determinis
 The check that has **licensed** more structural rewrites here than any other: record a fixed clip and
 hash it. A change that is meant to preserve behaviour must not move a single byte.
 
-"Licensed" rather than "caught", deliberately. Eleven commits cite byte-identity and every one of them
+"Licensed" rather than "caught", deliberately. Fifteen commits cite byte-identity — recount with
+`git log --oneline --grep=byte-ident` — and every one of them
 is a rewrite *confirmed safe* — the traversal module extraction, the geometry hoist into `World`, the
 memory arena, both halves of the two-level hierarchy. **Not one records a catch.** That may only mean
 catches get fixed before they reach a commit message, but by this file's own standard a check is worth

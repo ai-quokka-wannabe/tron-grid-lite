@@ -320,7 +320,7 @@ The claims survive networking and come out sharper, provided they are stated pre
 
 | Repository | Eventually owns | Today |
 |---|---|---|
-| **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Created; settings mirrored from this repository. Receives no commits until the owner says so |
+| **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Created; settings mirrored; documentation and CI furniture landed. The flesh waits for this repository's seams |
 | **link** | The wire: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary — Rust behind a plain C ABI, `std` only, zero third-party crates | Created; settings mirrored; scaffolded. The wire contract is its first etape |
 | **tron-grid-lite** | The client in both roles, the senses, the renderer, the shared world-definition and physics code the server consumes | Everything else, including the server's future flesh — this document and the split seams land here first |
 | **rc-worm** | The first brain: the DLL, its Qt telemetry GUI, eventually the Blender body | Cloned, parked until master-control and link have solid foundations |

@@ -230,6 +230,7 @@ chore: update Vulkan SDK to 1.4.335.0
 | `CHANGELOG.md` | User-facing change history |
 | `docs/PERCEPTION.md` | How creatures perceive: sensor resolutions and the biology behind them |
 | `docs/RELATED_WORK.md` | Prior art: what research labs build in this area, and what is unusual here |
+| `docs/TOPOLOGY.md` | How the Grid becomes a world: the four repositories and the wire, on audited MMO practice |
 | `TODO.md` | Roadmap and open etapes |
 
 ### Updating Documentation

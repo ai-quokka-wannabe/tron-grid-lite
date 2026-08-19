@@ -731,6 +731,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The pedantic pass: the examples were stale even where the prose was true.** The README's
+  `--list-programs` example spoke ABI version 1 in a Grid that speaks version 4, so both captured
+  blocks were re-taken from a freshly built binary — the listing now shows the real fixtures,
+  including a genuinely refused wrong-version library quoting the loader's actual message, and the
+  `--list-gpus` example now shows the daily machine's pair, which makes the "exercised on every
+  change" sentence beside it true again. The re-take itself vindicated the house rule that catches
+  stale binaries: the first capture came from a pre-v4 executable, and "confirm the build succeeded"
+  caught it. `--verify-senses` joined the README's mode table it had been missing from since it
+  landed, and "the two verification modes run in CI" became the three that actually do.
+  `.claude/CLAUDE.md`'s "eleven commits cite byte-identity" was recounted to fifteen, with the
+  recount command now inline so the number services itself. TOPOLOGY.md's repository table caught
+  up with master-control's furniture landing, and CONTRIBUTING.md's documentation table learnt
+  that TOPOLOGY.md exists. Every relative link in every markdown file across all four repositories
+  was checked mechanically; all resolve.
+
 - **The docs said "planned" about things that exist: a stale-claims sweep.** `ARCHITECTURE.md`
   carried four sections marked *(Phase 6, planned)* for work that shipped — the marks are gone, and
   each section now says in place how the build resolved it: ground contact went analytic through
