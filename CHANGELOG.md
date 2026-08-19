@@ -391,6 +391,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The protocol library has its official name: Link.** Capitalised like Master Control, by the
+  owner's word; `link`, lowercase, stays the repository's name, and "the wire of the Grid"
+  stays as Link's epithet rather than its name. The vocabulary table, the repository tables and
+  STYLE.md § Tron Naming (a fifth ruling) now say so — and Link's own repository pins the
+  contract to match: `lnk_protocol.h`, `LNK_PROTOCOL_VERSION`, fingerprint-guarded in the
+  flagship's manner.
+
 - **The docs now know the world grew: coherence across the constellation.** The README's
   vocabulary table gains **Master Control** and **the wire**; a **The Four Repositories** section
   — the same heading every sibling README now carries — places the flagship among
