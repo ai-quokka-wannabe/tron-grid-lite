@@ -731,6 +731,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A hung Ubuntu mirror cannot eat half an hour of CI any more.** Twice in one afternoon the
+  sanitiser jobs sat on `apt-get install libxcb1-dev` until their 30-minute job timeout killed
+  them — a package mirror hang, nothing in the tree, while sibling jobs cleared the identical
+  step in seconds. Every apt step in every workflow now carries its own one-minute bound (two
+  where `mesa-vulkan-drivers` makes the download bigger), with no retries, deliberately: a retry
+  can mask a real issue, so a dead mirror is a fast, legible red and rerunning stays a decision.
+
 - **The pedantic pass: the examples were stale even where the prose was true.** The README's
   `--list-programs` example spoke ABI version 1 in a Grid that speaks version 4, so both captured
   blocks were re-taken from a freshly built binary — the listing now shows the real fixtures,
