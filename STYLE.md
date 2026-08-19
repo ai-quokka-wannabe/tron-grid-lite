@@ -598,7 +598,7 @@ English:
 | Master Control validates every staged action | The Tron term — the world server as a being |
 | `master-control` names the server's repository | The repository name — lowercase, hyphenated |
 
-Four rulings, so that nothing corrects them back:
+Five rulings, so that nothing corrects them back:
 
 1. Tron's *Program* is a proper noun and keeps the American single-m spelling. British *programme*
    is a different word and stays British. Both appear in this repository legitimately, and neither
@@ -613,6 +613,10 @@ Four rulings, so that nothing corrects them back:
    hyphenated, names only its repository. The film's Master Control Program contracts to
    *Master Control* in prose here and never to *MCP* — an initialism that today reads as an
    unrelated protocol's name before it reads as the tyrant's.
+5. *Link* is the protocol library's official name and takes its capital, by the owner's word;
+   `link`, lowercase, names only its repository. "The wire of the Grid" is Link's epithet, not
+   its name — and the English noun keeps working underneath, so "a link" is never the library
+   and the library is never "the link".
 
 ---
 
