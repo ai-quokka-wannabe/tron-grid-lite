@@ -731,6 +731,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The docs said "planned" about things that exist: a stale-claims sweep.** `ARCHITECTURE.md`
+  carried four sections marked *(Phase 6, planned)* for work that shipped — the marks are gone, and
+  each section now says in place how the build resolved it: ground contact went analytic through
+  the `GroundFunction` seam rather than through the hierarchy, the tick runs deviceless with its
+  presentation phases living in the creature-less windowed mode until the spectator crosses the
+  wire, and the sensor interface's normative home is PROGRAM_INTERFACE.md. Its Build System section
+  claimed CMake 3.16+ and five presets against the actual 3.25+ and seven; its absences table
+  listed "terrain" as absent under a floor with 655 vertical risers, and credited the BVH with the
+  ground contact a closed form actually does. `.claude/CLAUDE.md` called the per-tick state hash
+  "open work" though it runs under ctest on every push, said "there is no cache" though the hum
+  cache has since been built, and its orientation tree had not heard of TOPOLOGY.md, `program-abi`
+  or `check_abi_version.py`. `CONTRIBUTING.md` demanded a journal entry its own Documentation
+  section says was abolished. Etape 16, all boxes ticked, moved to the completed table with its
+  durable reasoning already living in `roster_tests.cpp` and the CI workflow; and Phase 6's status
+  is now honest — not pending but under way, with Programs already perceiving.
+
 - **`docs/PROGRAM_INTERFACE.md` § Actions restated a struct and drifted, proving its own rule.**
   The listing still carried `desired_vertical_speed` after ABI v2 retired it, promised logging the
   sanitiser does not do, and repeated the header's claim that "the body's descriptor carries what

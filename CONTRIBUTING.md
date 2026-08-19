@@ -77,7 +77,7 @@ When submitting:
 - [ ] Code is formatted (`.clang-format`)
 - [ ] No Vulkan validation layer errors
 - [ ] Documentation is updated if needed
-- [ ] Journal entry added to `TODO.md` for non-trivial changes
+- [ ] An entry added to `CHANGELOG.md` § Unreleased for anything user-visible
 - [ ] Commit messages follow [conventional commits](#commit-messages)
 
 #### PR Process

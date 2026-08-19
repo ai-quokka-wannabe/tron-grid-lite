@@ -2,8 +2,8 @@
 
 Technical architecture of TronGrid Lite.
 
-> This document describes the target architecture. Sections covering phases that are not yet implemented are marked
-> accordingly. See `TODO.md` for the roadmap and open etapes, `CHANGELOG.md` for what changed and why,
+> This document describes the architecture as built. Where the plan and the build diverged, the
+> section says so in place. See `TODO.md` for the roadmap and open etapes, `CHANGELOG.md` for what changed and why,
 > and [VISION.md](VISION.md) for the *why* behind the project.
 
 ---
@@ -498,7 +498,13 @@ smooth skinning, so the cheap answer and the fitting answer are the same one —
 comfortable position an argument like this can end in, and worth being suspicious of exactly for that
 reason.
 
-#### The same hierarchy answers contact *(Phase 6, planned)*
+#### The same hierarchy answers contact
+
+The terrain half of this argument resolved the other way when physics shipped: ground contact runs
+against the closed-form `gridMeshHeight` through the `GroundFunction` seam, because an analytic
+ground gives contacts that replay exactly and devicelessly, which the world server's endgame
+demands. What follows stands as the argument for the half that has not shipped — creature-creature
+contact — and the two load-bearing properties at the end are load-bearing still.
 
 **One Grid, three senses if touch counts as one.** Nothing in the hierarchy, its layout or its
 traversal changes to serve physics, and that is not a coincidence — `Triangle` already stores `v0`,
@@ -635,7 +641,7 @@ There is deliberately no flag to draw unconditionally. The GPU profiler averages
 produces none, so a run of frames to average is obtained by holding a movement key — which is what a flag would have
 done anyway, and is how every frame timing quoted in this repository was taken.
 
-### What the rule means once creatures exist *(Phase 6, planned)*
+### What the rule means now that creatures exist
 
 The rule keeps its text and gains a boundary. Two sentences say the whole of it:
 
@@ -707,7 +713,14 @@ rejected. It is a clock inside a rule that says driven by change and never by a 
 cache key already provides the skip; and [ACOUSTICS.md](ACOUSTICS.md) § Solve rate rules out one
 global rate by name. It buys nothing the key does not.
 
-## The Tick *(Phase 6, planned)*
+## The Tick
+
+Phase 6 built this tick deviceless-first: phases 2 through 9 and 11 run in the program mode in the
+tabled order, while phases 1 and 10 belong to the windowed mode — which hosts no creatures, so the
+two halves of the table never meet in one process. They meet again across the wire:
+[TOPOLOGY.md](TOPOLOGY.md) moves the spectator into its own process, and the paragraphs below that
+speak of a window beside a live roster describe the single-process general form that blueprint
+supersedes.
 
 The frame flow below is the picture's. This is the world's, and the two meet only at the last step.
 Eleven phases, in this order, and the order is forced at every point where it looks arbitrary:
@@ -926,7 +939,10 @@ and no diffuse tail to consume it — which is precisely how the first pair came
 
 ---
 
-## Program Sensor Interface *(Phase 6, planned)*
+## Program Sensor Interface
+
+The contract shipped and is documented normatively in [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md);
+the diagram below is the shape it took.
 
 A Program is a shared library — DLL on Windows, SO on Linux — living in its **own repository** in the same
 organisation. The renderer knows nothing about what is inside it.
@@ -965,12 +981,12 @@ Each omission below is a design decision, and each one is what keeps the rendere
 | Denoiser (SVGF, ReSTIR, temporal accumulation) | Deterministic Whitted shading produces no noise, so there is nothing to denoise |
 | Textures, samplers, asset pipeline | Four analytic parameters per surface describe the whole Grid |
 | Roughness, microfacets, full PBR | Perfect mirrors and emissive geometry are the aesthetic; anything more would blur it |
-| Volumetric fog, terrain, skybox | The Grid is infinite black; a missed ray costs nothing |
-| Third-party physics or audio libraries | The BVH already answers both, and in-house keeps the dependency list short |
+| Volumetric fog, skybox | The Grid is infinite black; a missed ray costs nothing |
+| Third-party physics or audio libraries | In-house keeps the dependency list short: hearing rides the same BVH as vision, and the shipped ground contact is a closed form (`gridMeshHeight`) |
 | Rendergraph, event bus, service locator, resource handles | Not enough passes or entity variety to justify the abstraction. Revisit only with a concrete second use case |
 | Component / entity layout | Same reason, and it has already been tried here: `components.hpp` carried a `Transform`/`Bounds`/`Geometry`/`MaterialIndex` layout that nothing ever instantiated, which is why it is not there now. Re-proposing it is re-treading ground already paid for once |
 | An `Engine` class owning subsystems | Every candidate has exactly one consumer. The Khronos "Building a Simple Engine" chapter is the useful case study precisely because its prose and its shipped reference implementation disagree: the prose teaches component systems, service locators, an event bus with priorities and a topologically-sorted pass manager; the shipped `Engine` is a concrete non-virtual class holding eight named `unique_ptr`s, wired by straight-line construction order, with input arriving through four `std::function` callbacks and no rendergraph at all. Its own conclusion page then says each layer should solve a problem actually encountered rather than an anticipated one, and that "each abstraction adds cognitive overhead and potential failure points" |
-| A `libs/physics` extraction | One consumer. `src/tests/CMakeLists.txt` already says this in as many words, and the reason usually offered for the extraction — so that the check can run in CI — is simply false: the GPU-free ctest targets already run in CI without it |
+| A `libs/physics` extraction | One consumer today — [TOPOLOGY.md](TOPOLOGY.md) names the second, Master Control, and stages the extraction behind its seams. `src/tests/CMakeLists.txt` already says this in as many words, and the reason usually offered for the extraction — so that the check can run in CI — is simply false: the GPU-free ctest targets already run in CI without it |
 
 One pattern from the same chapter is worth taking rather than refusing, because it is an anti-pattern
 this repository currently has: **state indexed by the frame in flight belongs in one array of a
@@ -983,7 +999,8 @@ of step, and nothing catches it.
 
 ## Build System
 
-CMake 3.16+ with Ninja Multi-Config. Five presets cover every supported compiler and platform combination:
+CMake 3.25+ with Ninja Multi-Config. Seven configure presets — five platform presets, plus two
+sanitiser variants of `linux-x11-clang`:
 
 | Preset | OS | Compiler |
 |--------|----|----------|
@@ -992,6 +1009,8 @@ CMake 3.16+ with Ninja Multi-Config. Five presets cover every supported compiler
 | `windows-mingw` | Windows | MinGW-w64 (GCC) |
 | `linux-x11-gcc` | Linux | GCC |
 | `linux-x11-clang` | Linux | Clang |
+| `linux-x11-clang-asan` | Linux | Clang, ASan+UBSan |
+| `linux-x11-clang-tsan` | Linux | Clang, TSan |
 
 ```bash
 cmake --preset <name>
