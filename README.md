@@ -67,15 +67,17 @@ through the API — but you are missing out.
 ## Status
 
 Early development, and the picture above is real output rather than a target — though it is now a
-little out of date, having been recorded before the floor gained its terraced relief.
+little out of date, having been recorded before the floor gained its terraced relief and its
+vertical risers.
 
 Phases 0 to 5 are done. The Grid is traced in a compute shader against a hierarchy built on the
 host; surfaces reflect and refract; a bloom chain and an ACES tone curve turn radiance into a
 picture; and the same hierarchy now answers acoustic rays, delivering an impulse response — energy
 against delay — at an ear. One Grid, two senses, one traversal.
 
-What remains is Phase 6: the interface a Program plugs into, so that something can finally perceive
-any of it.
+Phase 6 is under way: Programs plug in and perceive — ears, eyes, touch and their own voices,
+through the C ABI in `libs/program-abi` — and what remains of the phase is listed in
+[TODO.md](TODO.md).
 
 ## The Four Repositories
 

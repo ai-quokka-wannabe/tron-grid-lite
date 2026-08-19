@@ -31,11 +31,11 @@ tron-grid-lite/
 ├── LICENCE              ← GPL v3
 ├── README.md            ← public-facing project overview
 ├── TODO.md              ← roadmap and open etapes
-├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, PERCEPTION, PROGRAM_INTERFACE, RELATED_WORK, DEV_ENV_SETUP
+├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, PERCEPTION, PROGRAM_INTERFACE, TOPOLOGY, RELATED_WORK, DEV_ENV_SETUP
 ├── images/              ← the flyby clips the README embeds
-├── libs/                ← bvh, logging, math, signals, testing, window — static libraries
-├── src/                 ← the renderer: main.cpp, Vulkan setup, tracer, postprocess, Slang shaders, tests/
-└── tools/               ← Python scripts outside the build (record_flyby.py)
+├── libs/                ← bvh, logging, math, signals, testing, window — static libraries — and program-abi, the C contract Programs build against
+├── src/                 ← the renderer and the world: main.cpp, Vulkan setup, tracer, postprocess, Slang shaders, the roster, stage and acoustics, tests/
+└── tools/               ← Python scripts outside the build (record_flyby.py, check_abi_version.py)
 ```
 
 ## Rules
@@ -64,7 +64,8 @@ tron-grid-lite/
 - **Vulkan loading:** Volk (dynamic). Always define `VK_NO_PROTOTYPES`. Never link Vulkan statically.
 - **Shaders:** Slang (not GLSL/HLSL directly).
 - **Build:** CMake 3.25+ with Ninja Multi-Config. Use presets: `cmake --preset <name>`, `cmake --build build/<name> --config Debug|Release`.
-- **CI:** GitHub Actions. 5 build jobs (one per platform preset) plus 2 sanitiser jobs (ASan+UBSan and TSan, both variants of `linux-x11-clang`).
+- **CI:** GitHub Actions. 5 build jobs (one per platform preset), 2 sanitiser jobs (ASan+UBSan and TSan, both variants of `linux-x11-clang`),
+  and a software-Vulkan job running the three `--verify` modes against lavapipe.
 - **Licence:** GPL v3-or-later.
 - **Don't over-engineer.** Keep it simple. No abstractions until there's a concrete second use case. This rule is the entire reason this repo exists.
 - **Stay lite.** If a feature needs RT hardware, mesh shaders, or a texture pipeline, it belongs in big TronGrid, not here.
@@ -296,14 +297,13 @@ Debian or Ubuntu it is `mesa-vulkan-drivers`. The Vulkan SDK ships neither — i
 fixed camera path as `--record` so that two runs are comparable. **Never measure a pass by timing
 `--record`** — most of that wall clock is PPM files.
 
-**One check would not belong in this table, and that is the point of mentioning it.** "Fires only
+**One check does not belong in this table, and that is the point of mentioning it.** "Fires only
 when somebody remembers it" is a property of *these three* rather than of checking in this
-repository: a per-tick physics state hash needs no device, so it would run under `ctest` on every
-push and would be the first determinism check here that fires without being remembered. It is open
-work — [TODO.md](../TODO.md) § Etape 16 — and it is named beside the claim so that the claim is read
-as a fact about three commands rather than as a law about this repository. Like every comparison
-here it needs a did-anything-move floor, and like every one of them it gets broken deliberately once
-before it is trusted.
+repository: the per-tick physics state hash needs no device, so it runs under `ctest` on every push
+— the first determinism check here that fires without being remembered. It lives in
+`src/tests/roster_tests.cpp`, was broken deliberately once with an address-derived perturbation,
+which it caught, and asserts per build rather than against golden values, because yaw goes through
+`sin` and `cos` and no two libms agree in the last bit.
 
 ## Hard-won rules
 
@@ -330,11 +330,12 @@ written as a story is read once, and written as a rule it is read every session.
   level of indirection was warm-up. The same measurement 7% the other way would have looked exactly
   like the honest cost of the feature, and would have been believed.
 - **Confirm an optimisation exists before costing its loss.** Two separate design proposals argued
-  against a change on the grounds that it would kill the acoustic solve cache. There is no cache.
-  `src/acoustics.hpp` states, in the future tense, an obligation on whatever eventually drives
-  solves; nothing drives them yet. An argument whose weight rests on a named mechanism should name
-  the file the mechanism lives in, because a specification reads exactly like an implementation once
-  it has been quoted twice.
+  against a change on the grounds that it would kill the acoustic solve cache — at a time when there
+  was no cache: `src/acoustics.hpp` stated, in the future tense, an obligation on whatever would
+  eventually drive solves, and nothing drove them yet. The hum cache has since been built
+  (`src/senses.hpp`), which retires the example without retiring the rule: an argument whose weight
+  rests on a named mechanism should name the file the mechanism lives in, because a specification
+  reads exactly like an implementation once it has been quoted twice.
 - **Verify on both GPUs before claiming correctness** — see Target Hardware. Driver-specific
   behaviour is invisible on one.
 - **Grep the ancestor before planning to port anything out of it.** The earlier TronGrid describes a
@@ -490,8 +491,9 @@ which is nothing but the boundary so that nothing can be added outside it.
 ## Roadmap
 
 Phases 0 to 4 are **Done** — toolchain, window and frame loop, compute BVH tracer, full ray tree,
-and post processing, and **Phase 5 — acoustic rays** is done too. Phase 6 opens the sensor interface
-Programs plug into.
+and post processing, and **Phase 5 — acoustic rays** is done too. **Phase 6 is under way**: Programs
+plug in and perceive — ears, eyes, touch, their own voices — through the C ABI in
+`libs/program-abi`, and what remains of the phase is in TODO.md's open etapes.
 
 The phase table is canonical in [`TODO.md` § Roadmap](../TODO.md), which also holds the active
 etapes. Read it there rather than duplicating it here.

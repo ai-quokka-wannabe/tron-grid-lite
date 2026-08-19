@@ -14,7 +14,7 @@ when satisfied; a finished etape collapses to one line, because what it *decided
 | 3     | Full ray tree                 | Reflections, emissives, glass      | **Done** |
 | 4     | Post processing               | Bloom, tonemapping                 | **Done** |
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | **Done** |
-| 6     | Programs                      | Creature sensor interface plugs in | Pending |
+| 6     | Programs                      | Creature sensor interface plugs in | **In progress** |
 
 What comes after Phase 6 — Master Control's heartbeat, the wire, the spectator — is blueprinted in
 [docs/TOPOLOGY.md](docs/TOPOLOGY.md) and staged in the `master-control` and `link` repositories'
@@ -22,7 +22,7 @@ own TODO files: the world grows here first, per the extraction order recorded th
 
 ## Completed etapes
 
-Eleven etapes, all boxes ticked. They are collapsed to one line each because a finished checklist is
+Twelve etapes, all boxes ticked. They are collapsed to one line each because a finished checklist is
 not a plan — what each one *decided* lives in `CHANGELOG.md`, and what each one
 *built* lives in the code with the reasoning attached to it. Keeping the checklists as well meant
 maintaining a third copy that drifts.
@@ -40,6 +40,7 @@ maintaining a third copy that drifts.
 | 9 | Phase 6 prerequisite: sub-allocate device memory | `MemoryArena`; sub-allocation warnings 16 to 2 |
 | 10 | Phase 6 prerequisite: a two-level hierarchy | `Scene`, `Instance`, `flatten`; `traceScene` in the shared module; both senses on it |
 | 11 | Make the Grid a command-line program that can open a window | Null-surface `Device`, `--window`, every other mode headless |
+| 16 | A check that runs without a GPU | The per-tick state hash in `roster_tests` under ctest; lavapipe answers the three `--verify` modes on every push |
 
 Decisions from those etapes that are load-bearing enough to live in the code rather than here, and
 are worth knowing before touching the areas they govern:
@@ -416,43 +417,6 @@ screen, and a hung job on a machine with nobody in front of it. This repository 
 once already, from a debug assertion. A constructor that throws is the cleanest failure C++ offers —
 the object never existed, and every member already built is destroyed in reverse order by the language
 itself.
-
-## Etape 16 — A check that runs without a GPU
-
-Every check that could catch a rendering or acoustic regression needed a device, so all of them fired
-only when somebody remembered them on a machine with one attached. **A device turned out not to have
-to be a GPU**, which closes most of this etape and leaves one item behind.
-
-- [x] Error-path tests that need no device. `SpirvLib` is the first: the SPIR-V reader moved out from
-      behind a Vulkan header into `src/spirv.hpp`, which mentions no Vulkan type, so its six guards
-      are testable by a target linking `testing` alone. Five of the six are confirmed by mutation.
-- [x] A per-tick physics state hash: two identical rosters over identical terrain, ticked side by
-      side, must hash bit-identically at every tick — FNV-1a over every body's pose, velocity and
-      actuators, in `roster_tests`, under `ctest` on every push. Cross-platform golden values are
-      deliberately not asserted: yaw goes through `sin` and `cos` and no two libms agree in the
-      last bit, so the claim is per build and so is the check. Broken deliberately once with an
-      address-derived perturbation, which it caught — the first determinism check here that fires
-      without being remembered, doing exactly that.
-- [x] Lavapipe as a CI device. It satisfies everything this renderer asks for — Vulkan 1.3, dynamic
-      rendering, synchronisation2, a graphics family that dispatches compute — and answers each
-      comparison in about a second. `--verify-acoustics`, `--verify-scene` and `--verify-senses` now
-      run on every push and gate the success job.
-
-**The recorded render is deliberately not part of that job**, and the reason is worth keeping.
-Lavapipe renders reproducibly — the twelve-frame recipe gives the same digest twice running, in one
-to three seconds — so a digest check would work *on one machine*. But a digest is a bit pattern, and
-lavapipe compiles shaders through LLVM for whatever CPU it finds, so it would pin the job to one Mesa
-build and one set of CPU features and break on a runner with a different vector width. The two
-comparisons are tolerance-based and mean the same thing anywhere, which is why they are the ones that
-travel.
-
-Running them locally on real hardware stays worthwhile for a reason CI cannot cover: lavapipe is one
-implementation, and the value of these checks is that they hold across implementations sharing
-nothing. See [.claude/CLAUDE.md](.claude/CLAUDE.md) § The three checks worth running for how to reach
-it.
-
-A headless server, when one exists, is `libs/bvh` plus `libs/math` plus a tick loop with **zero device
-code** — which makes it the first substantial part of this project testable on any runner at all.
 
 ## Where the research went
 
