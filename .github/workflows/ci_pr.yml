@@ -102,8 +102,12 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+            # A hung Ubuntu mirror once held jobs here for their whole 30-minute timeout. No
+            # retries, deliberately - a retry can mask a real issue. The step is simply cut short,
+            # so a dead mirror is a fast, legible red and rerunning stays a decision.
             - name: Install XCB development headers (Linux)
               if: runner.os == 'Linux'
+              timeout-minutes: 1
               run: sudo apt-get update && sudo apt-get install -y libxcb1-dev
 
             - name: Setup Vulkan SDK (Windows)
@@ -169,7 +173,11 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+            # A hung Ubuntu mirror once held jobs here for their whole 30-minute timeout. No
+            # retries, deliberately - a retry can mask a real issue. The step is simply cut short,
+            # so a dead mirror is a fast, legible red and rerunning stays a decision.
             - name: Install XCB development headers
+              timeout-minutes: 1
               run: sudo apt-get update && sudo apt-get install -y libxcb1-dev
 
             - name: Setup Vulkan SDK
@@ -210,7 +218,12 @@ jobs:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+            # A hung Ubuntu mirror once held jobs here for their whole 30-minute timeout. No
+            # retries, deliberately - a retry can mask a real issue. The step is simply cut short,
+            # so a dead mirror is a fast, legible red and rerunning stays a decision. Two minutes
+            # rather than one: mesa-vulkan-drivers is the bigger download.
             - name: Install XCB development headers and lavapipe
+              timeout-minutes: 2
               run: |
                 sudo apt-get update
                 sudo apt-get install -y libxcb1-dev mesa-vulkan-drivers
