@@ -415,8 +415,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ruling: once the world lives in Master Control, connection is what a client *is*, not a
   feature it opts into — `--window` and `--program` imply the wire, a client that cannot reach
   Master Control refuses loudly rather than falling back to a world that would look exactly
-  like an empty one, and the port becomes a contract constant (`LNK_DEFAULT_PORT`, proposed
-  1982 — the film's year — landing with the spectator etape). Where the authority lives is not
+  like an empty one, and the port becomes a contract constant (`LNK_DEFAULT_PORT`, the owner's
+  choice: **30702**, from JA-307020 — Tron's own program designation, the security program
+  guarding the doorway into the Grid — landing with the spectator etape). Where the authority lives is not
   a flag either: the address is the plain positional argument — `TronGridLite host:port
   --window`, `TronGridLite host:port --program <name>` — where the world is first, what you are
   there second, defaulting to localhost today and carrying an address anywhere in the world one
