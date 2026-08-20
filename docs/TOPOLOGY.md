@@ -64,9 +64,12 @@ at all (the owner's ruling): the address is the plain positional argument —
 `TronGridLite host:port --window` for the User's view, `TronGridLite host:port --program <name>`
 for a creature host. Where the world is comes first; what you are there comes second. Left out,
 it defaults to `127.0.0.1:LNK_DEFAULT_PORT`, so the local training constellation needs no
-ceremony at all. The port is a contract constant (`LNK_DEFAULT_PORT`, proposed 1982 — the
-film's year — landing in `lnk_protocol.h` with the spectator etape), one number both ends
-compile in. For now every address is localhost and the deferred security tier stays deferred,
+ceremony at all. The port is a contract constant (`LNK_DEFAULT_PORT`, the owner's
+choice: **30702**, from JA-307020 — Tron's own program designation in the 1982 film, trimmed to
+sixteen bits — because the port is the doorway into the Grid and Tron is the security program
+who guards the system; landing in `lnk_protocol.h` with the spectator etape), one number both
+ends compile in. A default and only a default: the positional already carries any host and any
+port a User fancies, and Master Control will take its own listening choice the same way. For now every address is localhost and the deferred security tier stays deferred,
 by the owner's word; one day the same positional carries an address anywhere in the world, and
 handing it one is the conscious act that pulls the trust stance's trigger — encryption,
 identity and the rest become due at that moment, not before.
