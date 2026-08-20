@@ -423,12 +423,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   day, with the deferred security tier coming due at exactly that handover. The whole surface
   stays deliberately small: the positional, one role flag, and the citizen's utilities —
   `--version` (Grid and wire versions side by side), `--verbose`, `--list-gpus`,
-  `--list-programs`, `--gpu`, and the serverless `--stage` view — with the development modes
-  owing the simple surface nothing. The blueprint also now states the training constellation plainly: four things as
+  `--list-programs`, `--gpu`, and `--debug` (the serverless static stage inspection: spawns its
+  own window, loads no Program, needs no world — for debugging the rendering) — with the
+  development modes owing the simple surface nothing. The blueprint also now states the training constellation plainly: four things as
   three processes — the animal's DLL inside a `--program` host, a `--window` instance for the
   User, and Master Control — with the spectator attachable and detachable without the animal
-  noticing. The serverless static stage view keeps a name of its own; `--stage` is the standing
-  proposal.
+  noticing. The serverless static stage view is `--debug`, the owner's ruling: it spawns its
+  own window, loads no Program and needs no world — named for its purpose.
 
 - **The flagship is truly oblivious to how the wire is made.** Link grew its own CMake face and
   this repository consumes it: every cargo mention left the build files, replaced by

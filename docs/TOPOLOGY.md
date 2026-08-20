@@ -76,10 +76,14 @@ one role — `--window` or `--program <name>` — and the utilities a command-li
 `--version` (stating the Grid's version and the wire's protocol version side by side, because
 the pair is what compatibility means here), `--verbose` for a chattier log, `--list-gpus` and
 `--list-programs` to see what a machine offers, `--gpu <index>` to overrule device scoring, and
-the serverless `--stage` view. The development modes — the three verifies, the recorder, the
-benchmark — are this repository's own tooling and owe the simple surface nothing. The one surviving serverless view — today's static
-inspection of the stage, no creatures, no tick — keeps a name of its own (`--stage` is the
-standing proposal, the owner's naming call).
+`--debug`, the serverless static inspection of the stage, which spawns its own window and never
+loads a Program. The development modes — the three verifies, the recorder, the benchmark — are
+this repository's own tooling and owe the simple surface nothing.
+
+The one surviving serverless view — today's static
+inspection of the stage, no creatures, no tick — is `--debug` (the owner's ruling):
+`TronGridLite --debug` spawns its own window, loads no Program and needs no world, the stage
+alone so the rendering can be debugged; `--window` is always the live view, and demands one.
 
 **To train an AI animal, four things run as three processes**: the animal's DLL, two TronGrid
 Lite instances — one `--window` for the User, one `--program` hosting the DLL — and Master
