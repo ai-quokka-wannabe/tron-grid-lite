@@ -28,7 +28,7 @@ add_test(NAME spirv_tests COMMAND spirv_tests)
 # directory arrives as a compile definition from the target that produces them rather than as a
 # string assembled here, so a fixture moving in the build tree cannot leave this test resolving
 # nothing and reporting that everything was correctly refused.
-add_executable(program_library_tests program_library_tests.cpp ../program_library.cpp)
+add_executable(program_library_tests program_library_tests.cpp ../program_library.cpp ../loader_os.cpp)
 target_link_libraries(program_library_tests PRIVATE program_abi testing ${CMAKE_DL_LIBS})
 target_compile_definitions(program_library_tests PRIVATE TGL_TEST_PROGRAM_DIR="$<TARGET_FILE_DIR:tgl_test_program>")
 add_dependencies(program_library_tests tgl_test_programs)
@@ -38,7 +38,7 @@ add_test(NAME program_library_tests COMMAND program_library_tests)
 # reason the roster mentions no Vulkan. It compiles the two translation units it needs directly,
 # for the same reason geometry_tests does: extracting a library for one consumer would be an
 # abstraction without a second use case.
-add_executable(roster_tests roster_tests.cpp ../roster.cpp ../program_library.cpp)
+add_executable(roster_tests roster_tests.cpp ../roster.cpp ../program_library.cpp ../loader_os.cpp)
 target_link_libraries(roster_tests PRIVATE program_abi math bvh testing ${CMAKE_DL_LIBS})
 target_compile_definitions(roster_tests PRIVATE TGL_TEST_PROGRAM_DIR="$<TARGET_FILE_DIR:tgl_test_program>")
 add_dependencies(roster_tests tgl_test_programs)
@@ -47,13 +47,28 @@ add_test(NAME roster_tests COMMAND roster_tests)
 # A creature hearing the Grid is likewise a complete thing to check with no device: the senses seam
 # takes a Creature rather than a Roster, so no Program library is needed either — the tests build
 # the creature by hand and hold the source to the ABI's own promises about what it wires in.
-add_executable(senses_tests senses_tests.cpp ../senses.cpp ../stage.cpp ../roster.cpp ../program_library.cpp ../acoustics.cpp)
+add_executable(senses_tests senses_tests.cpp ../senses.cpp ../stage.cpp ../roster.cpp ../program_library.cpp ../loader_os.cpp ../acoustics.cpp)
 target_link_libraries(senses_tests PRIVATE program_abi math bvh testing ${CMAKE_DL_LIBS})
 add_test(NAME senses_tests COMMAND senses_tests)
 
 # The stage is host arithmetic over the roster's models — scene assembly, one material table,
 # per-tick placements — so it is testable with no device, which is where its correctness matters:
 # the ear path walks exactly the scene this class maintains.
-add_executable(stage_tests stage_tests.cpp ../stage.cpp ../roster.cpp ../program_library.cpp ../acoustics.cpp)
+add_executable(stage_tests stage_tests.cpp ../stage.cpp ../roster.cpp ../program_library.cpp ../loader_os.cpp ../acoustics.cpp)
 target_link_libraries(stage_tests PRIVATE program_abi math bvh testing ${CMAKE_DL_LIBS})
 add_test(NAME stage_tests COMMAND stage_tests)
+
+# Link is loaded exactly as a Program is — a shared library found at run time behind one exported
+# symbol — so its loader gets the same deviceless treatment ProgramLib's has. Compiling this
+# target is itself half the etape: lnk_protocol.h and lnk_client.h meet a C++ compiler here, so
+# their static asserts finally run, on every preset, under /WX and -Werror. The library file and
+# the recorded fingerprint arrive as compile definitions from the configuration that builds them,
+# for the same reason the Program fixtures' directory does.
+add_executable(link_library_tests link_library_tests.cpp ../link_library.cpp ../loader_os.cpp)
+target_link_libraries(link_library_tests PRIVATE testing ${CMAKE_DL_LIBS})
+target_include_directories(link_library_tests PRIVATE ${TGL_LINK_SUBMODULE_DIR}/include)
+target_compile_definitions(link_library_tests PRIVATE
+    TGL_LINK_LIBRARY_FILE="${TGL_LINK_LIBRARY_FILE}"
+    TGL_LINK_FINGERPRINT_FILE="${TGL_LINK_SUBMODULE_DIR}/include/lnk/protocol_fingerprint.txt")
+add_dependencies(link_library_tests link_library)
+add_test(NAME link_library_tests COMMAND link_library_tests)

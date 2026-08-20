@@ -189,6 +189,9 @@ same fixed camera path `--record` does so that two runs compare. It writes nothi
 - **C++20** compiler (MSVC, GCC, or Clang)
 - **CMake** 3.25+
 - **Ninja** build system
+- **Rust** stable toolchain via [rustup](https://rustup.rs/) — cargo builds Link, the wire of the
+  Grid, from the `external/link` submodule at build time. The built library is required to sit
+  beside the executable, and the build puts it there
 
 ### Target Hardware
 
@@ -198,6 +201,9 @@ Intel — and one of them is a GTX 1650 Ti laptop that exposes no Vulkan ray tra
 all. If it runs well there, it runs well anywhere.
 
 ## Building
+
+Clone with `--recurse-submodules`, or run `git submodule update --init` in an existing clone —
+the configure step refuses, by name, when the Link submodule is empty.
 
 ### Windows (MSVC)
 

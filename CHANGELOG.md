@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The Grid consumes Link: the first cross-repository organ transplant.** Link — the wire of
+  the Grid — arrives as the `external/link` submodule, built by cargo from CMake (rustup stable
+  joins the prerequisites; configure refuses by name when the submodule is empty), and is loaded
+  at run time exactly as a Program is: one `LoadLibrary`'d symbol, `lnkGetClientVTable`,
+  version-refused with `vtable_bytes` checked against this Grid's own header, behind the new
+  `LinkLib::Library`. **The residence rule is the owner's**: Link's library lives beside the
+  executable, always — no path flag and no search order, so a stale copy elsewhere can never be
+  the one that loads; `besideExecutable()` is the single resolver, `copy_link` makes it true,
+  and a test exercises the rule end to end rather than reciting it. Compiling the consumer is
+  itself half the etape: `lnk_protocol.h` and `lnk_client.h` met MSVC, clang-cl and GCC for the
+  first time, so their static asserts finally run under `/WX` and `-Werror` — broken
+  deliberately once (a flipped size pin refused the build quoting its own message) — and
+  `link_library_tests` pins the loaded library's version, vtable size and fingerprint against
+  the submodule's recorded file, the C++ twin of Link's own Rust twin-check. The OS half of
+  library loading (`SetThreadErrorMode` suppression, `RTLD_NOW | RTLD_LOCAL`, the
+  symbol-to-function-pointer copy, `executablePath`) moved to a shared `LoaderOs` now that the
+  second consumer the admission rule waits for exists, so ProgramLib and LinkLib share one
+  truth about the platform. The stale C99 mention in the top-level CMake comment is corrected
+  to C17 in passing.
+
 - **`docs/TOPOLOGY.md`: the Grid becomes a world — the role-delegation blueprint for the
   three-process architecture.** One authoritative, deviceless world server — **Master Control**,
   capitalised as the being it is, `master-control` naming only its eventual repository — with

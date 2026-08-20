@@ -32,6 +32,7 @@ tron-grid-lite/
 ├── README.md            ← public-facing project overview
 ├── TODO.md              ← roadmap and open etapes
 ├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, PERCEPTION, PROGRAM_INTERFACE, TOPOLOGY, RELATED_WORK, DEV_ENV_SETUP
+├── external/link        ← the Link submodule — the wire of the Grid, built by cargo, loaded beside the executable like a Program
 ├── images/              ← the flyby clips the README embeds
 ├── libs/                ← bvh, logging, math, signals, testing, window — static libraries — and program-abi, the C contract Programs build against
 ├── src/                 ← the renderer and the world: main.cpp, Vulkan setup, tracer, postprocess, Slang shaders, the roster, stage and acoustics, tests/
@@ -71,6 +72,11 @@ tron-grid-lite/
 - **Stay lite.** If a feature needs RT hardware, mesh shaders, or a texture pipeline, it belongs in big TronGrid, not here.
 
 ## Building
+
+Initialise submodules first (`git submodule update --init`) — configure refuses without the Link
+submodule, and cargo (rustup stable) must be on PATH because the build invokes it. **Link's
+library lives beside the executable, always** — no path flag, no search order (the owner's rule);
+`LinkLib::Library::besideExecutable()` is the one resolver and `copy_link` is what makes it true.
 
 ```bash
 # Windows (from VS Developer Command Prompt or with MSVC in PATH)

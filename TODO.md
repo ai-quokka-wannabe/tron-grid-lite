@@ -22,7 +22,7 @@ own TODO files: the world grows here first, per the extraction order recorded th
 
 ## Completed etapes
 
-Twelve etapes, all boxes ticked. They are collapsed to one line each because a finished checklist is
+Thirteen etapes, all boxes ticked. They are collapsed to one line each because a finished checklist is
 not a plan — what each one *decided* lives in `CHANGELOG.md`, and what each one
 *built* lives in the code with the reasoning attached to it. Keeping the checklists as well meant
 maintaining a third copy that drifts.
@@ -41,6 +41,7 @@ maintaining a third copy that drifts.
 | 10 | Phase 6 prerequisite: a two-level hierarchy | `Scene`, `Instance`, `flatten`; `traceScene` in the shared module; both senses on it |
 | 11 | Make the Grid a command-line program that can open a window | Null-surface `Device`, `--window`, every other mode headless |
 | 16 | A check that runs without a GPU | The per-tick state hash in `roster_tests` under ctest; lavapipe answers the three `--verify` modes on every push |
+| 17 | Phase 6 prerequisite: consume Link | The `external/link` submodule built by cargo from CMake; `LinkLib::Library` with the beside-the-executable residence rule; the Link headers' asserts running under all three C++ toolchains; `LoaderOs` extracted for both loaders |
 
 Decisions from those etapes that are load-bearing enough to live in the code rather than here, and
 are worth knowing before touching the areas they govern:

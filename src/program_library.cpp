@@ -14,6 +14,8 @@
 
 #include "program_library.hpp"
 
+#include "loader_os.hpp"
+
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
@@ -53,104 +55,6 @@ namespace
     constexpr const char* OTHER_TOOLCHAIN_PREFIX{""};
 #endif
 
-    //! The operating system's account of why the last load or lookup failed, as text.
-    [[nodiscard]] std::string lastLoaderError()
-    {
-#if defined(_WIN32)
-        const DWORD code{GetLastError()};
-
-        char* buffer{nullptr};
-        const DWORD length{FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, code,
-            MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), reinterpret_cast<char*>(&buffer), 0u, nullptr)};
-
-        std::string message{(length > 0u) && (buffer != nullptr) ? std::string{buffer, length} : std::string{"unknown error"}};
-        if (buffer != nullptr) {
-            LocalFree(buffer);
-        }
-
-        // FormatMessage ends its text with CRLF, which reads badly in the middle of a sentence.
-        while ((!message.empty()) && ((message.back() == '\n') || (message.back() == '\r'))) {
-            message.pop_back();
-        }
-
-        return message + " (" + std::to_string(code) + ")";
-#else
-        const char* message{dlerror()};
-        return (message != nullptr) ? std::string{message} : std::string{"unknown error"};
-#endif
-    }
-
-    [[nodiscard]] void* openLibrary(const std::filesystem::path& path)
-    {
-#if defined(_WIN32)
-        /*
-            Windows answers a malformed library with a modal message box before it answers the
-            caller. Nobody is necessarily there to dismiss it: a Program library is loaded during a
-            headless run, and on a build machine or an unattended overnight run the box turns a clean
-            refusal into a process that waits for ever. That is the same trade this repository
-            already refuses around std::abort and the CRT's termination dialog — a failure somebody
-            can read beats a hang nobody can see.
-
-            SetThreadErrorMode rather than SetErrorMode because the latter is process-wide, and the
-            loader has no business changing how the rest of the Grid reports disk errors. The last
-            error is captured before the mode is restored, since it is what the refusal will quote.
-        */
-        DWORD previous_mode{0u};
-        const BOOL mode_changed{SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previous_mode)};
-
-        HMODULE module{LoadLibraryW(path.c_str())};
-        const DWORD load_error{GetLastError()};
-
-        if (mode_changed != FALSE) {
-            static_cast<void>(SetThreadErrorMode(previous_mode, nullptr));
-        }
-
-        SetLastError(load_error);
-        return static_cast<void*>(module);
-#else
-        /*
-            RTLD_NOW rather than lazy, because a Program with an unresolved symbol should be refused
-            while there is still somebody to tell. Bound lazily it loads, passes every check here,
-            and dies at the first tick instead — inside a call the Grid cannot catch.
-
-            RTLD_LOCAL so that one Program's symbols are not visible to the next. Two Programs from
-            different authors will one day define the same helper name, and with global binding the
-            second would silently call the first one's.
-        */
-        return dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
-#endif
-    }
-
-    void closeLibrary(void* handle) noexcept
-    {
-#if defined(_WIN32)
-        static_cast<void>(FreeLibrary(static_cast<HMODULE>(handle)));
-#else
-        static_cast<void>(dlclose(handle));
-#endif
-    }
-
-    [[nodiscard]] TglGetProgramVTableFn findEntryPoint(void* handle) noexcept
-    {
-#if defined(_WIN32)
-        const FARPROC symbol{GetProcAddress(static_cast<HMODULE>(handle), "tglGetProgramVTable")};
-#else
-        void* const symbol{dlsym(handle, "tglGetProgramVTable")};
-#endif
-        if (symbol == nullptr) {
-            return nullptr;
-        }
-
-        /*
-            Copied rather than cast. ISO C++ does not allow converting between an object pointer and
-            a function pointer, and -Wpedantic says so under -Werror; POSIX guarantees the round trip
-            works, so the bits are moved without asking the type system to bless it.
-        */
-        TglGetProgramVTableFn entry_point{nullptr};
-        std::memcpy(&entry_point, &symbol, sizeof(entry_point));
-        return entry_point;
-    }
-
     //! Unloads on the way out of a failed constructor, so a refusal does not leak the handle.
     class HandleGuard {
     public:
@@ -162,7 +66,7 @@ namespace
         ~HandleGuard()
         {
             if (m_handle != nullptr) {
-                closeLibrary(m_handle);
+                LoaderOs::closeLibrary(m_handle);
             }
         }
 
@@ -180,7 +84,7 @@ namespace
         void reset(void* handle) noexcept
         {
             if (m_handle != nullptr) {
-                closeLibrary(m_handle);
+                LoaderOs::closeLibrary(m_handle);
             }
             m_handle = handle;
         }
@@ -200,58 +104,6 @@ namespace
     [[noreturn]] void refuse(std::string_view identifier, const std::string& reason)
     {
         throw std::runtime_error{"Program \"" + std::string{identifier} + "\": " + reason};
-    }
-
-    //! Full path of the running executable.
-    [[nodiscard]] std::filesystem::path executablePath()
-    {
-#if defined(_WIN32)
-        /*
-            The buffer grows rather than assuming MAX_PATH. A path longer than 260 characters is
-            ordinary on a build agent, and GetModuleFileNameW's answer to a short buffer is to
-            truncate, set ERROR_INSUFFICIENT_BUFFER and still report success on older Windows — so a
-            single call with a fixed buffer can return a path that exists and is the wrong one.
-        */
-        std::vector<wchar_t> buffer(MAX_PATH);
-        for (;;) {
-            SetLastError(ERROR_SUCCESS);
-            const DWORD length{GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()))};
-
-            if (length == 0u) {
-                throw std::runtime_error{"Cannot determine where this executable is: " + lastLoaderError()};
-            }
-
-            if ((length < buffer.size()) && (GetLastError() != ERROR_INSUFFICIENT_BUFFER)) {
-                return std::filesystem::path{std::wstring{buffer.data(), length}};
-            }
-
-            if (buffer.size() >= 65536u) {
-                throw std::runtime_error{"This executable's path is implausibly long."};
-            }
-
-            buffer.resize(buffer.size() * 2u);
-        }
-#else
-        std::vector<char> buffer(1024);
-        for (;;) {
-            const ssize_t length{readlink("/proc/self/exe", buffer.data(), buffer.size())};
-            if (length < 0) {
-                throw std::runtime_error{"Cannot determine where this executable is: /proc/self/exe is unreadable."};
-            }
-
-            // readlink neither terminates nor reports truncation, so a full buffer is ambiguous
-            // between an exact fit and a path that was cut short. Grow and ask again.
-            if (static_cast<size_t>(length) < buffer.size()) {
-                return std::filesystem::path{std::string{buffer.data(), static_cast<size_t>(length)}};
-            }
-
-            if (buffer.size() >= 65536u) {
-                throw std::runtime_error{"This executable's path is implausibly long."};
-            }
-
-            buffer.resize(buffer.size() * 2u);
-        }
-#endif
     }
 
 } // namespace
@@ -286,7 +138,7 @@ namespace ProgramLib
 
     std::filesystem::path defaultDirectory()
     {
-        return executablePath().parent_path() / "programs";
+        return LoaderOs::executablePath().parent_path() / "programs";
     }
 
     std::filesystem::path resolve(const std::filesystem::path& directory, std::string_view identifier)
@@ -349,12 +201,12 @@ namespace ProgramLib
                 refuse(identifier, "no library at " + path.string());
             }
 
-            handle.reset(openLibrary(path));
+            handle.reset(LoaderOs::openLibrary(path));
             if (handle.get() == nullptr) {
-                refuse(identifier, "the operating system refused to load " + path.string() + ": " + lastLoaderError());
+                refuse(identifier, "the operating system refused to load " + path.string() + ": " + LoaderOs::lastLoaderError());
             }
 
-            const TglGetProgramVTableFn entry_point{findEntryPoint(handle.get())};
+            const TglGetProgramVTableFn entry_point{LoaderOs::findEntryPoint<TglGetProgramVTableFn>(handle.get(), "tglGetProgramVTable")};
             if (entry_point == nullptr) {
                 refuse(identifier, "exports no tglGetProgramVTable. Every Program library exports exactly that name, with C linkage.");
             }
@@ -526,7 +378,7 @@ namespace ProgramLib
             }
 
             if (m_handle != nullptr) {
-                closeLibrary(m_handle);
+                LoaderOs::closeLibrary(m_handle);
             }
         } catch (...) {
         }
