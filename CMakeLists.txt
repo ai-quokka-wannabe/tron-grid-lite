@@ -56,31 +56,15 @@ find_path(TGL_VULKAN_INCLUDE_DIR
 
 message(STATUS "Vulkan headers: ${TGL_VULKAN_INCLUDE_DIR}")
 
-# Link — the wire of the Grid — arrives as a source submodule and is built by its own toolchain:
-# cargo produces the shared library the Grid loads at run time, exactly as it loads Programs.
-# Nothing here links against it; the C ABI behind one LoadLibrary'd symbol is the whole coupling,
-# which is what lets an MSVC-built Grid, a MinGW-built Grid and the cargo-built library all agree.
-find_program(TGL_CARGO_EXECUTABLE cargo REQUIRED)
-
-set(TGL_LINK_SUBMODULE_DIR ${CMAKE_SOURCE_DIR}/external/link)
-if(NOT EXISTS ${TGL_LINK_SUBMODULE_DIR}/Cargo.toml)
+# Link — the wire of the Grid — is a submodule with its own CMake face, and the Grid consumes it
+# like any other library: the target `lnk` carries its headers, lnk_copy_beside() enforces the
+# residence rule, and how the wire is actually made is Link's own business, stated nowhere in
+# this repository's build files. The face's three-export contract is documented at the top of
+# external/link/CMakeLists.txt.
+if(NOT EXISTS ${CMAKE_SOURCE_DIR}/external/link/CMakeLists.txt)
     message(FATAL_ERROR "The Link submodule is empty. Run: git submodule update --init")
 endif()
-
-if(WIN32)
-    set(TGL_LINK_LIBRARY_FILE ${TGL_LINK_SUBMODULE_DIR}/target/release/link.dll)
-else()
-    set(TGL_LINK_LIBRARY_FILE ${TGL_LINK_SUBMODULE_DIR}/target/release/liblink.so)
-endif()
-
-# cargo is its own dependency tracker and a fraction of a second when nothing changed, so the
-# target simply always runs it — the shaders' ALL-target reasoning, with cargo as the tracker.
-add_custom_target(link_library ALL
-    COMMAND ${TGL_CARGO_EXECUTABLE} build --release
-    WORKING_DIRECTORY ${TGL_LINK_SUBMODULE_DIR}
-    COMMENT "Building Link (cargo build --release)"
-    VERBATIM
-)
+add_subdirectory(external/link)
 
 enable_testing()
 
