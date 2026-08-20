@@ -415,9 +415,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ruling: once the world lives in Master Control, connection is what a client *is*, not a
   feature it opts into — `--window` and `--program` imply the wire, a client that cannot reach
   Master Control refuses loudly rather than falling back to a world that would look exactly
-  like an empty one, and the port becomes a contract constant (`LNK_DEFAULT_PORT`, landing with
-  the spectator etape) so an `--address` flag waits for the first connection that is not
-  127.0.0.1. The blueprint also now states the training constellation plainly: four things as
+  like an empty one, and the port becomes a contract constant (`LNK_DEFAULT_PORT`, proposed
+  1982 — the film's year — landing with the spectator etape). Where the authority lives is not
+  a flag either: the address is the plain positional argument — `TronGridLite host:port
+  --window`, `TronGridLite host:port --program <name>` — where the world is first, what you are
+  there second, defaulting to localhost today and carrying an address anywhere in the world one
+  day, with the deferred security tier coming due at exactly that handover. The whole surface
+  stays deliberately small: the positional, one role flag, and the citizen's utilities —
+  `--version` (Grid and wire versions side by side), `--verbose`, `--list-gpus`,
+  `--list-programs`, `--gpu`, and the serverless `--stage` view — with the development modes
+  owing the simple surface nothing. The blueprint also now states the training constellation plainly: four things as
   three processes — the animal's DLL inside a `--program` host, a `--window` instance for the
   User, and Master Control — with the spectator attachable and detachable without the animal
   noticing. The serverless static stage view keeps a name of its own; `--stage` is the standing
