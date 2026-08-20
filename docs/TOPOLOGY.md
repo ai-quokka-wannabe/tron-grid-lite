@@ -33,7 +33,7 @@ Three operating-system processes and one loaded library, all on one machine for 
           custom protocol      custom protocol
                    /                  \
    TronGrid Lite, spectator    TronGrid Lite, creature host
-   (--connect --window:        (--connect --program:
+   (--window:                  (--program <name>:
     window + speakers,          headless, GPU senses,
     free-flight camera)         one Program DLL loaded)
                                         |
@@ -52,6 +52,26 @@ creature host is a senses-and-brain terminal with no window at all. The server i
 Program's own GUI — the worm's Qt telemetry — belongs to the Program and shows only what the
 creature senses, which is exactly why the spectator exists: someone has to be able to see the worm
 crawl.
+
+**There is deliberately no `--connect` flag** (the owner's ruling, 2026-08-20). Once the world
+lives in Master Control, connection is not a feature a client opts into — it is what the client
+*is*. The role flags already say everything: `--window` means "I watch the world", `--program`
+means "I host this creature in the world", and both imply the wire. A client that cannot reach
+Master Control refuses loudly — *"no Master Control at its address — is it running?"* — and
+exits; there is no silent local fallback, because a fallen server would then look exactly like
+an empty world. The address needs no flag either while the trust stance holds: the port is a
+contract constant (`LNK_DEFAULT_PORT`, landing in `lnk_protocol.h` with the spectator etape),
+one number both ends compile in, and an `--address` flag arrives exactly when the first
+connection that is not 127.0.0.1 does. The one surviving serverless view — today's static
+inspection of the stage, no creatures, no tick — keeps a name of its own (`--stage` is the
+standing proposal, the owner's naming call).
+
+**To train an AI animal, four things run as three processes**: the animal's DLL, two TronGrid
+Lite instances — one `--window` for the User, one `--program` hosting the DLL — and Master
+Control. The DLL is the fourth thing but not a fourth process: it lives inside the host, one
+per instance. The strict minimum is three of the four — the world ticks whether or not anyone
+watches, so the spectator attaches and detaches without the animal ever noticing, which is
+exactly the property SourceTV's observers bought.
 
 Drawn small, this is the grand vision's kernel. Every block grows into its eventual role without
 re-architecting because authority is placed correctly from the first commit.
