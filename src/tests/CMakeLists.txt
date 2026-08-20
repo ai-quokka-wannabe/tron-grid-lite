@@ -80,3 +80,18 @@ add_executable(world_client_tests world_client_tests.cpp ../world_client.cpp ../
 target_link_libraries(world_client_tests PRIVATE lnk testing ${CMAKE_DL_LIBS})
 add_test(NAME world_client_tests COMMAND world_client_tests)
 lnk_copy_beside(world_client_tests)
+
+# The live view's scene is host arithmetic like the stage's: what the tracer's dynamic instance
+# path is fed is plain records, checkable with no device. It compiles the translation units it
+# needs directly, for the same single-consumer reason every target above does.
+add_executable(world_stage_tests world_stage_tests.cpp ../world_stage.cpp ../stage.cpp ../roster.cpp ../program_library.cpp ../loader_os.cpp ../acoustics.cpp)
+target_link_libraries(world_stage_tests PRIVATE program_abi lnk math bvh testing ${CMAKE_DL_LIBS})
+add_test(NAME world_stage_tests COMMAND world_stage_tests)
+
+# Master Control's understudy: a real listening server built from Link's own server half, standing
+# in until the master-control repository exists. A tool to run, not a test to assert — it is what
+# `TronGridLite --window` dials on this machine to prove the live view against something alive.
+add_executable(rehearsal_master_control rehearsal_master_control.cpp ../link_library.cpp ../loader_os.cpp)
+target_compile_features(rehearsal_master_control PRIVATE cxx_std_20)
+target_link_libraries(rehearsal_master_control PRIVATE lnk ${CMAKE_DL_LIBS})
+lnk_copy_beside(rehearsal_master_control)

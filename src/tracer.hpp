@@ -56,9 +56,16 @@ public:
         \param frames_in_flight Number of independent output images to allocate.
         \param shader_path Path to the compiled `trace.spv`, relative to the working directory.
         \param logger Logger for the upload summary.
+        \param dynamic_instance_capacity Zero — the default, and every mode whose placements never
+               move — renders the world's own static instance buffer, exactly as before. Non-zero
+               buys the live view its moving placements: one host-visible instance buffer per frame
+               in flight, each holding up to this many records, fed by `stageInstances` and traced
+               instead of the static upload. Per frame in flight rather than one buffer, because
+               the host rewrites placements while the device may still be reading the previous
+               frame's.
     */
     Tracer(const Device& device, const World& world, const std::vector<Material>& materials, uint32_t frames_in_flight, const std::string& shader_path,
-        LoggingLib::Logger& logger);
+        LoggingLib::Logger& logger, uint32_t dynamic_instance_capacity = 0u);
 
     // Non-copyable, non-movable: it owns Vulkan objects and is referenced by the frame loop.
     Tracer(const Tracer&) = delete;
@@ -86,6 +93,23 @@ public:
         \param max_bounces Depth of the ray tree, at least one.
     */
     void record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces) const;
+
+    //! True when this tracer was built with a dynamic instance capacity — the live view's shape.
+    [[nodiscard]] bool hasDynamicInstances() const noexcept
+    {
+        return m_dynamic_capacity > 0u;
+    }
+
+    /*!
+        Replaces the placements one frame slot traces against. Dynamic tracers only.
+
+        A memcpy into that slot's host-visible buffer, legal from the moment the slot's fence has
+        been waited on — the same moment its command buffer becomes recordable — because nothing
+        else can still be reading it. More records than the construction-time capacity is refused
+        loudly rather than truncated: a silently missing creature is the failure this path exists
+        to never have.
+    */
+    void stageInstances(uint32_t frame_slot, const std::vector<BvhLib::InstanceRecord>& records);
 
     //! Returns the linear HDR image for a frame slot, valid until the next resize().
     [[nodiscard]] vk::Image outputImage(uint32_t frame_slot) const
@@ -128,6 +152,15 @@ private:
     MemoryArena m_buffer_arena;
 
     VulkanHelpers::DeviceBuffer m_materials; //!< Optical material table, 32 bytes each.
+
+    uint32_t m_dynamic_capacity{0u}; //!< Records each dynamic buffer holds; zero means static.
+    std::vector<uint32_t> m_dynamic_counts; //!< Records staged per frame slot, traced by `record`.
+
+    //! Behind the dynamic instance buffers. Empty and allocation-free for a static tracer.
+    MemoryArena m_host_arena;
+
+    std::vector<vk::raii::Buffer> m_dynamic_instances; //!< One per frame in flight, host-visible.
+    std::vector<void*> m_dynamic_mapped; //!< Where the host writes each of them.
 
     /*!
         One block of memory behind every output image, rather than one allocation each.

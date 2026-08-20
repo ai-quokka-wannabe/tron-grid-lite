@@ -17,6 +17,7 @@ add_executable(${PROJECT_NAME}
     loader_os.cpp
     program_library.cpp
     world_client.cpp
+    world_stage.cpp
     link_library.cpp
     roster.cpp
     senses.cpp

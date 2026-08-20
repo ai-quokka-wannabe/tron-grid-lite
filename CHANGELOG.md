@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The live view draws the creatures: neon darts on the Grid, moving as the world tells them.**
+  The window now renders what TICK_STATE says. A new `WorldStageLib::WorldStage` assembles the
+  live view's scene — the Grid plus one shared placeholder body, a low neon dart sized by the
+  roster's own body constants with its long slender nose towards -Z because that is the way
+  `forwardFor` faces — and turns each telling's interpolated poses into the 144-byte instance
+  records the shader reads, capacity-checked against the protocol's own creature cap. The tracer
+  grew the dynamic instance path to consume them: one host-visible instance buffer per frame in
+  flight, staged the moment the slot's fence has been waited on, while every static mode — the
+  debug view, `--record`, `--benchmark` — still binds the world's own immutable upload,
+  byte-for-byte the buffer the reference digest has always hashed. The generation counter the
+  render loop's ViewState comment always promised for "when creatures move" now exists: a telling
+  from Master Control is a reason to draw exactly as a moved camera is, a world gone quiet costs
+  no frames, and a minimised window ignores the world's chatter entirely. The event thread
+  publishes latest-wins placements at the blend's own pace and stops publishing once the blend
+  saturates; a changed creature count always republishes, so a DEREZ between tellings cannot
+  leave a ghost standing. Both new host-side properties were broken deliberately once — a
+  yaw-less pose transform and a placeholder wearing the floor's material slot — and the suite
+  went red exactly where it should. **Master Control's understudy comes with it**:
+  `rehearsal_master_control`, a real listening server built from Link's server half (three
+  orbiting creatures, one blinking out and back, one calling), proved the whole constellation
+  live — connect, interpolate, derez, event, clean shutdown — and stands in until the
+  master-control repository exists. In passing: `--debug` was never sizing the tracer to the
+  window (the one gate the spectator etape's first half missed), found because the understudy
+  made the live view runnable at all.
+
 - **`--window` watches a live world: the spectator dials Master Control, and the Grid is an MMO
   from its very first connection.** The command line takes the ruled shape from
   `docs/TOPOLOGY.md`: one positional argument for where the world is (`host:port`, defaulting to
