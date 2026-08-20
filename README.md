@@ -115,12 +115,32 @@ Creatures perceive the Grid through a senses buffer; they have no window and no 
 that hosts them needs no display, no surface and no present queue — and is not refused on a machine
 that has none.
 
-`--window` opens a debug view so the User can check that things are in their place: that the geometry
-is where it should be, that the neon reads as neon. **It shows the Grid, not a simulation** — no
-Program is loaded in that mode, and the picture is rendered for a human rather than for a creature.
+**The Grid is one world with many eyes on it.** Master Control hosts the world; every TronGrid Lite
+is a client of it, from the very first run rather than bolted on later. Where the world is comes
+first, as the one positional argument — `host:port`, defaulting to `127.0.0.1:30702` — and what you
+are there comes second:
+
+```text
+TronGridLite [host:port] --window     # watch the world live
+TronGridLite --debug                  # inspect the built-in stage, no world needed
+```
+
+`--window` opens a live view of the world: the creatures Master Control tells of, drawn interpolated
+between the two newest ticks, with no prediction ever. If nobody is listening at the address the run
+refuses loudly — "No Master Control at … - is it running?" — and there is deliberately no silent
+fallback, because a fallen server must never look like an empty world. No Program is loaded in that
+mode: a window is for the User's eyes, and a creature has no use for one.
+
+`--debug` opens the same window on the built-in stage, with no server and no Program at all, so the
+User can check that things are in their place — that the geometry is where it should be, that the
+neon reads as neon — even where no world is running.
+
+`--version` prints the Grid's version and its Link protocol version side by side, because that pair
+is what compatibility means here; `--verbose` makes the run talkative.
 
 A Program that wants to show its own internals opens its own window. The Grid knows nothing about how
-a Program works inside and provides it no display.
+a Program works inside and provides it no display. A Program run joins the same world through the
+same wire in a coming etape; today it ticks a world of its own, locally and headless.
 
 **A Program is named, never pathed.** Programs live in `programs/` beside the executable — as many
 as you like — and a name selects one. `--list-programs` reports what is there and which of it the

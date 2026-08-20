@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`--window` watches a live world: the spectator dials Master Control, and the Grid is an MMO
+  from its very first connection.** The command line takes the ruled shape from
+  `docs/TOPOLOGY.md`: one positional argument for where the world is (`host:port`, defaulting to
+  `127.0.0.1:30702`), `--window` for the live view, `--debug` for the serverless stage
+  inspection that used to be `--window`'s job, plus `--version` (Grid and Link protocol versions
+  side by side, because the pair is what compatibility means) and `--verbose`. The new
+  `WorldClientLib::Client` walks the whole handshake as a spectator through the loaded Link
+  library and keeps the client's living copy of the world: TICK_STATE replaces it whole —
+  the broadcast is a full snapshot, so a creature absent from it is gone even if a DEREZ were
+  lost — EVENT queues for the ears, DEREZ removes, and every pose interpolates between the two
+  newest ticks with yaw taking the shortest arc across ±pi, so a creature crossing the seam
+  turns a few degrees rather than almost a full circle (both properties broken deliberately
+  once; the suite went red exactly where it should). There is no silent fallback: nobody
+  listening at the address is the loud ruled refusal — "No Master Control at … - is it
+  running?" — with exit code 1, because a fallen server must never look like an empty world.
+  With a live world the window loop's on-demand gate expires — the loop turns at a steady pace
+  and drains the wire whole, instead of blocking on the User's hand. The tests play Master
+  Control itself through Link's own server half — the first C++ consumer of that surface, and
+  the reason it exists, since a hand-written C++ test server would be the second implementation
+  of the wire this organisation forbids. The submodule advances to Link's protocol v2
+  (port 30702, the server vtable half); README and the shape doctrine follow the new truth.
+
 - **The Grid consumes Link: the first cross-repository organ transplant.** Link — the wire of
   the Grid — arrives as the `external/link` submodule, built by cargo from CMake (rustup stable
   joins the prerequisites; configure refuses by name when the submodule is empty), and is loaded

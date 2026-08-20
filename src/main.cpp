@@ -44,6 +44,9 @@
 #include "stage.hpp"
 #include "program_library.hpp"
 #include "spectator.hpp"
+#include "world_client.hpp"
+
+#include <lnk/lnk_protocol.h>
 #include "surface.hpp"
 #include "swapchain.hpp"
 #include "tracer.hpp"
@@ -1535,6 +1538,10 @@ int main(int argc, char** argv)
             drags a window edge.
         */
         bool wants_window{false};
+        bool wants_debug_view{false};
+        bool wants_version{false};
+        bool verbose{false};
+        std::string master_control_address{};
 
         //! Record a flight through the Grid to PPM files. Needs no window.
         bool recording{false};
@@ -1608,6 +1615,12 @@ int main(int argc, char** argv)
 
             if (argument == "--window") {
                 wants_window = true;
+            } else if (argument == "--debug") {
+                wants_debug_view = true;
+            } else if (argument == "--version") {
+                wants_version = true;
+            } else if (argument == "--verbose") {
+                verbose = true;
             } else if (argument == "--record") {
                 recording = true;
             } else if (argument == "--verify-acoustics") {
@@ -1636,7 +1649,17 @@ int main(int argc, char** argv)
                 record_frames = value(record_frames);
             } else if ((argument == "--output") && ((index + 1) < argc)) {
                 record_directory = argv[++index];
+            } else if (!argument.starts_with("--")) {
+                // The positional: where Master Control is. Where the world is comes first; what
+                // you are there comes second - and there is deliberately no flag for it.
+                master_control_address = argument;
             }
+        }
+
+        // Grid and wire versions side by side, because the pair is what compatibility means here.
+        if (wants_version) {
+            logger.logInfo(std::string{"TronGrid Lite "} + TGL_VERSION + " | Link protocol " + std::to_string(LNK_PROTOCOL_VERSION));
+            return EXIT_SUCCESS;
         }
 
         /*
@@ -1644,10 +1667,10 @@ int main(int argc, char** argv)
             nothing for a bare invocation to run, and saying so before a device is opened is cheaper
             and clearer than saying it after the Grid has been built and uploaded.
         */
-        if (!wants_window && !recording && !benchmarking && !verify_acoustics && !verify_scene && !verify_senses && !list_gpus && !list_programs
+        if (!wants_window && !wants_debug_view && !recording && !benchmarking && !verify_acoustics && !verify_scene && !verify_senses && !list_gpus && !list_programs
             && program_identifier.empty()) {
-            logger.logInfo("Nothing to do. Pass --window to look at the Grid, or one of --record, --benchmark, "
-                           "--verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs, --program <name> [--ticks N].");
+            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world, --debug to inspect the stage, or one of --record, "
+                           "--benchmark, --verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs, --program <name> [--ticks N].");
             return EXIT_SUCCESS;
         }
 
@@ -1705,16 +1728,38 @@ int main(int argc, char** argv)
         }
 
         // A Program run continues past here because its eyes need a device — but never a window.
-        if (!program_identifier.empty() && wants_window) {
-            logger.logError("With --window there are no creatures: run the Program without a window.");
+        if (!program_identifier.empty() && (wants_window || wants_debug_view)) {
+            logger.logError("With a window there are no locally hosted creatures: run the Program without one.");
             return EXIT_FAILURE;
         }
+
+        /*
+            The live view dials the world before any window or device exists, so a client that
+            cannot reach Master Control refuses loudly while refusing is still cheap - and there
+            is no silent fallback, because a fallen server must never look like an empty world.
+            The address is the positional argument; left out, it is localhost at the port Tron
+            guards.
+        */
+        if (master_control_address.empty()) {
+            master_control_address = "127.0.0.1:" + std::to_string(LNK_DEFAULT_PORT);
+        }
+
+        std::unique_ptr<WorldClientLib::Client> world_client;
+        if (wants_window) {
+            world_client = std::make_unique<WorldClientLib::Client>(master_control_address, std::chrono::milliseconds{5000});
+            logger.logInfo("Connected: Master Control at " + master_control_address + ", tick " + std::to_string(world_client->welcome().current_tick) + ", dt "
+                + std::to_string(static_cast<double>(world_client->welcome().nominal_dt_seconds)) + " s, client id " + std::to_string(world_client->welcome().client_id)
+                + ".");
+        }
+
+        const bool any_window{wants_window || wants_debug_view};
 
         // The window, the surface and the swapchain are created together or not at all. Every mode
         // other than the debug view runs without any of them.
         std::unique_ptr<WindowLib::Window> window;
-        if (wants_window) {
-            const WindowLib::WindowConfig window_config{.title = "TronGrid Lite - debug window", .width = 1280, .height = 720, .resizable = true, .decorated = true};
+        if (any_window) {
+            const WindowLib::WindowConfig window_config{
+                .title = wants_window ? "TronGrid Lite - the Grid" : "TronGrid Lite - debug view", .width = 1280, .height = 720, .resizable = true, .decorated = true};
             window = WindowLib::create(window_config, logger);
         }
 
@@ -1726,10 +1771,10 @@ int main(int argc, char** argv)
 
         // Surface extensions are instance-level and only meaningful when a surface will be created.
         // Asking for them headless would refuse to start on a machine with no windowing system at all.
-        const Instance instance{enable_validation, wants_window ? requiredSurfaceExtensions() : std::vector<const char*>{}, logger};
+        const Instance instance{enable_validation, any_window ? requiredSurfaceExtensions() : std::vector<const char*>{}, logger};
 
-        const vk::raii::SurfaceKHR surface{wants_window ? createSurface(instance.get(), *window) : vk::raii::SurfaceKHR{nullptr}};
-        const VkSurfaceKHR surface_handle{wants_window ? static_cast<VkSurfaceKHR>(*surface) : VK_NULL_HANDLE};
+        const vk::raii::SurfaceKHR surface{any_window ? createSurface(instance.get(), *window) : vk::raii::SurfaceKHR{nullptr}};
+        const VkSurfaceKHR surface_handle{any_window ? static_cast<VkSurfaceKHR>(*surface) : VK_NULL_HANDLE};
 
         if (list_gpus) {
             // Surveys and returns without creating a logical device, so it works even when nothing
@@ -1741,7 +1786,7 @@ int main(int argc, char** argv)
         const Device device{instance, surface_handle, logger, preferred_gpu};
 
         std::unique_ptr<Swapchain> swapchain;
-        if (wants_window) {
+        if (any_window) {
             swapchain = std::make_unique<Swapchain>(device, *surface, window->width(), window->height(), logger);
         }
 
@@ -1984,9 +2029,34 @@ int main(int argc, char** argv)
             },
             &channel);
 
+        std::size_t watched_creatures{0u};
         while (!window->shouldClose() && !channel.render_failed) {
-            window->waitEvents();
-            window->pumpEvents();
+            if (world_client != nullptr) {
+                /*
+                    The on-demand gate is licensed by there being nothing alive whose tick could
+                    be missed, and with a live world that licence expires: the loop turns at a
+                    steady pace, drains the wire whole, and sleeps the remainder rather than
+                    blocking on the User's hand.
+                */
+                window->pumpEvents();
+                world_client->poll();
+
+                if (world_client->creatureCount() != watched_creatures) {
+                    watched_creatures = world_client->creatureCount();
+                    logger.logInfo("The world holds " + std::to_string(watched_creatures) + " creature(s) at tick " + std::to_string(world_client->tick()) + ".");
+                }
+                for (const LnkEvent& event : world_client->drainEvents()) {
+                    if (verbose) {
+                        logger.logDebug("Creature " + std::to_string(event.creature_id) + " vocalised at strength " + std::to_string(static_cast<double>(event.strength))
+                            + ", tick " + std::to_string(event.tick) + ".");
+                    }
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds{8});
+            } else {
+                window->waitEvents();
+                window->pumpEvents();
+            }
 
             // The callback has already forwarded everything; this drains the window's own queue so
             // it cannot grow without bound, and catches the close request.

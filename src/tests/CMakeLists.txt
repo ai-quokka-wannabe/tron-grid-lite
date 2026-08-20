@@ -72,3 +72,11 @@ target_compile_definitions(link_library_tests PRIVATE
     TGL_LINK_FINGERPRINT_FILE="${LNK_FINGERPRINT_FILE}")
 add_test(NAME link_library_tests COMMAND link_library_tests)
 lnk_copy_beside(link_library_tests)
+
+# The spectator's half of a world, tested against the server's half of the same loaded library:
+# this target plays Master Control through Link's own vtable — the first C++ consumer of the
+# server surface, and the very reason it exists. Deviceless throughout.
+add_executable(world_client_tests world_client_tests.cpp ../world_client.cpp ../link_library.cpp ../loader_os.cpp)
+target_link_libraries(world_client_tests PRIVATE lnk testing ${CMAKE_DL_LIBS})
+add_test(NAME world_client_tests COMMAND world_client_tests)
+lnk_copy_beside(world_client_tests)
