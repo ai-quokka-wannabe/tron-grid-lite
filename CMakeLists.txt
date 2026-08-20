@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 # C is enabled for one reason: the Program ABI is a C header, and a check that only ever compiles it
-# as C++ does not check the thing Programs are written against. It buys the C99 assertion fallback
+# as C++ does not check the thing Programs are written against. It buys the header compiled as C17
 # and a Program built as a shared library, neither of which C++ can reach.
 project(TronGridLite
     LANGUAGES CXX C
@@ -55,6 +55,32 @@ find_path(TGL_VULKAN_INCLUDE_DIR
 )
 
 message(STATUS "Vulkan headers: ${TGL_VULKAN_INCLUDE_DIR}")
+
+# Link — the wire of the Grid — arrives as a source submodule and is built by its own toolchain:
+# cargo produces the shared library the Grid loads at run time, exactly as it loads Programs.
+# Nothing here links against it; the C ABI behind one LoadLibrary'd symbol is the whole coupling,
+# which is what lets an MSVC-built Grid, a MinGW-built Grid and the cargo-built library all agree.
+find_program(TGL_CARGO_EXECUTABLE cargo REQUIRED)
+
+set(TGL_LINK_SUBMODULE_DIR ${CMAKE_SOURCE_DIR}/external/link)
+if(NOT EXISTS ${TGL_LINK_SUBMODULE_DIR}/Cargo.toml)
+    message(FATAL_ERROR "The Link submodule is empty. Run: git submodule update --init")
+endif()
+
+if(WIN32)
+    set(TGL_LINK_LIBRARY_FILE ${TGL_LINK_SUBMODULE_DIR}/target/release/link.dll)
+else()
+    set(TGL_LINK_LIBRARY_FILE ${TGL_LINK_SUBMODULE_DIR}/target/release/liblink.so)
+endif()
+
+# cargo is its own dependency tracker and a fraction of a second when nothing changed, so the
+# target simply always runs it — the shaders' ALL-target reasoning, with cargo as the tracker.
+add_custom_target(link_library ALL
+    COMMAND ${TGL_CARGO_EXECUTABLE} build --release
+    WORKING_DIRECTORY ${TGL_LINK_SUBMODULE_DIR}
+    COMMENT "Building Link (cargo build --release)"
+    VERBATIM
+)
 
 enable_testing()
 

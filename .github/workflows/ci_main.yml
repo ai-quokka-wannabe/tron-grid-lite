@@ -111,6 +111,8 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                submodules: true
 
             # A hung Ubuntu mirror once held jobs here for their whole 30-minute timeout. No
             # retries, deliberately - a retry can mask a real issue. The step is simply cut short,
@@ -182,6 +184,8 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                submodules: true
 
             # A hung Ubuntu mirror once held jobs here for their whole 30-minute timeout. No
             # retries, deliberately - a retry can mask a real issue. The step is simply cut short,
@@ -227,6 +231,8 @@ jobs:
         steps:
             - name: Checkout repository
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                submodules: true
 
             # A hung Ubuntu mirror once held jobs here for their whole 30-minute timeout. No
             # retries, deliberately - a retry can mask a real issue. The step is simply cut short,

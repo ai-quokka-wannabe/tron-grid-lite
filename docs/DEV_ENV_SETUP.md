@@ -26,6 +26,12 @@ hardware ray tracing, so integrated graphics from the last few years are fair ga
 | Ninja | 1.11 | <https://ninja-build.org/> (bundled with Visual Studio and most distributions) |
 | Vulkan SDK | 1.3.2xx or newer | <https://vulkan.lunarg.com/sdk/home> |
 | Git | any recent | <https://git-scm.com/downloads> |
+| Rust (stable) | 1.85 | <https://rustup.rs/> |
+
+Rust is there for exactly one thing: cargo builds Link — the wire of the Grid — from the
+`external/link` submodule, and the build copies the library beside the executables, which is
+where it is required to live. Initialise submodules before the first configure:
+`git submodule update --init`.
 
 The build uses the **Ninja Multi-Config** generator, so Ninja is not optional.
 
