@@ -16,6 +16,7 @@ add_executable(${PROJECT_NAME}
     spectator.cpp
     loader_os.cpp
     program_library.cpp
+    world_client.cpp
     link_library.cpp
     roster.cpp
     senses.cpp
@@ -37,6 +38,7 @@ target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${TGL_VULKAN_INCLUDE_D
 # translation unit sees the same vulkan-hpp struct definitions (defining it in only some
 # headers is an ODR hazard that links silently and misbehaves at runtime).
 target_compile_definitions(${PROJECT_NAME} PRIVATE
+    TGL_VERSION="${PROJECT_VERSION}"
     VK_NO_PROTOTYPES
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
     VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1

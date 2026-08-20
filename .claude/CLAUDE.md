@@ -77,7 +77,7 @@ Initialise submodules first (`git submodule update --init`) — configure refuse
 submodule, and cargo (rustup stable) must be on PATH because Link's own CMake face demands it;
 this repository's build files never name it. **Link's
 library lives beside the executable, always** — no path flag, no search order (the owner's rule);
-`LinkLib::Library::besideExecutable()` is the one resolver and `copy_link` is what makes it true.
+`LinkLib::Library::besideExecutable()` is the one resolver and `lnk_copy_beside` is what makes it true.
 
 ```bash
 # Windows (from VS Developer Command Prompt or with MSVC in PATH)
@@ -260,15 +260,25 @@ commit, and say in the message what moved and why.
 
 ## The shape of the program
 
-**Command-line first. `--window` is an opt-in debug view, and it is the only mode that presents.**
-A creature perceives through a senses buffer, never a swapchain, so a run that hosts Programs needs no
+**Command-line first, and a client of Master Control from the very first run.** The one positional
+argument is where the world is — `host:port`, defaulting to `127.0.0.1:30702` — and the flags say
+what you are there; the full ruling lives in [TOPOLOGY.md](../docs/TOPOLOGY.md) § The shape. A
+creature perceives through a senses buffer, never a swapchain, so a run that hosts Programs needs no
 display and `Device` accepts a null surface — no present queue is sought and `VK_KHR_swapchain` is
 neither required nor enabled. A compute-only card with no monitor is a perfectly good device here.
 
-**With `--window` there are no creatures.** It shows the Grid so a human can check it, not a
-simulation in progress. That is what licenses the on-demand gate to skip whole frames while the User
-drags a window edge: there is nothing alive whose tick could be missed. A Program that wants to show
-its own internals opens its own window; that is its business, and the Grid provides it nothing.
+**`--window` is the live view, and it refuses loudly when nobody is listening** — "No Master
+Control at `<addr>` - is it running?" — because a fallen server must never look like an empty
+world; there is deliberately no silent fallback. It draws what TICK_STATE tells, interpolated
+between the two newest ticks (`src/world_client.hpp`), with no prediction ever. **With a window
+there are no locally hosted creatures** — a window is for the User's eyes; a Program that wants to
+show its own internals opens its own window, and the Grid provides it nothing.
+
+**`--debug` is the standalone stage view**: the same window on the built-in stage, no server and no
+Program, for checking the rendering where no world is running. It is also where the on-demand gate
+— skipping whole frames while the User drags a window edge — keeps its licence: nothing there is
+alive, so no tick can be missed. With a live world that licence expires, and the loop turns at a
+steady pace instead, draining the wire whole each turn.
 
 ## The three checks worth running
 
