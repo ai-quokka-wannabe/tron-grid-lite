@@ -33,7 +33,7 @@ Three operating-system processes and one loaded library, all on one machine for 
           custom protocol      custom protocol
                    /                  \
    TronGrid Lite, spectator    TronGrid Lite, creature host
-   (--window:                  (--program <name>:
+   (host:port --window:        (host:port --program <name>:
     window + speakers,          headless, GPU senses,
     free-flight camera)         one Program DLL loaded)
                                         |
@@ -59,12 +59,31 @@ lives in Master Control, connection is not a feature a client opts into — it i
 means "I host this creature in the world", and both imply the wire. A client that cannot reach
 Master Control refuses loudly — *"no Master Control at its address — is it running?"* — and
 exits; there is no silent local fallback, because a fallen server would then look exactly like
-an empty world. The address needs no flag either while the trust stance holds: the port is a
-contract constant (`LNK_DEFAULT_PORT`, landing in `lnk_protocol.h` with the spectator etape),
-one number both ends compile in, and an `--address` flag arrives exactly when the first
-connection that is not 127.0.0.1 does. The one surviving serverless view — today's static
-inspection of the stage, no creatures, no tick — keeps a name of its own (`--stage` is the
-standing proposal, the owner's naming call).
+an empty world. Where the authority lives is providable but is not a flag
+at all (the owner's ruling): the address is the plain positional argument —
+`TronGridLite host:port --window` for the User's view, `TronGridLite host:port --program <name>`
+for a creature host. Where the world is comes first; what you are there comes second. Left out,
+it defaults to `127.0.0.1:LNK_DEFAULT_PORT`, so the local training constellation needs no
+ceremony at all. The port is a contract constant (`LNK_DEFAULT_PORT`, proposed 1982 — the
+film's year — landing in `lnk_protocol.h` with the spectator etape), one number both ends
+compile in. For now every address is localhost and the deferred security tier stays deferred,
+by the owner's word; one day the same positional carries an address anywhere in the world, and
+handing it one is the conscious act that pulls the trust stance's trigger — encryption,
+identity and the rest become due at that moment, not before.
+
+The whole command line stays deliberately small, by the same ruling: the positional address,
+one role — `--window` or `--program <name>` — and the utilities a command-line citizen owes:
+`--version` (stating the Grid's version and the wire's protocol version side by side, because
+the pair is what compatibility means here), `--verbose` for a chattier log, `--list-gpus` and
+`--list-programs` to see what a machine offers, `--gpu <index>` to overrule device scoring, and
+`--debug`, the serverless static inspection of the stage, which spawns its own window and never
+loads a Program. The development modes — the three verifies, the recorder, the benchmark — are
+this repository's own tooling and owe the simple surface nothing.
+
+The one surviving serverless view — today's static
+inspection of the stage, no creatures, no tick — is `--debug` (the owner's ruling):
+`TronGridLite --debug` spawns its own window, loads no Program and needs no world, the stage
+alone so the rendering can be debugged; `--window` is always the live view, and demands one.
 
 **To train an AI animal, four things run as three processes**: the animal's DLL, two TronGrid
 Lite instances — one `--window` for the User, one `--program` hosting the DLL — and Master
