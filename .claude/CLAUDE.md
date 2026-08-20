@@ -74,7 +74,8 @@ tron-grid-lite/
 ## Building
 
 Initialise submodules first (`git submodule update --init`) — configure refuses without the Link
-submodule, and cargo (rustup stable) must be on PATH because the build invokes it. **Link's
+submodule, and cargo (rustup stable) must be on PATH because Link's own CMake face demands it;
+this repository's build files never name it. **Link's
 library lives beside the executable, always** — no path flag, no search order (the owner's rule);
 `LinkLib::Library::besideExecutable()` is the one resolver and `copy_link` is what makes it true.
 

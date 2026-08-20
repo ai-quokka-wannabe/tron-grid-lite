@@ -411,6 +411,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The flagship is truly oblivious to how the wire is made.** Link grew its own CMake face and
+  this repository consumes it: every cargo mention left the build files, replaced by
+  `add_subdirectory(external/link)`, the `lnk` header target sitting in the ordinary library
+  list beside `math` and `bvh`, and `lnk_copy_beside()` enforcing the residence rule for the
+  executable and the test alike. The grep is the proof — the flagship's CMake knows the word
+  cargo zero times — and the consequence is the point: if Link were rewritten in another
+  language behind the same face, nothing here would change, and nothing here could tell. The
+  submodule advances to the face-bearing main.
+
 - **The protocol library has its official name: Link.** Capitalised like Master Control, by the
   owner's word; `link`, lowercase, stays the repository's name, and "the wire of the Grid"
   stays as Link's epithet rather than its name. The vocabulary table, the repository tables and

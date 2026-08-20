@@ -62,13 +62,13 @@ add_test(NAME stage_tests COMMAND stage_tests)
 # symbol — so its loader gets the same deviceless treatment ProgramLib's has. Compiling this
 # target is itself half the etape: lnk_protocol.h and lnk_client.h meet a C++ compiler here, so
 # their static asserts finally run, on every preset, under /WX and -Werror. The library file and
-# the recorded fingerprint arrive as compile definitions from the configuration that builds them,
-# for the same reason the Program fixtures' directory does.
+# the recorded fingerprint arrive as compile definitions from Link's own face — the LNK_*
+# variables — for the same reason the Program fixtures' directory does: a path assembled here
+# could drift from the file the face actually builds.
 add_executable(link_library_tests link_library_tests.cpp ../link_library.cpp ../loader_os.cpp)
-target_link_libraries(link_library_tests PRIVATE testing ${CMAKE_DL_LIBS})
-target_include_directories(link_library_tests PRIVATE ${TGL_LINK_SUBMODULE_DIR}/include)
+target_link_libraries(link_library_tests PRIVATE lnk testing ${CMAKE_DL_LIBS})
 target_compile_definitions(link_library_tests PRIVATE
-    TGL_LINK_LIBRARY_FILE="${TGL_LINK_LIBRARY_FILE}"
-    TGL_LINK_FINGERPRINT_FILE="${TGL_LINK_SUBMODULE_DIR}/include/lnk/protocol_fingerprint.txt")
-add_dependencies(link_library_tests link_library)
+    TGL_LINK_LIBRARY_FILE="${LNK_LIBRARY_FILE}"
+    TGL_LINK_FINGERPRINT_FILE="${LNK_FINGERPRINT_FILE}")
 add_test(NAME link_library_tests COMMAND link_library_tests)
+lnk_copy_beside(link_library_tests)

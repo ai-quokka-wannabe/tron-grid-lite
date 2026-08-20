@@ -28,11 +28,6 @@ target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
-# Link's headers are this organisation's own contract, not a vendored third party, so they are
-# deliberately NOT marked SYSTEM: they must compile clean under /WX and -Werror on every preset,
-# and this target is where their static asserts run.
-target_include_directories(${PROJECT_NAME} PRIVATE ${TGL_LINK_SUBMODULE_DIR}/include)
-
 # SYSTEM so that warnings from the Vulkan SDK's own headers cannot fail this build under /WX and
 # -Werror. A future SDK release is not something this repository can fix.
 target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${TGL_VULKAN_INCLUDE_DIR})
@@ -56,6 +51,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     math
     bvh
     program_abi
+    lnk
     ${CMAKE_DL_LIBS}
 )
 
@@ -172,17 +168,8 @@ add_custom_target(copy_shaders ALL
 )
 add_dependencies(copy_shaders shaders)
 
-# The wire beside the executables, like the shaders: copy_if_different after cargo has run.
-# Beside the Grid because that is the residence rule — Link lives next to the executable, with
-# no path flag and no search — and beside its own test executable because the rule is tested
-# end to end rather than recited.
-add_custom_target(copy_link ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${TGL_LINK_LIBRARY_FILE} $<TARGET_FILE_DIR:${PROJECT_NAME}>/
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${TGL_LINK_LIBRARY_FILE} $<TARGET_FILE_DIR:link_library_tests>/
-    COMMENT "Copying Link to output directories"
-    VERBATIM
-)
-add_dependencies(copy_link link_library)
+# The residence rule, enforced by Link's own face: the wire beside the executable that loads it.
+lnk_copy_beside(${PROJECT_NAME})
 
 # Install rules. The release workflow stages the archive with `cmake --install`, so that the
 # knowledge of where the binary and its shaders actually land lives here rather than being
