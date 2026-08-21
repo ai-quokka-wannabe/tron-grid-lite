@@ -35,7 +35,7 @@ tron-grid-lite/
 ├── external/link        ← the Link submodule — the wire of the Grid, built by cargo, loaded beside the executable like a Program
 ├── images/              ← the flyby clips the README embeds
 ├── libs/                ← bvh, logging, math, signals, testing, window — static libraries — and program-abi, the C contract Programs build against
-├── src/                 ← the renderer and the world: main.cpp, Vulkan setup, tracer, postprocess, Slang shaders, the roster, stage and acoustics, tests/
+├── src/                 ← the `grid` library (the deviceless core: world_definition, geometry, acoustics, roster, stage, senses, both loaders, world client and live-view stage) plus the executable's device half (main.cpp, Vulkan setup, tracer, postprocess, Slang shaders), tests/
 └── tools/               ← Python scripts outside the build (record_flyby.py, check_abi_version.py)
 ```
 

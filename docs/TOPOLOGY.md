@@ -378,9 +378,10 @@ wire is the same kind of thing between repositories.
 
 The audit's codebase brief (research-archive brief 11) maps the split seam by seam: `stepBody` is
 already a free function of a creature and the ground; `beginTick` is already the settled-roster
-boundary the network slides into; the world-definition constants must leave `main.cpp`'s
-anonymous namespace for any second consumer to exist; and `src/` finally has the second consumer
-that justifies the library target its own test files have been working around.
+boundary the network slides into; the world-definition constants had to leave `main.cpp`'s
+anonymous namespace for any second consumer to exist — they now live in
+`src/world_definition.hpp` — and `src/` carries the `grid` library target its own test files once
+worked around, which is the target Master Control's flesh consumes.
 
 ## The four decisions, taken
 
