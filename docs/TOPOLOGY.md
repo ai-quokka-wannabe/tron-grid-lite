@@ -558,7 +558,37 @@ already a free function of a creature and the ground; `beginTick` is already the
 boundary the network slides into; the world-definition constants had to leave `main.cpp`'s
 anonymous namespace for any second consumer to exist — they now live in
 `src/world_definition.hpp` — and `src/` carries the `grid` library target its own test files once
-worked around, which is the target Master Control's flesh consumes.
+worked around.
+
+**The `grid` library is two worlds fused, and they part ways** (the owner's ruling, 2026-08-21,
+following Master Control's move to Rust). The **perceived world** — geometry, materials,
+reflectors, the stage, the senses, the world client and the live view's stage — stays here
+forever: its consumers are the spectator and the creature host, rendering and sensing, C++ with
+a GPU, and the server never renders. The **simulated world** — `stepBody`, `sanitiseAndClamp`,
+the ground function and the shared config constants — follows its owner out at Master Control's
+Etape 2, ported to Rust in `master-control` as **the one implementation**: "the server is the
+man" is a runtime doctrine, but source gravity following it keeps the authoritative code in the
+memory-safe language, under the build that pins the floating-point environment. Two consequences
+accepted with it: the flagship's local `--program --ticks` physics retires in favour of running
+against a local Master Control — the constellation applied to the dev loop, one command since
+the rehearsal proved it — with the per-tick hash test moving to the server's own suite where it
+guards the real thing; and the port is not a transcription — no two libms agree in the last bit,
+so acceptance is the flagship's behavioural physics tests re-run with tolerances, not
+bit-identity. The constants that remain shared across the boundary (the floor config, the body's
+dimensions, dt) are guarded the org's way: the world-definition fingerprint in `WELCOME`, and
+twin tests. Considered and rejected: the world definition moving into the link repository on the
+lives-with-neither pattern — world geometry is not a wire contract, and link's whole identity is
+the minimal zero-crate component that eats hostile bytes.
+
+**Two more placement rulings from the same review.** The flagship's `rehearsal_master_control`
+tool is correctly placed *today* and **retires the day the real heartbeat lands**: it is a second
+implementation of Master Control's part, licensed only by the real one's absence — the in-test
+`RehearsalMasterControl` class stays, being a test double for the client. And the Program ABI
+(`libs/program-abi`) is, by this document's own lives-with-neither reasoning, eventually
+misplaced: its two parties are the Grid and the brains, and the brains live in other
+repositories. It extracts into its own contract repository when `rc-worm` unpauses — the trigger
+is the second party becoming real, and not before, because an extraction with one consumer is
+ceremony.
 
 ## The four decisions, taken
 

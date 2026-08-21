@@ -496,7 +496,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses without and now demonstrate `--debug`; the pre-topology "debug window" vocabulary is
   retired across VISION, ARCHITECTURE, PERCEPTION and PROGRAM_INTERFACE; the live view's
   interpolation comment states its honest one-telling depth; and the window's ray depth is now
-  pinned to the senses' by static_assert rather than prose.
+  pinned to the senses' by static_assert rather than prose. A same-day placement review added
+  three rulings to § The four repositories: the `grid` library's **simulated world** (stepBody,
+  the clamps, the ground function) follows its owner out to a Rust master-control at its
+  Etape 2 — the perceived world stays here forever, since the server never renders — with the
+  flagship's local physics mode retiring in favour of dialling a local Master Control;
+  `rehearsal_master_control` retires the day the real heartbeat lands; and `program-abi`
+  extracts to its own contract repository when rc-worm unpauses, by this repository's own
+  lives-with-neither doctrine.
 
 - **The seams the master-control repository has been waiting for: the world definition leaves
   `main.cpp`, and `src/` becomes a library.** The audit's codebase brief mapped the split
