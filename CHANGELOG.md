@@ -863,6 +863,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **The understudy retires: `rehearsal_master_control` leaves the tree.** The ruling said it
+  would go the day the real heartbeat landed, and the heartbeat has landed — Master Control
+  lives in its own repository now (`cargo run --release` there, then `TronGridLite --window`
+  here), so the flagship's stand-in server became the second implementation the organisation
+  forbids, and second implementations do not get to linger on sentiment. It goes out with full
+  honours: it proved the live view before any real server existed, it was the first C++
+  consumer of Link's server half, and its scripted world — the orbiters, the blinker, the
+  rhythm — lives on inside the heartbeat itself. The `RehearsalMasterControl` class inside
+  `world_client_tests` stays: a test double for the client is a different creature from a
+  server pretending to be real.
+
 - **The rasteriser's share of MathLib, none of which this renderer calls.** The tracer builds rays
   from the camera's basis vectors and field of view directly, and the BVH is the culling — so
   `projection.hpp` in its entirety (`perspective`, `lookAt`, `viewFromQuaternion`,
