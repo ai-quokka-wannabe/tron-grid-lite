@@ -68,7 +68,7 @@ Everything else — maths, windowing, logging, signals, the test harness, the BV
 | Materials | One continuous, branchless parameter space | Mirror, neon and glass are named points in it, four values each |
 | Shader language | Slang | Modern, modular, compiles to SPIR-V |
 | Creature vision | Dedicated small render targets, 64 x 64 to 256 x 256 | Biologically honest; keeps ray counts trivial |
-| Debug window output | Separate, larger swapchain window | Debugging and observation only |
+| The User's window output | Separate, larger swapchain window | Observation: the live view of the world, or the stage alone under `--debug` |
 | Acoustics | Same BVH, same surfaces | One Grid, two senses |
 | Coordinate system | Right-handed, Y-up | Matches glTF and most authoring tools |
 | Units | Metres | Physically meaningful light and sound propagation |
@@ -387,7 +387,7 @@ nodes run Möller-Trumbore against their triangle range. Nothing exotic, nothing
 is visible in a shader the author wrote.
 
 The same buffers are bound by the acoustic pass, unchanged. The BVH is built once per frame at most — in practice
-only when the Grid changes — and is shared by every sensor and by the debug view.
+only when the Grid changes — and is shared by every sensor and by the User's view.
 
 ### One hierarchy today, two when creatures move
 
@@ -587,21 +587,21 @@ a bounded stack is cheaper and more predictable than one anyway.
 
 ---
 
-## Render Targets: Sensors versus the Debug Window
+## Render Targets: Sensors versus the User's Window
 
 Two distinct classes of render target exist, and they are not the same resource.
 
-| | Creature sensor targets | Debug window |
+| | Creature sensor targets | The User's window |
 |---|---|---|
 | **Purpose** | The input a creature perceives | Debugging and observation for the User |
-| **Resolution** | 64 x 64 to 256 x 256, per eye | Whatever the debug window is sized to |
+| **Resolution** | 64 x 64 to 256 x 256, per eye | Whatever the User's window is sized to |
 | **Count** | One per eye, several eyes per creature | Exactly one |
 | **Camera** | Rigidly attached to the creature | Free-flight debug camera |
 | **Format** | `R16G16B16A16_SFLOAT`, read back or sampled by the Program | HDR, then post-processed and presented |
 | **Post-processing** | None — creatures receive linear radiance | Bloom and tonemapping |
 | **Present** | Never presented | Presented through the swapchain |
 
-The debug view is not privileged in any way that matters: it runs the same tracer over the same BVH. It is simply
+The User's view is not privileged in any way that matters: it runs the same tracer over the same BVH. It is simply
 larger, and it is the only target that ever reaches a monitor.
 
 Creature sensors are deliberately not tonemapped. A creature receives linear radiance, and any perceptual compression
@@ -624,7 +624,7 @@ camera draws every pass — the saving is only ever claimed for a Grid and a vie
 
 The rule applies to both senses, but they earn it differently:
 
-- **The debug view compares the state it drew from** — camera position, orientation, field of view, surface size — and
+- **The User's view compares the state it drew from** — camera position, orientation, field of view, surface size — and
   sleeps on the render channel's condition variable when none of them has moved. State comparison rather than dirty
   flags, deliberately: a dirty flag is correct only if every writer remembers to raise it, and forgetting costs a
   window that has stopped updating. Comparing the state cannot be forgotten. The one thing this must never get wrong is
@@ -759,7 +759,7 @@ level, and because the acoustic gather's cache key *is* the generation. A skip c
 generation that has not yet been recomputed.
 
 **Change detection is a `memcmp` of the instance-record array against the last published copy**, at
-the exact granularity the GPU reads, rather than a dirty flag — the same argument the debug view
+the exact granularity the GPU reads, rather than a dirty flag — the same argument the User's view
 already makes one layer up, applied one layer down. A future writer who adds a field to
 `InstanceRecord` cannot forget to raise anything.
 
@@ -821,7 +821,7 @@ On an empty Grid this loop is bit-identical to today's.
                    ┌──────────────────────┼──────────────────────┐
                    │                                             │
        ┌───────────▼────────────┐                    ┌───────────▼────────────┐
-       │  Sensor trace pass     │                    │  Debug view trace pass │
+       │  Sensor trace pass     │                    │  User view trace pass  │
        │  compute, 64 x 64 ...  │                    │  compute, window size  │
        │  one dispatch per eye  │                    │  same shader, same BVH │
        └───────────┬────────────┘                    └───────────┬────────────┘
@@ -964,7 +964,7 @@ A Program never links against renderer internals, never touches a Vulkan object,
 senses and it returns actions. There is no entity list, no position query, no ground truth of any kind — see
 [VISION.md](VISION.md) § The Inhabitants for why that boundary is not negotiable.
 
-The User's debug window sits entirely outside this interface and is never an input to any Program.
+The User's window sits entirely outside this interface and is never an input to any Program.
 
 ---
 

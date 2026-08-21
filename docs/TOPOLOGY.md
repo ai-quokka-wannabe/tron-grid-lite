@@ -162,9 +162,42 @@ accidentally network-shaped from the start:
 3. **The creature host** updates its stage, renders its creature's senses from authoritative
    tick-N state (never interpolated — a brain fed fabricated poses is the divergence class the
    audit warns about), calls `program_tick`, and sends `ACTIONS` tagged for tick N+1.
-4. **Master Control** accepts the latest actions with tick ≤ N+1 as it steps; anything arriving
-   later is discarded. A missing action means the creature coasts — which is not a networking
-   policy but the ABI's existing sentence: a Program that writes nothing coasts.
+4. **Master Control** accepts actions through a published window: an `ACTIONS` tagged for tick T
+   is accepted while `T ∈ [N, N+1)` relative to the tick N being stepped — stale intents lose to
+   newer ones (latest wins, deduplicated by creature and tick), and an intent tagged for a far
+   future tick is refused outright rather than queued, because an interval rejects both
+   directions of nonsense where "latest with tick ≤ T" rejected only one. Every acceptance and
+   every refusal is logged with *which tick the intent actually applied to* — the field that
+   lets a replay distinguish an on-time action from a late-and-shifted one.
+
+**Silence has two authors, and the rules differ because the information differs** (the owner's
+ruling, 2026-08-21 — the audit found briefs 12 and 14 disagreeing and the distillation had
+silently picked a side):
+
+- **A silent Program** — one that writes nothing into its zeroed `TglActions` — has *said*
+  something: zero intent. Its host sends the zeroes, and the creature brakes to a stop, exactly
+  the ABI's own sentence. No network rule may overwrite an intent a Program actually expressed.
+- **A silent network** — a missing `ACTIONS` where the host's connection still lives — has said
+  *nothing*, and the world must not fabricate a brake the Program never asked for. Master
+  Control re-applies the last accepted intent for up to `LNK_ACTIONS_REPEAT_TICKS` (one tick —
+  the Overwatch/Rocket League answer: repeat the last input, never stall, never rewind), then
+  falls to zeroed coast. Loss is further minimised at the source: **every `ACTIONS` message
+  carries the previous tick's intent piggybacked beside the current one** — Tribes repeated its
+  moves across datagrams for exactly this reason — so a single lost or late message costs
+  nothing at all, and the acceptance dedupe is idempotent by construction so the redundancy is
+  free to process. Redundant on today's TCP, which never loses; load-bearing the day the UDP
+  trigger fires, and adopted now because a message layout is cheapest to widen before anyone
+  speaks it.
+- **A dead host** — keepalive silence past the published threshold, or a closed connection — is
+  a third thing: see the liveness rule below. Its creature falls to the neutral reflex (zeroed
+  intent) and *stays embodied*.
+
+**Why this much rigour about loss** (the owner's word, 2026-08-21): this is an embodied-AI
+project, and repeatability is the product. A creature learns against the world's published
+rules, so every intent that reached the wire must either reach the world or be *refused on the
+record* — silent loss is a corrupted experience for a learning mind, and a replay that cannot
+say what happened to an action cannot explain the world it reproduces. Resend, repeat, and log
+the verdict; never merely drop.
 
 The one-tick action delay this implies is not a compromise: it is the staged-actions contract the
 ABI has documented since physics landed, and it is the 1500 Archers insight (schedule commands for
@@ -193,25 +226,67 @@ that the places protocols actually fail are the places this codebase already has
   inject stale intent. When a measured trigger fires — internet loss making motion stutter
   through retransmit stalls, or a human-piloted creature — the transport swaps to the Gaffer
   stack (sequence/ack/ack-bits, actions repeated across datagrams as Tribes repeated its moves,
-  ≤1200-byte datagrams) without the messages above it changing.
+  ≤1200-byte datagrams) without the messages above it changing. Three connect-time rules are
+  recorded now so they are not reinvented under pressure on that day: an unverified source gets
+  a challenge-response with a server salt before anything else; no response is ever larger than
+  the request that provoked it (Quake 3's `getstatus` amplified 24.5× and became a DDoS tool);
+  and the server allocates *nothing* for a source it has not verified (Factorio's pre-verification
+  connect state was spoofable, and spoofable allocation is a remote memory bill).
 - **Framing**: `u16 length | u8 type`, little-endian, then a fixed-width no-padding POD payload —
   the ABI's layout discipline extended to the wire, with the same static-assert pinning. The
-  receiver validates length against a per-type maximum *before* any copy: the audit's protocol
-  postmortems (Dark Souls III's remote-code execution, CS:GO's pre-auth overflows) all lived in
-  parsers that trusted a length field. This is the one part of the protocol that is gold-plated
-  on day one, localhost or not, because it is correctness, not security theatre.
+  receiver validates length against the *exact* size for the type — not merely under a maximum —
+  *before* any copy, and before even asking the socket for the payload bytes: the audit's
+  protocol postmortems (Dark Souls III's remote-code execution, CS:GO's pre-auth overflows) all
+  lived in parsers that trusted a length field. The read loop treats TCP strictly as the byte
+  stream it is — split and coalesced segments are the normal case, never a surprise (Minecraft's
+  canon) — and an unknown type or a wrong length earns a logged disconnect, never a skip: a
+  skipped message leaves the stream desynchronised, which is a quieter failure than a hangup.
+  This is the one part of the protocol that is gold-plated on day one, localhost or not, because
+  it is correctness, not security theatre. The one large variable-size input — the rez-model
+  blob — is additionally parsed in a single pass, no re-scanning, because hand-rolled parsers
+  are this project's policy and an accidentally quadratic one cost GTA Online six-minute loads
+  for years.
+- **Keepalive is a contract, with numbers**: an end that has heard nothing for one second sends
+  `PING`; an end that has heard nothing for ten seconds declares the peer dead and reaps the
+  connection — LAN-sane figures inside the shipped norms (Gaffer's 5 s, Source's 30 s,
+  Minecraft's 20–30 s), published as header constants exactly as the port is, because a timeout
+  only works when both ends compile in the same one. Reaping is what makes the dead-host
+  liveness rule fire deterministically rather than whenever the OS notices.
+- **Minimal flood posture from day one** (the owner's ruling, 2026-08-21, siding with the
+  programmable-creature brief over the deferral): a per-connection cap on messages processed per
+  tick, and a high-water mark on the per-connection write buffer beyond which the connection is
+  declared dead rather than the buffer grown — because a runaway *local* host floods exactly as
+  well as a remote one, and an unbounded buffer is an allocation the peer controls. Real rate
+  limiting stays deferred with the security tier.
 - **Handshake**: magic, then a protocol fingerprint produced by the same fingerprint tooling that
   guards the ABI header; mismatch earns a human-readable refusal and a closed connection —
   refusal, not negotiation, exactly as `tglGetProgramVTable` behaves.
 - **Messages**: `HELLO`/`WELCOME` (identity, tick rate, current tick), `REZ` (a creature's
   identity, descriptor and render model — client to server at hosting time, server to everyone on
   spawn and to every late joiner), `TICK_STATE` (the full world, every tick, every client — no
-  deltas, no acks, no area-of-interest at this scale), `ACTIONS`, `EVENT` (vocalisations and
-  kin, tick-stamped notifications, never load-bearing state), `DEREZ`, `PING`/`PONG`, `BYE`.
+  deltas, no acks, no area-of-interest at this scale), `ACTIONS` (current intent *and* the
+  previous tick's intent piggybacked — see the silence rules), `EVENT` (tick, kind, the source
+  creature, position, strength — tick-stamped notifications, never load-bearing state: without
+  the kind a spectator cannot choose a sound, without the source it cannot attribute one),
+  `DEREZ`, `PING`/`PONG`, `BYE`.
   Late join is not a special case: `WELCOME`, the `REZ` of every live creature, then the next
   `TICK_STATE` — Quake 3's gamestate-then-snapshots in one code path. A spectator is a client
-  that never sends `ACTIONS`; observers fall out of the broadcast for free, which is the
-  SourceTV insight.
+  that never sends `ACTIONS`, **and Link's own server half refuses `ACTIONS` arriving from a
+  spectator-role connection** (the owner's ruling, 2026-08-21): the CS:GO coaching bug's lesson
+  is that spectator privilege is enforced where the authority lives, and enforcing it inside the
+  one shared wire implementation means the rule cannot drift between consumers. Observers fall
+  out of the broadcast for free, which is the SourceTV insight.
+- **What the wire still owes, recorded before it is needed.** `TICK_STATE`'s rows carry pose,
+  velocity, yaw rate and the voice today — enough for a spectator, not enough for a creature
+  host: filling `TglSenses` also needs the specific force and the tick's contacts (the audit's
+  codebase brief read the exact list out of `GridSensesSource::fill`), so the rows grow those
+  fields with the creature-host etape, while this repository is pre-release and a message layout
+  still changes for free. `REZ`'s caps have three names — vertex count, triangle count,
+  *material count* — plus index-range checks, the material cap being the one that guards the
+  shared slot space below. And `WELCOME` grows a world-definition fingerprint beside the
+  protocol's: the Grid's geometry and material table are compiled into both ends from the shared
+  `grid` library, one index space with two homes, and a slot-count mismatch mis-shades and
+  mis-sounds *silently* — a handshake refusal is the only honest failure for build skew.
 - **One structural rule bought from the Screeps lineage**: the broadcast is per-subscriber
   filterable from day one. Not filtered — v1 sends everyone everything — but the code path is
   "compose this subscriber's view", not "write the one global buffer to all sockets", so the day
@@ -222,6 +297,16 @@ that the places protocols actually fail are the places this codebase already has
   keeps working across sim changes) and the input log (seed, config, every accepted action —
   Factorio-style deterministic re-simulation), with a periodic state hash in the log so replay
   divergence is detected rather than trusted. This is Etape 16's hash, promoted to the world.
+  The details that make the logs worth having, from the audit: the state log opens with a
+  header — the protocol fingerprint and the run's start metadata — because a replay file that
+  cannot say which wire it speaks is unreadable after the first protocol change; at roughly
+  55 MB per hour, rotation and retention are a day-one concern, not an afterthought; each
+  input-log record carries *which tick the action actually applied to* (the fourth field —
+  without it a replay cannot tell on-time from late-and-shifted), and refusals are logged
+  too — an action that existed and was refused is exactly the datum "every accepted action"
+  throws away. When the periodic hash ever disagrees, the report is a server-versus-replay
+  state diff with floats serialised as hex — a hash says *that* two worlds diverged; only the
+  diff says *where*, and only hex makes the diff readable.
 
 ## The spectator
 
@@ -235,7 +320,15 @@ interpolate buffered truth, hold the last pose on starvation, never invent.
   interpolation of positions, shortest-arc for yaw. No prediction — a spectator has no avatar,
   so there is nothing to predict. The window path grows the same movable-instance machinery the
   senses pass already has, plus a world-generation term in its redraw gate, both long
-  anticipated in the code's own comments.
+  anticipated in the code's own comments. *Built so far*: the live view blends one telling deep —
+  the depth localhost TCP actually needs, where delivery jitter is microseconds — and the ring
+  deepens to this section's figure when the UDP trigger fires; the playout clock then also
+  learns the discipline that keeps such a buffer level over a long session: slew it against the
+  arrival cadence by at most half a per cent, never step it — a stepped clock is a visible hitch
+  at every correction, and an unslewed one drains or floods the buffer by drift alone. If
+  smoothing beyond the buffer is ever wanted, extrapolation is capped at one tick and then
+  holds — Source caps `cl_extrapolate` at a quarter second because prediction error grows
+  without bound (Fiedler's demonstration: cubes sinking through floors and springing back).
 - **Sound**: the Grid finally reaches the User's ears, and the ABI's no-auralisation clause
   survives intact — because auralisation was refused on the *creature* path, and the spectator
   is presentation. The server replicates acoustic *events* (a call: tick, position, strength;
@@ -248,8 +341,24 @@ interpolate buffered truth, hold the last pose on starvation, never invent.
   shared-mode renderer — Windows-SDK-only, zero dependencies, an honest 500–800 lines — with
   Bencina's real-time rules as law on the audio thread: no locks, no allocation, no I/O,
   silence-fill on starvation, events crossing on a preallocated ring. Pings are synthesised
-  wavetables, the hum a procedural oscillator bank; no assets, no files. HRTF, Doppler and
-  spectator-side occlusion are deferred luxuries.
+  wavetables, the hum a procedural oscillator bank; no assets, no files. **Doppler is in from
+  the start** (the owner's ruling, 2026-08-21 — realism now, not later): the broadcast already
+  carries every creature's velocity, so the spectator pitch-shifts each event's synthesis by the
+  radial speed between source and camera — parametric like everything else, and still never a
+  second simulation. HRTF and spectator-side occlusion remain the deferred luxuries. The same
+  ruling reaches the creature's ears through the acoustic model itself: discrete arrivals grow
+  sub-bin interaural onsets (direction) and radial velocity (Doppler) — ACOUSTICS.md § What a
+  Creature Ear Needs carries the committed extension, and TODO.md stages the etape. One rule above all of it: **spectator audio
+  derives from replicated events and parameters, never from a second acoustic simulation** — the
+  tempting move of running the acoustic gather spectator-side with the camera as listener is a
+  second implementation of world physics that can drift, and drift between what a creature heard
+  and what the User heard is a bug nobody would ever find.
+- **Two permissions the protocol grants the server, written down so nobody builds their
+  absence**: a client holding `TICK_STATE` rows for a creature whose `REZ` it has not yet
+  processed draws a visible placeholder and never disconnects (Source's `error.mdl` convention —
+  an unknown body is a rendering question, not a protocol violation); and a late joiner simply
+  misses the acoustic events that were in flight before it arrived (GOTV behaves the same) — the
+  server owes history to its logs, not to its joiners.
 - **The CS:GO coaching bug is the standing warning**: spectator privilege is a server-enforced
   role, not a client UI state. The spectator connects as a role that cannot submit actions, and
   the eventual mitigation ladder (below) filters *host* feeds while spectator feeds stay full —
@@ -264,16 +373,69 @@ scaling law: more creatures, more host processes, one brain each.
 - Senses come from authoritative tick-N state only. The host never interpolates, extrapolates or
   predicts on the sense path.
 - The pipeline budget — receive, stage, render senses, run the brain, send actions — is
-  instrumented against the 31.25 ms tick, and the miss counter is surfaced per host. Misses
-  coast, by the ABI's own semantics; the Overwatch and Rocket League answer (repeat the last
-  input, never stall the world, never rewind) agrees.
+  instrumented against the 31.25 ms tick, and the miss counter is surfaced per host. The
+  pass/fail line has a number: about 29 ms end to end, because a host that completes inside it
+  is bitwise-indistinguishable in timing semantics from a local run. Misses fall under the
+  silence rules above — the network repeats briefly, then the creature coasts; never stall the
+  world, never rewind.
 - The Firefox "Lorentz" insight arrives free of ABI changes whenever wanted: a supervisor that
   relaunches a crashed host is crash isolation without security isolation, and it is the cheap
   90% of what process isolation ever buys here — since the accepted risk is the owner's own
   machine, per the Ardour precedent that in-process plugins are a defensible choice when you own
-  the deadline.
+  the deadline. The supervisor's partner is a **watchdog timeout on the `program_tick` call
+  itself**, because a brain *hang* is likelier than a brain crash and is otherwise a host that
+  stalls silently while the server coasts its creature forever; and when either fires, the
+  crash report names the DLL as the author of the fault, not the host that carried it.
+- **The sense spec is fixed server-side, per species.** Sensor resolution, field of view, ray
+  and bounce budgets are dictated by Master Control's normative spec (version-pinned like the
+  acoustic model), never chosen by whatever GPU a host happens to carry — otherwise hardware
+  inequality becomes a fairness axis, and a bigger card buys sharper eyes when it must only ever
+  buy faster thinking.
 - The worm's Qt GUI runs inside the DLL on its own thread, as always planned; the host neither
   knows nor cares.
+
+## Master Control's mechanics
+
+The heartbeat's own laws, recovered from the briefs before the first line of server code — each
+one a mechanism behind a sentence this document already had, or a behaviour it had nowhere.
+
+- **The pacing mechanism, not just the sentence.** A fixed-dt accumulator against the wall
+  clock, with a clamp on the maximum ticks stepped per iteration (Fiedler's canon): without the
+  clamp, one long stall makes the loop "catch up" in an unbounded burst, which is the spiral of
+  death the overrun sentence exists to close. And falling behind is *loud* — an overrun counter
+  and a Minecraft-style "can't keep up" log line — because a server chronically 8% late must
+  never look identical to a healthy one.
+- **Liveness indifference.** A dead host's creature drops to the server-side neutral reflex
+  (zeroed intent), **stays embodied and stays vulnerable**; the world never waits for a host,
+  and `DEREZ` is the word for a *leave*, never for a crash. Screeps is the precedent: a broken
+  script's empire persists, decays and remains attackable. The alternative — dropping the body
+  on disconnect — makes crash-looping an escape hatch and a griefing verb at once.
+- **Intents are requests, and conflicts resolve server-side.** Every brain runs against the
+  settled, immutable snapshot of tick N (the two-stage pipeline Screeps ships); when two intents
+  contend for the same outcome, Master Control resolves the conflict deterministically and logs
+  the resolution. Today no creature-creature contact exists and the sentence is trivially true;
+  it is written before it is needed.
+- **The RNG of record has substreams.** One master seed, and per-creature substreams derived
+  from it — so one creature's draws are independent of roster order and of how many neighbours
+  exist, and admitting a newcomer does not perturb every incumbent's randomness. Client entropy
+  never enters the world.
+- **The floating-point environment is pinned in the build, from day one.** Strict FP modes, no
+  fast-math, fused-multiply-add contraction pinned, and libm transcendentals treated with the
+  suspicion the flagship already documents (no two libms agree in the last bit; AMD and Intel
+  differ on `sin`/`cos`/`tan`) — because the replay claim rests on the server's build, and a
+  build flag is nearly free on day one and unpayable after logs exist.
+- **Determinism dies at hidden state — the audit's checklist.** No iteration over unordered
+  containers anywhere in the simulation; no cache that lives outside the hashed state; nothing
+  recomputed at load that could differ from what was saved (Factorio's actual specimens: a
+  serialiser changing Lua iteration order, and a cached value recalculated on load).
+- **Identities are traceable.** Creatures and models carry identities an audit can follow —
+  Ultima Online caught its duplication bugs by seeding items with traceable hashes — costing
+  nothing now, and becoming the only way to *notice* the duplication class if persistence ever
+  lands.
+- **Three named non-goals**, so nobody helpfully builds them: no node handoffs (single-process
+  authority is the design, and the handoff seam is where UO's dupes lived), no time dilation
+  (EVE's TiDi bends dt, and dt is sacred here), no database-backed hot persistence (the
+  snapshot-plus-action-log is stronger until the first world anyone regrets losing).
 
 ## Trust, in writing
 
@@ -307,19 +469,34 @@ Grid — until any of these fires: a ranked or prized event; a host operated out
 maintainers' circle of trust; credible suspicion of a brain acting on information it could not
 have perceived; a world economy where scouting confers advantage. When one fires, the ladder is
 climbed cheapest-first: per-host interest filtering in the already-filterable broadcast
-(Valorant's fog: the data never arrives); post-hoc statistical audit against the logged poses and
-the deterministic sense spec (the chess.com model — the only anti-cheat fully compatible with a
-GPL client); server-computed hearing (cheap long before vision ever could move). Attestation and
-client scanning are rejected permanently.
+(Valorant's fog: the data never arrives); server-controlled staleness beside it (EVE's ESI ships
+cache timers that bound how fresh any read can be — degrading sense freshness without building
+full interest management, on the same seam); post-hoc statistical audit against the logged poses
+and the deterministic sense spec (the chess.com model — the only anti-cheat fully compatible
+with a GPL client); server-computed hearing (cheap long before vision ever could move), for
+which the shipped blueprint is RoboCup's rcssserver — per-agent percepts computed server-side on
+a fixed cadence, with distance-degraded noise as a cheap integrity technique of its own.
+Attestation and client scanning are rejected permanently.
 
 **Brains as artefacts.** A native DLL is a malware distribution format the moment it is shared —
 the Minecraft fractureiser incident and the Cities: Skylines auto-updater sabotage are the
 ecosystem's scars. Policy from the first shared brain: brains publish as source; no auto-update
-mechanisms in brains, ever; and when the grand vision needs strangers' brains running on
-strangers' hosts, the second brain format is WebAssembly with fuel metering (Battlecode's
-deterministic budgets at near-native speed), while foreign native DLLs never execute on the
-server or auto-ship to other owners' machines — .NET Terrarium tried exactly that, and
-Microsoft's own retirement of its sandbox is the closing argument.
+mechanisms in brains, ever; where a binary is genuinely unavoidable, reproducible builds and
+published checksums are the fallback, never trust. When the grand vision needs strangers' brains
+running on strangers' hosts, the second brain format is WebAssembly — with **two budgets, not
+one**: fuel for deterministic instruction metering (Battlecode's property), and epoch
+interruption for wall-clock defence, because a fuel-only design still hangs on a spin fuel
+accounting has not yet caught up with. On exhaustion, Battlecode's answer beats killing: the
+brain *pauses and resumes exactly there* next tick. And the sandbox sits **inside** a process
+boundary rather than replacing one — the language-level sandboxes rotted on their own vendors'
+word (isolated-vm's README disclaims safety, the Node `vm`/`vm2` CVE lineage, Microsoft's
+retirement of CAS). Should a hosted brain tier ever run on the authoritative machine, Halite's
+containment recipe applies with its most forgettable ingredient made explicit: CPU and memory
+limits, **and the network blocked**. Foreign native DLLs never execute on the server or
+auto-ship to other owners' machines — .NET Terrarium tried exactly that, and Microsoft's own
+retirement of its sandbox is the closing argument. If Master Control ever meters anything, the
+fair shape is Screeps' bucket: a banked budget with a burst cap, so a quiet brain earns the
+right to think hard occasionally.
 
 ## Determinism and replay, scoped
 
@@ -349,13 +526,13 @@ The claims survive networking and come out sharper, provided they are stated pre
 | Deferred | Trigger to build it |
 |---|---|
 | UDP transport + reliability layer | Measured loss stuttering motion through TCP stalls, or human-piloted control over the internet |
-| Delta compression, acked baselines | Per-tick state approaching a quarter of an MTU (~50× today's size) |
+| Delta compression, acked baselines | Per-tick state approaching a quarter of an MTU (~50× today's size). Refused rather than merely postponed: at ~500 bytes per tick the bookkeeping costs more than it saves |
 | Interest management / area-of-interest | Sense-integrity triggers above, or fan-out beyond ~100 entities / ~16 clients |
 | Client-side prediction, lag compensation | A human whose reflexes are in the loop — none exist by design |
 | TLS, accounts, tokens, rate limiting | The first connection that is not 127.0.0.1 |
 | Persistence (the world survives the server) | The first world anyone regrets losing; until then, snapshot + action log is stronger than a database |
 | Spectator delay | Participants able to consume the spectator feed as a side channel |
-| Audio beyond parametric pings (HRTF, Doppler, occlusion) | The spectator's ears caring, which is a taste decision, not a measurement |
+| Audio beyond parametric pings and Doppler (HRTF, spectator-side occlusion) | The spectator's ears caring, which is a taste decision, not a measurement. Doppler itself left this row on 2026-08-21 — the owner ruled it realism owed now |
 | WebAssembly brain tier, out-of-process DLL runner | The first community brain from outside the circle of trust |
 
 ## The four repositories

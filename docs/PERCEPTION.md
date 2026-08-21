@@ -62,7 +62,7 @@ The names run from the simplest animal upward, and the sizes are startlingly sma
 | `rodent` | One ~166×166-equivalent panoramic buffer, uniform, no fovea | 1–3 | **17,600–27,500** | 0.4–0.5 cyc/deg acuity across an 8.38 sr field |
 | `macropod` | 256×256 forward plus a coarse peripheral band | 3 | **65,536** | Tammar wallaby 4.8 cyc/deg behavioural |
 
-For scale, a 640×480 debug window is 307,200 pixels. **Every preset below the last is cheaper
+For scale, a 640×480 User's window is 307,200 pixels. **Every preset below the last is cheaper
 than one frame of that window, and the first three presets are cheaper by two to three orders of
 magnitude.** Twenty simultaneous fruit-fly-class creatures cost about 30,000 primary rays per
 frame — a tenth of one 640×480 image.

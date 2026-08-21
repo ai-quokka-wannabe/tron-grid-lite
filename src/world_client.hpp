@@ -25,9 +25,11 @@
 
 /*!
     The client's living copy of Master Control's world: what TICK_STATE said, remembered one
-    telling deep so the picture can interpolate between the two newest ticks rather than jump —
-    the blueprint's two-to-three-tick spectator delay, with no prediction ever. Clients own
-    perception; the world stays the server's.
+    telling deep so the picture can interpolate between the two newest ticks rather than jump,
+    with no prediction ever. One telling is the depth localhost TCP actually needs — delivery
+    jitter here is microseconds against a 31 ms tick — and the blueprint's two-to-three-tick
+    ring buffer (TOPOLOGY.md § The spectator) deepens this exact seam the day the UDP trigger
+    fires. Clients own perception; the world stays the server's.
 */
 namespace WorldClientLib
 {

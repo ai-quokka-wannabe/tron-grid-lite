@@ -99,8 +99,12 @@ checking.
 ```bat
 git clone https://github.com/ai-quokka-wannabe/tron-grid-lite.git
 cd tron-grid-lite
+git submodule update --init
 cmake --preset windows-msvc
 ```
+
+The submodule line is not optional: configure refuses by name when `external/link` is empty,
+because the wire of the Grid is built from it.
 
 Run this from a **Developer Command Prompt for VS 2022**, or from any shell where `cl.exe` is on
 the path.
@@ -120,12 +124,13 @@ ctest --preset windows-msvc-debug
 ### Step 7 — Run
 
 ```bat
-build\windows-msvc\src\Debug\TronGridLite.exe
+build\windows-msvc\src\Debug\TronGridLite.exe --debug
 ```
 
-This opens the **debug window** — the User's free-flight camera for observing the Grid. It is a
-development and observation tool only: no User inhabits TronGrid Lite, and the camera influences
-nothing.
+This opens the **debug view** — the User's free-flight camera over the built-in stage, with no
+world server and no Program, so the rendering can be checked on its own. The live view is
+`TronGridLite [host:port] --window`, which demands a running Master Control and refuses loudly
+without one; no User inhabits TronGrid Lite either way, and the camera influences nothing.
 
 ---
 
@@ -183,10 +188,11 @@ If `VULKAN_SDK` is empty, source the SDK's environment script — the tarball in
 ```bash
 git clone https://github.com/ai-quokka-wannabe/tron-grid-lite.git
 cd tron-grid-lite
+git submodule update --init
 cmake --preset linux-x11-gcc
 cmake --build build/linux-x11-gcc --config Debug
 ctest --preset linux-x11-gcc-debug
-./build/linux-x11-gcc/src/Debug/TronGridLite
+./build/linux-x11-gcc/src/Debug/TronGridLite --debug
 ```
 
 ---

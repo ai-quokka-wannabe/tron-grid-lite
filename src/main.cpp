@@ -200,6 +200,10 @@ namespace
     */
     constexpr uint32_t MAX_BOUNCES{6u};
 
+    // A creature and the User standing in the same place must see the same Grid; senses.hpp
+    // states the same number for exactly that reason, and prose-only equality is not a mechanism.
+    static_assert(MAX_BOUNCES == SENSES_MAX_BOUNCES, "The window's ray depth and the senses' ray depth are one fact spelled twice. Change both or neither.");
+
     //! Linear scale applied to the traced radiance before the tone curve.
     constexpr float EXPOSURE{1.0f};
 

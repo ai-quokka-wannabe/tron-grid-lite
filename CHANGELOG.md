@@ -458,6 +458,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The MMO lessons, audited and absorbed whole: TOPOLOGY.md now carries every mechanism the
+  briefs taught, and the owner ruled for rigour everywhere.** A pre-heartbeat compliance audit
+  re-read all five research briefs against the distillation and the shipped code. The code came
+  out clean — the wire validates exactly and before any copy, refusal is never negotiation, the
+  spectator interpolates buffered truth and never invents — but the distillation had dropped
+  real content, and one genuine fork was hiding: briefs 12 and 14 disagree about a missing
+  ACTIONS packet (zero-coast versus repeat-last), and the ABI's coast sentence is about a
+  different silence than the network's. The owner's ruling (2026-08-21), under the standing
+  principle that **no information may be lost** — this is an embodied-AI project and
+  repeatability is the product: silence has three authors now written into TOPOLOGY.md. A
+  silent Program said "zero" and brakes; a silent network said nothing, so the server repeats
+  the last accepted intent for one tick and every ACTIONS message piggybacks the previous
+  tick's intent beside the current one (Tribes' resend, adopted while the wire still changes
+  for free); a dead host's creature falls to the neutral reflex and stays embodied — the world
+  never waits (Screeps' liveness indifference). Around that ruling, TOPOLOGY.md absorbed the
+  audit's recovered mechanisms: the acceptance window [N, N+1) with idempotent dedupe by
+  (creature, tick); the fixed-dt accumulator with a max-steps clamp and a loud "can't keep up"
+  counter; keepalive as published header constants (PING at one second idle, dead at ten);
+  minimal flood posture now (per-connection per-tick quotas, a write-buffer high-water) because
+  a runaway local host floods as well as a remote one; Link's server half itself refusing
+  ACTIONS from spectator-role connections (the CS:GO coaching lesson, enforced in the one
+  shared implementation); FP-environment pinning and the hidden-state determinism checklist for
+  Master Control's build; per-creature RNG substreams; traceable identities; three named
+  non-goals (no handoffs, no time dilation, no hot database); what TICK_STATE still owes the
+  creature host (specific force and contacts) and what REZ's three caps are; the
+  world-definition fingerprint WELCOME grows so build skew refuses instead of mis-shading; the
+  state-log header, rotation arithmetic, the which-tick-applied field and logged refusals; the
+  playout-clock slew, the one-tick extrapolation cap, the never-a-second-acoustic-simulation
+  rule and the spectator's two protocol permissions; the ~29 ms host budget line, the
+  program_tick watchdog, and the server-side sense spec. **And two new owner rulings landed the
+  same day: Doppler is realism owed now** — the spectator pitch-shifts events from replicated
+  velocities from the start, off the deferred list — **and creatures must be able to sense a
+  voice's direction**: the interaural extension ACOUSTICS.md anticipated is committed (sub-bin
+  onsets per ear plus radial velocity per arrival), staged as Etape 17. Housekeeping the audit
+  caught in passing: DEV_ENV_SETUP's walkthroughs gained the submodule init a fresh clone
+  refuses without and now demonstrate `--debug`; the pre-topology "debug window" vocabulary is
+  retired across VISION, ARCHITECTURE, PERCEPTION and PROGRAM_INTERFACE; the live view's
+  interpolation comment states its honest one-telling depth; and the window's ray depth is now
+  pinned to the senses' by static_assert rather than prose.
+
 - **The seams the master-control repository has been waiting for: the world definition leaves
   `main.cpp`, and `src/` becomes a library.** The audit's codebase brief mapped the split
   exactly — "the world-definition constants must leave `main.cpp`'s anonymous namespace for any

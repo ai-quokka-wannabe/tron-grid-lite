@@ -777,6 +777,20 @@ first cut. And the *Grid* should stop at two buffers: how a Program extracts dir
 the Program's problem, and *Ormia* is a standing warning that the mechanism may live in the body's
 mechanics rather than in computation at all.
 
+**That extension is now committed** (the owner's ruling, 2026-08-21: creatures must be able to
+sense the direction a voice comes from, and Doppler belongs in the world's realism). The shape this
+section anticipated becomes the plan: each discrete arrival grows a record beyond band energies —
+its **sub-bin onset per ear** (the interaural time structure a 1 ms histogram destroys; whether it
+travels as a fractional-bin delay pair or as an explicit arrival direction is the etape's first
+design question, and this section's own physics is the brief for it), and its **radial velocity**,
+from which a Program senses Doppler. The honest number is written beside the promise: at the
+Grid's creature speeds of a few metres per second against 343 m/s, the frequency shift is under
+one per cent — real information for a sense built to read it, imperceptible colour for anything
+else — so the field is cheap truth, not drama. The ambient hum stays energy-only: a sustained
+sourceless bed has no onset to time and no bearing worth naming, which is the same arithmetic
+that already denies it a range. The staged work is in `TODO.md`; nothing in this section's
+current normative model changes until that etape lands.
+
 An earlier TODO item read "Fill `hearing_samples` in the Program interface", naming a flat array.
 **A flat sample list is precisely the shape that makes localisation impossible**, because it has
 nowhere to put the second ear. The item is gone and the shape it named never existed; what the ABI
