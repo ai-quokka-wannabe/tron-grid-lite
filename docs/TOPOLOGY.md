@@ -581,9 +581,9 @@ lives-with-neither pattern — world geometry is not a wire contract, and link's
 the minimal zero-crate component that eats hostile bytes.
 
 **Two more placement rulings from the same review.** The flagship's `rehearsal_master_control`
-tool is correctly placed *today* and **retires the day the real heartbeat lands**: it is a second
-implementation of Master Control's part, licensed only by the real one's absence — the in-test
-`RehearsalMasterControl` class stays, being a test double for the client. And the Program ABI
+tool was a second implementation of Master Control's part, licensed only by the real one's
+absence — and it retired the day the heartbeat landed in `master-control`, exactly as ruled;
+the in-test `RehearsalMasterControl` class stays, being a test double for the client. And the Program ABI
 (`libs/program-abi`) is, by this document's own lives-with-neither reasoning, eventually
 misplaced: its two parties are the Grid and the brains, and the brains live in other
 repositories. It extracts into its own contract repository when `rc-worm` unpauses — the trigger

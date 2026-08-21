@@ -80,10 +80,3 @@ lnk_copy_beside(world_client_tests)
 add_executable(world_stage_tests world_stage_tests.cpp)
 target_link_libraries(world_stage_tests PRIVATE grid testing)
 add_test(NAME world_stage_tests COMMAND world_stage_tests)
-
-# Master Control's understudy: a real listening server built from Link's server half, standing
-# in until the master-control repository exists. A tool to run, not a test to assert — it is what
-# `TronGridLite --window` dials on this machine to prove the live view against something alive.
-add_executable(rehearsal_master_control rehearsal_master_control.cpp)
-target_link_libraries(rehearsal_master_control PRIVATE grid)
-lnk_copy_beside(rehearsal_master_control)
