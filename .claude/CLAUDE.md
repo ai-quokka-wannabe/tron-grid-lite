@@ -270,9 +270,15 @@ neither required nor enabled. A compute-only card with no monitor is a perfectly
 **`--window` is the live view, and it refuses loudly when nobody is listening** — "No Master
 Control at `<addr>` - is it running?" — because a fallen server must never look like an empty
 world; there is deliberately no silent fallback. It draws what TICK_STATE tells, interpolated
-between the two newest ticks (`src/world_client.hpp`), with no prediction ever. **With a window
-there are no locally hosted creatures** — a window is for the User's eyes; a Program that wants to
-show its own internals opens its own window, and the Grid provides it nothing.
+between the two newest ticks (`src/world_client.hpp`), with no prediction ever: creatures stand in
+a shared placeholder neon dart (`src/world_stage.hpp`) until REZ delivers real bodies, placed
+through the tracer's dynamic instance path while every other mode still renders the world's
+immutable upload — which is what keeps the reference digest untouched. **With a window there are
+no locally hosted creatures** — a window is for the User's eyes; a Program that wants to show its
+own internals opens its own window, and the Grid provides it nothing. Until the master-control
+repository exists, the thing to dial locally is `rehearsal_master_control`, built beside the
+tests: a real listening server made from Link's server half, three scripted creatures, and the
+way to see the live view do anything at all.
 
 **`--debug` is the standalone stage view**: the same window on the built-in stage, no server and no
 Program, for checking the rendering where no world is running. It is also where the on-demand gate

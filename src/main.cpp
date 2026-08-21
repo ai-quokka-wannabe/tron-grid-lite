@@ -45,6 +45,7 @@
 #include "program_library.hpp"
 #include "spectator.hpp"
 #include "world_client.hpp"
+#include "world_stage.hpp"
 
 #include <lnk/lnk_protocol.h>
 #include "surface.hpp"
@@ -133,6 +134,15 @@ namespace
         //! Render thread to event thread: the renderer has died, so stop pumping into a queue nobody drains.
         std::atomic<bool> render_failed{false};
 
+        //! Event thread to render thread: the world's placements as last told. Latest wins — a
+        //! frame drawn from the newest telling is the only frame worth drawing.
+        std::mutex world_mutex;
+        std::vector<BvhLib::InstanceRecord> world_instances;
+
+        //! Bumped once per publish: the generation counter ViewState was always waiting for, so
+        //! the render loop can tell a moved world from a still one without comparing records.
+        std::atomic<std::uint64_t> world_generation{0u};
+
         /*!
             Queues a message and wakes the render thread.
 
@@ -151,6 +161,30 @@ namespace
             {
                 const std::lock_guard<std::mutex> lock{mutex};
                 queue.emit(event);
+            }
+            cv.notify_one();
+        }
+
+        /*!
+            Publishes the world's placements and wakes the render thread.
+
+            The generation bump must be visible before a sleeping render thread re-tests its
+            predicate, and taking the wait's own mutex — even empty-handed — guarantees exactly
+            that: the same lost-wakeup discipline `send` documents, applied to a flag rather than
+            a queue.
+
+            \param records The whole world's placements, Grid included, ready for the tracer.
+        */
+        void publishWorld(std::vector<BvhLib::InstanceRecord> records)
+        {
+            {
+                const std::lock_guard<std::mutex> lock{world_mutex};
+                world_instances = std::move(records);
+            }
+            world_generation.fetch_add(1u);
+
+            {
+                const std::lock_guard<std::mutex> lock{mutex};
             }
             cv.notify_one();
         }
@@ -1224,9 +1258,10 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
         needed costs one redundant frame; wrongly deciding it is not costs a window that has stopped
         updating, so the cheap-to-get-right version is the one to have.
 
-        The Grid itself is absent from this because it cannot yet change — `World` is uploaded once
-        and is immutable. Phase 6 is where a generation counter joins this struct, because that is
-        when creatures move.
+        The Grid's geometry is absent from this because it cannot change — `World` is uploaded
+        once and is immutable. What stands on it can: `world_generation` is the channel's counter
+        of published placements, so a telling from Master Control is a reason to draw exactly as a
+        moved camera is, and a world that has gone quiet costs no frames at all.
     */
     struct ViewState {
         MathLib::Vec3 position{};
@@ -1234,6 +1269,7 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
         float fov_y{0.0f};
         uint32_t width{0u};
         uint32_t height{0u};
+        std::uint64_t world_generation{0u};
 
         [[nodiscard]] bool operator==(const ViewState&) const = default;
     };
@@ -1314,17 +1350,25 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
             no flag to draw unconditionally — it would exist solely to do what holding W already
             does.
         */
-        const ViewState wanted{
-            .position = camera.position(), .orientation = camera.orientation(), .fov_y = camera.fovY(), .width = surface_width, .height = surface_height};
+        const ViewState wanted{.position = camera.position(),
+            .orientation = camera.orientation(),
+            .fov_y = camera.fovY(),
+            .width = surface_width,
+            .height = surface_height,
+            .world_generation = channel.world_generation.load()};
 
         const bool blank{(surface_width == 0u) || (surface_height == 0u)};
         const bool idle{has_presented && (wanted == presented) && !needs_recreate};
 
         if (blank || idle) {
             {
+                // A telling from the world is a reason to wake exactly as an event is — but only
+                // while there is a surface to draw it on. A minimised window ignores the world's
+                // chatter and sleeps until an event restores it; the placements are latest-wins,
+                // so nothing is missed by not waking for each of them.
                 std::unique_lock<std::mutex> lock{channel.mutex};
-                channel.cv.wait(lock, [&channel]() {
-                    return !channel.queue.empty();
+                channel.cv.wait(lock, [&channel, &presented, blank]() {
+                    return !channel.queue.empty() || (!blank && (channel.world_generation.load() != presented.world_generation));
                 });
             }
 
@@ -1405,6 +1449,17 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
         device.get().resetFences({*fence});
         profiler.collect(frame_index);
         profiler.logSummary();
+
+        /*
+            The live view's placements, staged into this slot now that its fence has been waited
+            on — the one moment nothing can still be reading the slot's buffer. Under the lock
+            only for the copy; the event thread publishes latest-wins, so whatever is here is the
+            newest telling there is.
+        */
+        if (tracer.hasDynamicInstances()) {
+            const std::lock_guard<std::mutex> lock{channel.world_mutex};
+            tracer.stageInstances(frame_index, channel.world_instances);
+        }
 
         const vk::raii::CommandBuffer& command_buffer{command_buffers[frame_index]};
         command_buffer.reset();
@@ -1852,15 +1907,27 @@ int main(int argc, char** argv)
             return runProgramTicks(device, bvh, program_identifier, ticks, shader_directory, logger);
         }
 
-        // The window's world: the bare Grid, uploaded once. With --window there are no creatures,
-        // so nothing here ever moves.
-        const World world{device, bvh, logger};
+        /*
+            The window's world. The live view stands creatures on the Grid, so its world carries
+            the placeholder body's geometry too and its placements move each telling; every other
+            mode — the debug view, `--record`, `--benchmark` — renders the bare Grid, uploaded
+            once, and nothing in it ever moves. That split is what keeps the reference digest's
+            world byte-for-byte the world it has always hashed.
+        */
+        std::unique_ptr<WorldStageLib::WorldStage> world_stage;
+        if (world_client != nullptr) {
+            world_stage = std::make_unique<WorldStageLib::WorldStage>(bvh, makeMaterials(), LNK_TICK_STATE_MAX_CREATURES);
+        }
 
-        Tracer tracer{device, world, makeMaterials(), MAX_FRAMES_IN_FLIGHT, (shader_directory / "trace.spv").string(), logger};
+        const std::unique_ptr<const World> world{
+            world_stage != nullptr ? std::make_unique<const World>(device, world_stage->flatScene(), logger) : std::make_unique<const World>(device, bvh, logger)};
+
+        Tracer tracer{device, *world, world_stage != nullptr ? world_stage->materials() : makeMaterials(), MAX_FRAMES_IN_FLIGHT,
+            (shader_directory / "trace.spv").string(), logger, world_stage != nullptr ? world_stage->instanceCapacity() : 0u};
         PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};
 
         // Sized to the window only when there is one. `--record` and `--benchmark` size themselves.
-        if (wants_window) {
+        if (any_window) {
             tracer.resize(swapchain->extent());
             post_process.resize(swapchain->extent(), tracer.outputViews());
         }
@@ -1893,6 +1960,12 @@ int main(int argc, char** argv)
             wants one owner.
         */
         RenderChannel channel;
+
+        // Seeded before the render thread exists, so the first frame of the live view draws the
+        // Grid rather than the zero placements an unstaged dynamic buffer would mean.
+        if (world_stage != nullptr) {
+            channel.world_instances = world_stage->records({});
+        }
 
         std::thread render_thread{[&device, &swapchain, &tracer, &post_process, &logger, &channel, &window]() {
             try {
@@ -2030,6 +2103,10 @@ int main(int argc, char** argv)
             &channel);
 
         std::size_t watched_creatures{0u};
+        std::uint64_t interpolation_tick{world_client != nullptr ? world_client->tick() : 0u};
+        std::chrono::steady_clock::time_point telling_arrived{std::chrono::steady_clock::now()};
+        float published_alpha{-1.0f};
+
         while (!window->shouldClose() && !channel.render_failed) {
             if (world_client != nullptr) {
                 /*
@@ -2044,12 +2121,38 @@ int main(int argc, char** argv)
                 if (world_client->creatureCount() != watched_creatures) {
                     watched_creatures = world_client->creatureCount();
                     logger.logInfo("The world holds " + std::to_string(watched_creatures) + " creature(s) at tick " + std::to_string(world_client->tick()) + ".");
+
+                    // A DEREZ between tellings changes the world without moving the tick, and a
+                    // saturated blend would otherwise leave the departed standing until the next
+                    // one. A changed count always republishes.
+                    published_alpha = -1.0f;
                 }
                 for (const LnkEvent& event : world_client->drainEvents()) {
                     if (verbose) {
                         logger.logDebug("Creature " + std::to_string(event.creature_id) + " vocalised at strength " + std::to_string(static_cast<double>(event.strength))
                             + ", tick " + std::to_string(event.tick) + ".");
                     }
+                }
+
+                /*
+                    The picture the render thread draws: every pose a fraction of the way from the
+                    previous telling to the newest, the fraction being how much of a tick's length
+                    has passed since the newest arrived — the client draws the world one telling
+                    late and glides through the gap, with no prediction ever. Published only while
+                    the blend still changes: once it saturates and no new telling comes, the world
+                    is still, and a still world owes the render thread no frames at all.
+                */
+                if (world_client->tick() != interpolation_tick) {
+                    interpolation_tick = world_client->tick();
+                    telling_arrived = std::chrono::steady_clock::now();
+                    published_alpha = -1.0f;
+                }
+                const float nominal_dt{world_client->welcome().nominal_dt_seconds};
+                const float since_arrival{std::chrono::duration<float>{std::chrono::steady_clock::now() - telling_arrived}.count()};
+                const float alpha{(nominal_dt > 0.0f) ? std::clamp(since_arrival / nominal_dt, 0.0f, 1.0f) : 1.0f};
+                if (alpha != published_alpha) {
+                    channel.publishWorld(world_stage->records(world_client->interpolated(alpha)));
+                    published_alpha = alpha;
                 }
 
                 std::this_thread::sleep_for(std::chrono::milliseconds{8});

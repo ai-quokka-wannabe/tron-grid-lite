@@ -44,6 +44,10 @@ namespace
     //! Block size for the buffer arena. Comfortably larger than every table this owns put together.
     constexpr vk::DeviceSize BUFFER_BLOCK_BYTES{4u * 1024u * 1024u};
 
+    //! Block size for the host-visible arena behind the dynamic instance buffers. The protocol's
+    //! whole creature cap is ~37 KB of records per frame in flight, so one block carries them all.
+    constexpr vk::DeviceSize HOST_BLOCK_BYTES{256u * 1024u};
+
     /*!
         Linear radiance, not a picture.
 
@@ -96,12 +100,15 @@ namespace
 } // namespace
 
 Tracer::Tracer(const Device& device, const World& world, const std::vector<Material>& materials, uint32_t frames_in_flight, const std::string& shader_path,
-    LoggingLib::Logger& logger) :
+    LoggingLib::Logger& logger, const uint32_t dynamic_instance_capacity) :
     m_device(&device),
     m_world(&world),
     m_logger(&logger),
     m_frames_in_flight(frames_in_flight),
     m_buffer_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, BUFFER_BLOCK_BYTES),
+    m_dynamic_capacity(dynamic_instance_capacity),
+    m_dynamic_counts(frames_in_flight, 0u),
+    m_host_arena(device, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, HOST_BLOCK_BYTES),
     m_image_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, IMAGE_BLOCK_BYTES)
 {
     if (materials.empty()) {
@@ -109,6 +116,25 @@ Tracer::Tracer(const Device& device, const World& world, const std::vector<Mater
     }
 
     m_materials = VulkanHelpers::uploadStorageBuffer(*m_device, m_buffer_arena, materials.data(), materials.size() * sizeof(Material));
+
+    if (m_dynamic_capacity > 0u) {
+        const vk::DeviceSize instance_bytes{static_cast<vk::DeviceSize>(m_dynamic_capacity) * sizeof(BvhLib::InstanceRecord)};
+        for (uint32_t frame{0u}; frame < m_frames_in_flight; ++frame) {
+            vk::raii::Buffer buffer{m_device->get(),
+                vk::BufferCreateInfo{.size = instance_bytes, .usage = vk::BufferUsageFlagBits::eStorageBuffer, .sharingMode = vk::SharingMode::eExclusive}};
+            void* const mapped{m_host_arena.bind(buffer)};
+
+            // Defined contents before the first staging: a dispatch that somehow precedes it
+            // traces zero-node records and misses, rather than traversing garbage.
+            std::memset(mapped, 0, static_cast<size_t>(instance_bytes));
+
+            m_dynamic_instances.emplace_back(std::move(buffer));
+            m_dynamic_mapped.push_back(mapped);
+        }
+
+        m_logger->logInfo("Dynamic placements: " + std::to_string(m_dynamic_capacity) + " records per frame across " + std::to_string(m_frames_in_flight)
+            + " frames in flight, " + std::to_string(static_cast<size_t>(instance_bytes) * m_frames_in_flight) + " bytes host-visible.");
+    }
 
     m_logger->logInfo("Optical materials uploaded: " + std::to_string(materials.size()) + " entries, " + std::to_string(materials.size() * sizeof(Material))
         + " bytes of device-local storage.");
@@ -200,7 +226,11 @@ void Tracer::writeDescriptorSets()
         const vk::DescriptorBufferInfo nodes_info{.buffer = m_world->nodes(), .offset = 0u, .range = vk::WholeSize};
         const vk::DescriptorBufferInfo triangles_info{.buffer = m_world->triangles(), .offset = 0u, .range = vk::WholeSize};
         const vk::DescriptorBufferInfo materials_info{.buffer = *m_materials.buffer, .offset = 0u, .range = vk::WholeSize};
-        const vk::DescriptorBufferInfo instances_info{.buffer = m_world->instances(), .offset = 0u, .range = vk::WholeSize};
+
+        // The live view's slot traces its own moving placements; every other mode traces the
+        // world's static upload, byte for byte the buffer the reference digest has always seen.
+        const vk::DescriptorBufferInfo instances_info{
+            .buffer = hasDynamicInstances() ? *m_dynamic_instances[frame] : m_world->instances(), .offset = 0u, .range = vk::WholeSize};
 
         const std::array<vk::WriteDescriptorSet, 5> writes{vk::WriteDescriptorSet{.dstSet = *m_descriptor_sets[frame],
                                                                .dstBinding = 0u,
@@ -249,6 +279,21 @@ void Tracer::resize(vk::Extent2D extent)
     m_extent = extent;
     createOutputImages();
     writeDescriptorSets();
+}
+
+void Tracer::stageInstances(const uint32_t frame_slot, const std::vector<BvhLib::InstanceRecord>& records)
+{
+    if (!hasDynamicInstances()) {
+        throw std::runtime_error{"This tracer renders static placements: it was built with no dynamic instance capacity."};
+    }
+    if (records.size() > m_dynamic_capacity) {
+        throw std::runtime_error{"More placements than this tracer was built for: " + std::to_string(records.size()) + " of " + std::to_string(m_dynamic_capacity) + "."};
+    }
+
+    if (!records.empty()) {
+        std::memcpy(m_dynamic_mapped[frame_slot], records.data(), records.size() * sizeof(BvhLib::InstanceRecord));
+    }
+    m_dynamic_counts[frame_slot] = static_cast<uint32_t>(records.size());
 }
 
 void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces) const
@@ -302,7 +347,7 @@ void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t fram
         .resolution_x = m_extent.width,
         .resolution_y = m_extent.height,
         .max_bounces = max_bounces,
-        .instance_count = m_world->instanceCount()};
+        .instance_count = hasDynamicInstances() ? m_dynamic_counts[frame_slot] : m_world->instanceCount()};
 
     command_buffer.pushConstants<TracePushConstants>(*m_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0u, {push});
 
