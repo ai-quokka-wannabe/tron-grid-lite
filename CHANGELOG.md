@@ -863,6 +863,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **The deletion movement: the physics follows its owner out, and one implementation remains.**
+  The companion to master-control's "the physics comes home": `stepBody`, `sanitiseAndClamp`
+  and their sixteen tests — traction, arcs, walls, landings, the sanitise quartet, the per-tick
+  hash — leave this repository, their guardianship continued by the Rust port and the golden
+  vectors this repository's own C++ generated for it. The local `--program --ticks` mode
+  retires outright: with no local physics there is no local world to tick, so `--program` is
+  now purely the loading probe, and hosting a creature returns with the wire host as its own
+  etape, dialling Master Control like every other citizen. What stays of the roster is the
+  mind's half — senses in, Program called, intent staged **raw**, because the host's clamp was
+  convenience and the server's is the law — with the voice actuator applied from the staged
+  intent so the hearing seam still hears one consistent tick. The reference digest was re-taken
+  on the 4090 and is byte-identical; clang-cl and GCC each caught orphaned test helpers MSVC
+  waved through, exactly as this file promises they will.
+
 - **The understudy retires: `rehearsal_master_control` leaves the tree.** The ruling said it
   would go the day the real heartbeat landed, and the heartbeat has landed — Master Control
   lives in its own repository now (`cargo run --release` there, then `TronGridLite --window`

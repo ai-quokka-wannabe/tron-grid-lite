@@ -323,13 +323,11 @@ Debian or Ubuntu it is `mesa-vulkan-drivers`. The Vulkan SDK ships neither — i
 fixed camera path as `--record` so that two runs are comparable. **Never measure a pass by timing
 `--record`** — most of that wall clock is PPM files.
 
-**One check does not belong in this table, and that is the point of mentioning it.** "Fires only
-when somebody remembers it" is a property of *these three* rather than of checking in this
-repository: the per-tick physics state hash needs no device, so it runs under `ctest` on every push
-— the first determinism check here that fires without being remembered. It lives in
-`src/tests/roster_tests.cpp`, was broken deliberately once with an address-derived perturbation,
-which it caught, and asserts per build rather than against golden values, because yaw goes through
-`sin` and `cos` and no two libms agree in the last bit.
+**One check left this table with the physics that owned it.** The per-tick state hash — the
+first determinism check here that fired without being remembered — followed the simulation to
+Master Control's own suite, where it guards the authoritative process on every push; the golden
+vectors in that repository's `tests/data/` hold the ported physics to what this repository's
+C++ answered, bit-exactly for the ground and with tolerances for the arc's `sin` and `cos`.
 
 ## Hard-won rules
 

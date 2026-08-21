@@ -139,8 +139,9 @@ neon reads as neon — even where no world is running.
 is what compatibility means here; `--verbose` makes the run talkative.
 
 A Program that wants to show its own internals opens its own window. The Grid knows nothing about how
-a Program works inside and provides it no display. A Program run joins the same world through the
-same wire in a coming etape; today it ticks a world of its own, locally and headless.
+a Program works inside and provides it no display. Hosting a creature in the world arrives with the
+wire host, its own etape: since the physics followed its owner to Master Control, there is no local
+world left to tick, and `--program` today answers the loading question alone.
 
 **A Program is named, never pathed.** Programs live in `programs/` beside the executable — as many
 as you like — and a name selects one. `--list-programs` reports what is there and which of it the
@@ -184,7 +185,6 @@ All of them also run over SSH or on a machine with no monitor attached.
 | `--benchmark` | What does each GPU pass cost? |
 | `--program <name>` | Is that library something the Grid could run? Needs no device at all. |
 | `--list-programs` | Which Programs are installed, and which of them would load? Also needs no device. |
-| `--program <name> --ticks N` | Rez that Program onto a body, give it N turns, and say where it ended up. No device either. |
 
 ```text
 Trace 3.342041 ms | post 0.294431 ms | frame 3.636273 ms.

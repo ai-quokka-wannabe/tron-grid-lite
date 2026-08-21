@@ -52,27 +52,11 @@ namespace RosterLib
     //! The same fact as an integer, for anything that wants to say "per second" without dividing.
     inline constexpr uint32_t TICKS_PER_SECOND{32u};
 
-    //! Gravity, metres per second squared. The number the ABI states an otolith at rest reads.
-    inline constexpr float GRAVITY{9.81f};
-
-    //! The first body's mass in kilograms. One, so that an impulse in newton-seconds is legible as
-    //! the velocity change it delivers.
-    inline constexpr float BODY_MASS_KG{1.0f};
-
     //! Half the body's height, metres: how far its origin stands above what it stands on.
     inline constexpr float BODY_HALF_HEIGHT{0.05f};
 
     //! Half the body's length along its own Z, metres. The ears and eyes at ±0.2 sit just inside.
     inline constexpr float BODY_HALF_LENGTH{0.215f};
-
-    /*!
-        Tallest rise the body walks up rather than walks into, metres.
-
-        Twice the body's half height — ankle height. A terrace riser above this is a wall: the
-        horizontal motion is cancelled and the body feels the stop as a contact on its front face,
-        which is what makes the lattice's steps something a creature can feel rather than glide over.
-    */
-    inline constexpr float CLIMB_LIMIT_METRES{0.1f};
 
     /*!
         Height of the ground under a point, in world metres.
@@ -115,28 +99,6 @@ namespace RosterLib
     //! A body-frame direction carried into world space: the rotation alone, with no translation.
     //! This is how an eye sample's view direction becomes the way it actually looks.
     [[nodiscard]] MathLib::Vec3 worldDirectionFromBody(const Pose& pose, const MathLib::Vec3& body_direction) noexcept;
-
-    /*!
-        Replaces non-finite values with zero and then clamps to the body's bounds.
-
-        **What must be true is that a NaN request becomes zero and never a bound.** A NaN velocity
-        becomes a NaN position and then a hierarchy traversal that does not terminate, so a Program
-        returning garbage would take the Grid down rather than merely behave oddly — and a NaN
-        quietly promoted to `max_forward_speed` would be worse still, because the creature would
-        sprint and nothing would look wrong.
-
-        Sanitise precedes clamp because the ABI fixes that order, and mutation testing is worth
-        recording here: with the comparison-based clamp below the order is *not* observable, since
-        every comparison against NaN is false and the NaN falls through to be caught either way. It
-        becomes observable the moment somebody rewrites the clamp with `fmin`/`fmax`, which return
-        the non-NaN operand and would turn garbage into a legal-looking bound. The order is kept so
-        that rewrite stays safe; the test asserts the outcome rather than the order, because the
-        outcome is what matters.
-
-        \param actions What the Program asked for. Modified in place.
-        \param desc The body, which carries the bounds.
-    */
-    void sanitiseAndClamp(TglActions& actions, const TglCreatureDesc& desc) noexcept;
 
     struct Creature;
 
@@ -184,13 +146,14 @@ namespace RosterLib
         /*!
             Announces the tick's roster-wide context before any creature is filled.
 
-            Called once per tick, after physics has advanced every body and before the first
-            `fill`. A fill sees one listener, but some of what a listener senses is a fact about
-            the whole roster — who is calling this tick, and eventually where every body stands —
-            so the source reads it here, from a roster physics has finished with, rather than
-            piecing it together from per-creature calls whose staged state is being overwritten as
-            the Programs run. The default does nothing, which is the correct behaviour for a source
-            with no cross-creature senses.
+            Called once per tick, after the bodies' state has settled for the tick — the world's
+            telling, once Master Control's physics owns motion — and before the first `fill`. A
+            fill sees one listener, but some of what a listener senses is a fact about the whole
+            roster — who is calling this tick, and eventually where every body stands — so the
+            source reads it here, from a settled roster, rather than piecing it together from
+            per-creature calls whose staged state is being overwritten as the Programs run. The
+            default does nothing, which is the correct behaviour for a source with no
+            cross-creature senses.
         */
         virtual void beginTick(const std::vector<Creature>& creatures)
         {
@@ -229,8 +192,8 @@ namespace RosterLib
 
         Pose pose{};
 
-        //! World-frame velocity, physics-owned. Vertical is gravity's; horizontal is traction's
-        //! while the body stands on something and momentum's while it does not.
+        //! World-frame velocity, owned by the world's physics — Master Control's, since the
+        //! simulation followed its owner out; a hosted body carries what the telling said.
         MathLib::Vec3 velocity{};
 
         //! True while the body stands on the ground. Traction is a fact about contact: intent
@@ -243,14 +206,16 @@ namespace RosterLib
         float turn_rate{0.0f};
 
         //! What the voice is doing this tick: the loudness of the call sounding now, zero for a
-        //! silent body. An actuator like the two above, set by physics from the staged intent so
-        //! that every ear on the roster hears one consistent tick — but with no traction condition,
-        //! because a body calls as well in flight as standing. There is no proprioceptive readback
-        //! for it: the caller hears its own call, which is the readback an animal actually has.
+        //! silent body. Applied from the staged intent at the top of the tick so that every ear
+        //! on the roster hears one consistent tick — with no traction condition, because a body
+        //! calls as well in flight as standing. There is no proprioceptive readback for it: the
+        //! caller hears its own call, which is the readback an animal actually has.
         float vocalisation{0.0f};
 
         /*!
-            The intent physics acts on next tick, already sanitised and clamped.
+            The intent the world acts on next tick, staged raw: the host's clamp was convenience
+            and Master Control's is the law — the server sanitises every intent before its
+            physics sees it.
 
             Staged rather than applied, because the lifecycle promises that an action takes effect
             on the next tick for every creature alike — applying inside the Program loop would let
@@ -293,16 +258,17 @@ namespace RosterLib
         Roster& operator=(Roster&&) = delete;
 
         /*!
-            One tick, in the lifecycle's documented order.
+            One tick of the mind's half of the lifecycle — all that lives here since the physics
+            followed its owner to Master Control.
 
-            Physics advances first, once for every body on the roster, acting on the intent staged
-            last tick. The senses source is then told the settled roster through `beginTick` — the
-            calls sounding this tick are a fact about everyone, settled before anyone listens.
-            Then each creature in roster order receives its senses — the bodily ones here, the
-            traced ones from `senses_source` — its Program is called, and its actions are
-            sanitised, clamped and staged for the next tick. An action therefore takes effect on
-            the next tick for every creature alike, which is the promise
-            `docs/PROGRAM_INTERFACE.md` § Lifecycle makes.
+            The voice actuator is applied from last tick's staged intent first, so the calls
+            sounding this tick are a fact about everyone before anyone listens; the senses source
+            is told the settled roster through `beginTick`; then each creature in roster order
+            receives its senses — the bodily ones here, the traced ones from `senses_source` —
+            its Program is called, and its actions are staged raw for the world to validate and
+            act on. An action therefore takes effect on the next tick for every creature alike,
+            which is the promise `docs/PROGRAM_INTERFACE.md` § Lifecycle makes. Poses advance
+            only by the world's telling: the wire host that carries it arrives as its own etape.
 
             \param senses_source Fills eyes, ears and irradiance per creature. Storage it wires in
                    is valid for that creature's `program_tick` call only.
