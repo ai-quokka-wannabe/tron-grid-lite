@@ -7,7 +7,8 @@ TronGrid Lite is a small, deliberately simple Vulkan renderer that builds the Gr
 There is no human player. There is no gameplay, no score, no win condition, no story. The inhabitants of the Grid are
 **Programs**, each driving a creature that perceives the Grid through rendered images and rendered sound, and acts
 back into it through a narrow motor interface. A User never inhabits the Grid; a User only ever **watches** it,
-through a debug window driven by a free-flight camera used for development and observation.
+through a window driven by a free-flight camera — the live view of the shared world (`--window`, the spectator of
+[TOPOLOGY.md](TOPOLOGY.md)), or the serverless stage inspection (`--debug`) when the question is the rendering itself.
 
 That distinction shapes every decision in this repository. When a design question comes up, the answer is not "what
 feels good to play" — it is "what does a creature need to perceive, and what does the User need to see while
@@ -45,7 +46,7 @@ what is around it, never a privileged read of scene state. No entity list. No gr
 creature knows what its sensors resolve, and nothing more — see [PERCEPTION.md](PERCEPTION.md) for how small that
 deliberately is.
 
-The User sits outside that contract entirely. The debug window is an instrument for development — it shows the
+The User sits outside that contract entirely. The User's window is an instrument — it shows the
 same Grid from a free camera at a comfortable resolution, so the User can watch what a creature is doing and judge
 whether the Grid is behaving. It is never an input to any creature.
 
@@ -98,9 +99,9 @@ as a raster or as an explicit sample-direction list — see
 [PERCEPTION.md § Sensor presets](PERCEPTION.md#sensor-presets). This is biologically honest — the eyes of most animals
 resolve far less than a computer display — and it is also what makes hand-written compute ray tracing affordable on a
 modest GPU. A 64 x 64 raster is 4096 primary rays; the smallest preset is two. A creature can have several eyes,
-pointing in several directions, or none at all, and still cost less than one debug-window frame.
+pointing in several directions, or none at all, and still cost less than one frame of the User's window.
 
-The debug window is separate and larger. It renders the same Grid with the same tracer, at a resolution the User
+The User's window is separate and larger. It renders the same Grid with the same tracer, at a resolution the User
 can actually look at.
 
 ### Hearing
@@ -159,7 +160,7 @@ needed writing, debugging, and explaining, and none of them are needed for neon 
    a Program behaves strangely — which is worth a great deal, and is a different thing from what it is usually sold
    as. See [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md) § Determinism and Replay.
 4. **Honest embodiment.** A creature receives senses only. No scene graph access, no entity list, no ground truth.
-5. **Creature-sized resolution.** Sensors render tiny. Only the debug window renders large.
+5. **Creature-sized resolution.** Sensors render tiny. Only the User's window renders large.
 6. **One Grid, two senses.** A single BVH, one triangle table and one material index serve visual and acoustic rays
    alike; the two coefficient sets are coupled by that index rather than packed into the same struct row.
 7. **Own everything that matters.** The BVH, the tracer, the maths, the windowing, the logging and the test harness are

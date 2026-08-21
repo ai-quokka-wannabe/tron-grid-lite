@@ -17,7 +17,7 @@ One word per concept, used consistently in this document and in the ABI itself.
 | the Grid | The world this project renders and simulates, and the binary that runs it |
 | Program  | The thing that thinks: a shared library that drives one creature          |
 | creature | The body the Grid simulates — geometry, eyes, actuators                   |
-| User     | The human at the debug window, who watches and never acts                 |
+| User     | The human at the window, who watches and never acts                       |
 | tick     | One simulation step                                                       |
 | senses   | Everything a creature perceives during one tick (`TglSenses`)             |
 | actions  | The physical intent a Program returns for that tick (`TglActions`)        |
@@ -713,7 +713,7 @@ roughly 6e-4 radians of genuine float error.
 everything producing a `TglSenses` buffer, visual and acoustic alike; Grid generation, spawn state
 and every stochastic quantity in the world; the tick itself.
 
-**Outside:** the debug view, overlays, bloom, tone mapping, post-hoc high-quality re-renders,
+**Outside:** the User's view, overlays, bloom, tone mapping, post-hoc high-quality re-renders,
 profiling instrumentation.
 
 Half of that line is already drawn — creature sensors are exempt from tone mapping — and the other

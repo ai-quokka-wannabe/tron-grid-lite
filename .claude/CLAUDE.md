@@ -276,9 +276,11 @@ through the tracer's dynamic instance path while every other mode still renders 
 immutable upload — which is what keeps the reference digest untouched. **With a window there are
 no locally hosted creatures** — a window is for the User's eyes; a Program that wants to show its
 own internals opens its own window, and the Grid provides it nothing. Until the master-control
-repository exists, the thing to dial locally is `rehearsal_master_control`, built beside the
-tests: a real listening server made from Link's server half, three scripted creatures, and the
-way to see the live view do anything at all.
+repository's heartbeat exists, the thing to dial locally is `rehearsal_master_control`, built
+beside the tests: a real listening server made from Link's server half, three scripted
+creatures, and the way to see the live view do anything at all. **It retires the day the real
+heartbeat lands** — it is a second implementation of Master Control's part, licensed only by
+the real one's absence (TOPOLOGY.md § The four repositories records the ruling).
 
 **`--debug` is the standalone stage view**: the same window on the built-in stage, no server and no
 Program, for checking the rendering where no world is running. It is also where the on-demand gate
