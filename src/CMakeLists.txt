@@ -1,3 +1,26 @@
+# The Grid's deviceless core, as a library at last. TOPOLOGY.md's audit mapped this seam: src/
+# "finally has the second consumer that justifies the library target its own test files have been
+# working around". The tests link this instead of re-compiling translation units one by one, and
+# Master Control's flesh consumes the same target — one truth, two executables. Nothing in here
+# may mention Vulkan; a translation unit that needs a device belongs in the executable below.
+add_library(grid STATIC
+    world_definition.cpp
+    geometry.cpp
+    acoustics.cpp
+    loader_os.cpp
+    program_library.cpp
+    roster.cpp
+    stage.cpp
+    senses.cpp
+    world_client.cpp
+    world_stage.cpp
+    link_library.cpp
+)
+
+target_compile_features(grid PUBLIC cxx_std_20)
+target_include_directories(grid PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(grid PUBLIC math bvh program_abi lnk ${CMAKE_DL_LIBS})
+
 add_executable(${PROJECT_NAME}
     main.cpp
     volk.cpp
@@ -7,28 +30,16 @@ add_executable(${PROJECT_NAME}
     swapchain.cpp
     tracer.cpp
     world.cpp
-    acoustics.cpp
     acoustic_tracer.cpp
     memory_arena.cpp
     postprocess.cpp
-    geometry.cpp
     profiler.cpp
     spectator.cpp
-    loader_os.cpp
-    program_library.cpp
-    world_client.cpp
-    world_stage.cpp
-    link_library.cpp
-    roster.cpp
-    senses.cpp
-    stage.cpp
     senses_tracer.cpp
     cinematic.cpp
 )
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
-
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # SYSTEM so that warnings from the Vulkan SDK's own headers cannot fail this build under /WX and
 # -Werror. A future SDK release is not something this repository can fix.
@@ -47,15 +58,12 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     $<$<PLATFORM_ID:Linux>:VK_USE_PLATFORM_XCB_KHR>
 )
 
+# math, bvh, program_abi, lnk and the loader arrive transitively through grid's PUBLIC links.
 target_link_libraries(${PROJECT_NAME} PRIVATE
+    grid
     window
     signals
     logging
-    math
-    bvh
-    program_abi
-    lnk
-    ${CMAKE_DL_LIBS}
 )
 
 # Slang shader compilation — slangc and spirv-val come from the Vulkan SDK.

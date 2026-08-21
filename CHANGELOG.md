@@ -458,6 +458,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The seams the master-control repository has been waiting for: the world definition leaves
+  `main.cpp`, and `src/` becomes a library.** The audit's codebase brief mapped the split
+  exactly — "the world-definition constants must leave `main.cpp`'s anonymous namespace for any
+  second consumer to exist; and `src/` finally has the second consumer that justifies the
+  library target its own test files have been working around" — and both seams now exist. The
+  Grid the whole world agrees on lives in `src/world_definition.{hpp,cpp}`: `GRID_FLOOR_CONFIG`,
+  `makeMaterials`, `buildGridTriangles` and `makeGridReflectors`, with the placements, the neon
+  tube config and `plantOnFloor` internal to the one translation unit. The new `grid` static
+  library is the single statement of the deviceless core — world definition, geometry,
+  acoustics, roster, stage, senses, both loaders, the world client and the live view's stage —
+  and every deviceless test target now links it instead of re-compiling translation units one by
+  one, which is the drift-prone workaround the audit named. The executable keeps only what needs
+  a device: `main.cpp` and the Vulkan translation units. Pure restructuring, licensed the house
+  way: the reference digest was re-taken on the 4090 and is byte-identical (`70DDA0E7…`), and
+  all twenty tests pass on MSVC and MinGW with clang-cl building clean. With the wire already
+  carrying a tick, every gate in the master-control repository's "code-free until the flagship's
+  seams exist" rule is now met: the heartbeat can begin.
+
 - **There is deliberately no `--connect` flag, and TOPOLOGY.md now says so.** The owner's
   ruling: once the world lives in Master Control, connection is what a client *is*, not a
   feature it opts into — `--window` and `--program` imply the wire, a client that cannot reach
