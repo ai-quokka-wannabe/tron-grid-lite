@@ -848,61 +848,6 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
 }
 
 /*!
-    Runs a Program against the Grid for a fixed number of ticks, senses and all.
-
-    This is the mode the sensor interface exists for: the body's ears gather the Grid's hum on the
-    host, its eyes and irradiance are answered by the very `radiance` the User's window renders
-    with, and the Program decides what to do about it. No window, no swapchain, no presentation —
-    a device with no monitor attached is a perfectly good Grid.
-*/
-[[nodiscard]] int runProgramTicks(const Device& device, const BvhLib::Bvh& bvh, const std::string& program_identifier, uint32_t ticks,
-    const std::filesystem::path& shader_directory, LoggingLib::Logger& logger)
-{
-    const std::filesystem::path directory{ProgramLib::defaultDirectory()};
-
-    // The ground the bodies stand on is the analytic surface the floor triangles were generated
-    // from: physics collides against the truth rather than against its tessellation.
-    RosterLib::Roster roster{directory, program_identifier, 1u, [](float x, float z) {
-                                 return gridMeshHeight(x, z, GRID_FLOOR_CONFIG);
-                             }};
-
-    /*
-        The stage is assembled after the roster, because the bodies are the Programs' to offer:
-        rez decides what stands on the Grid, and only then does the world know its whole geometry.
-        The device upload happens once, here — a rigid body's hierarchy is built at rez and only
-        its placement ever moves again, so nothing below this line grows.
-    */
-    Stage stage{bvh, makeMaterials(), roster.creatures()};
-    const BvhLib::FlatScene flat{stage.flatten()};
-    const World world{device, flat, logger};
-
-    // Sized from the roster actually rezzed rather than guessed: every eye sample plus every
-    // irradiance direction of the hungriest body is what one solve carries.
-    uint32_t max_rays{1u};
-    for (const RosterLib::Creature& creature : roster.creatures()) {
-        uint32_t body_rays{creature.body.irradiance_sample_count};
-        for (uint32_t eye{0u}; eye < creature.body.eye_count; ++eye) {
-            body_rays += creature.body.eyes[eye].sample_count;
-        }
-        max_rays = std::max(max_rays, body_rays);
-    }
-
-    SensesTracer senses_tracer{device, world, stage.materials(), flat.instances, max_rays, (shader_directory / "senses.spv").string(), logger};
-    GridSensesSource senses_source{stage.scene(), stage.acousticStrengths(), makeGridReflectors(), &senses_tracer, &stage};
-
-    for (uint32_t index{0u}; index < ticks; ++index) {
-        roster.tick(senses_source);
-    }
-
-    const RosterLib::Creature& creature{roster.creatures().front()};
-    logger.logInfo("Program \"" + program_identifier + "\" ran for " + std::to_string(ticks) + " ticks ("
-        + std::to_string(static_cast<float>(ticks) * RosterLib::TICK_SECONDS) + " s). Creature at (" + std::to_string(creature.pose.position.x) + ", "
-        + std::to_string(creature.pose.position.y) + ", " + std::to_string(creature.pose.position.z) + "), facing " + std::to_string(creature.pose.yaw)
-        + " rad, moving at " + std::to_string(creature.forward_speed) + " m/s.");
-    return EXIT_SUCCESS;
-}
-
-/*!
     Draws the Grid until told to stop. Runs on the render thread and owns the Vulkan timeline.
 
     Every Vulkan object created here belongs to this thread for its whole life, which is the point:
@@ -1376,7 +1321,6 @@ int main(int argc, char** argv)
         bool list_programs{false};
 
         //! Ticks to run the named Program for. Zero checks it and stops without rezzing anything.
-        uint32_t ticks{0u};
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -1432,8 +1376,6 @@ int main(int argc, char** argv)
                 program_identifier = argv[++index];
             } else if (argument == "--list-programs") {
                 list_programs = true;
-            } else if (argument == "--ticks") {
-                ticks = value(ticks);
             } else if (argument == "--width") {
                 record_width = value(record_width);
             } else if (argument == "--height") {
@@ -1463,7 +1405,7 @@ int main(int argc, char** argv)
         if (!wants_window && !wants_debug_view && !recording && !benchmarking && !verify_acoustics && !verify_scene && !verify_senses && !list_gpus && !list_programs
             && program_identifier.empty()) {
             logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world, --debug to inspect the stage, or one of --record, "
-                           "--benchmark, --verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs, --program <name> [--ticks N].");
+                           "--benchmark, --verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs, --program <name>.");
             return EXIT_SUCCESS;
         }
 
@@ -1511,7 +1453,7 @@ int main(int argc, char** argv)
             rate is not chosen yet, and a check that invented one would hand a Program a number the
             eventual run would contradict.
         */
-        if (!program_identifier.empty() && (ticks == 0u)) {
+        if (!program_identifier.empty() && !wants_window && !wants_debug_view) {
             const std::filesystem::path directory{ProgramLib::defaultDirectory()};
             const ProgramLib::Inspection inspection{ProgramLib::inspect(directory, program_identifier)};
 
@@ -1520,9 +1462,9 @@ int main(int argc, char** argv)
             return EXIT_SUCCESS;
         }
 
-        // A Program run continues past here because its eyes need a device — but never a window.
+        // One role at a time: --program probes a library, a window watches a world.
         if (!program_identifier.empty() && (wants_window || wants_debug_view)) {
-            logger.logError("With a window there are no locally hosted creatures: run the Program without one.");
+            logger.logError("One role at a time: --program probes a library, a window watches a world. Hosting a creature in the world arrives with the wire host.");
             return EXIT_FAILURE;
         }
 
@@ -1635,14 +1577,6 @@ int main(int argc, char** argv)
         // A check on sight needs no post-processing: only the Grid, a device and senses.spv.
         if (verify_senses) {
             return verifySenses(device, bvh, logger, shader_directory);
-        }
-
-        // The Program run: everything above this line was the Grid coming up, and everything the
-        // debug window would add below it is deliberately absent. It builds its own world, because
-        // what stands on the Grid is not known until the roster has rezzed and the Programs have
-        // offered their bodies.
-        if (!program_identifier.empty()) {
-            return runProgramTicks(device, bvh, program_identifier, ticks, shader_directory, logger);
         }
 
         /*

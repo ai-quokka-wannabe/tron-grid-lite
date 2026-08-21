@@ -144,22 +144,16 @@ namespace
         return desc;
     }
 
-    //! Zero if the value is not a real number. The first half of sanitise-then-clamp.
-    [[nodiscard]] float finiteOrZero(float value) noexcept
-    {
-        return std::isfinite(value) ? value : 0.0f;
-    }
-
     /*!
         Copies a Program's borrowed model into owned storage, validating the whole of it first.
 
         Accepted entire or refused entire, with the reason. Validation is not politeness: a
         non-finite vertex or a zero-area triangle entering the world's hierarchy poisons a
         traversal that fails somewhere else entirely, on behalf of every creature at once —
-        exactly the failure sanitiseAndClamp exists to stop in the other direction. Actions are
-        sanitised rather than refused because they arrive every tick and a stream must degrade
-        gracefully; a model arrives once, at rez, where a loud refusal is cheap and a silent
-        repair would ship a body its author never saw.
+        exactly the failure Master Control's sanitise-and-clamp stops in the other direction.
+        Actions are sanitised rather than refused because they arrive every tick and a stream
+        must degrade gracefully; a model arrives once, at rez, where a loud refusal is cheap
+        and a silent repair would ship a body its author never saw.
 
         \throws std::runtime_error naming the first defect found.
     */
@@ -233,17 +227,6 @@ namespace
         return out;
     }
 
-    [[nodiscard]] float clampMagnitude(float value, float bound) noexcept
-    {
-        if (value > bound) {
-            return bound;
-        }
-        if (value < -bound) {
-            return -bound;
-        }
-        return value;
-    }
-
 } // namespace
 
 namespace RosterLib
@@ -276,17 +259,6 @@ namespace RosterLib
         const float sin_yaw{std::sin(pose.yaw)};
         const float cos_yaw{std::cos(pose.yaw)};
         return MathLib::Vec3{(body_direction.x * cos_yaw) + (body_direction.z * sin_yaw), body_direction.y, (body_direction.z * cos_yaw) - (body_direction.x * sin_yaw)};
-    }
-
-    void sanitiseAndClamp(TglActions& actions, const TglCreatureDesc& desc) noexcept
-    {
-        actions.desired_forward_speed = clampMagnitude(finiteOrZero(actions.desired_forward_speed), desc.max_forward_speed);
-        actions.desired_turn_rate = clampMagnitude(finiteOrZero(actions.desired_turn_rate), desc.max_turn_rate);
-
-        // A call is loudness rather than a signed quantity, so a negative one is silence rather than
-        // something to be reflected into the positive half.
-        const float vocalisation{finiteOrZero(actions.vocalisation_strength)};
-        actions.vocalisation_strength = (vocalisation < 0.0f) ? 0.0f : clampMagnitude(vocalisation, desc.max_vocalisation_strength);
     }
 
     Roster::Roster(const std::filesystem::path& directory, std::string_view identifier, uint32_t creature_count, GroundFunction ground) :
@@ -365,177 +337,18 @@ namespace RosterLib
         }
     }
 
-    /*!
-        Advances one body by one tick of physics.
-
-        **Analytic where a closed form exists, symplectic where it does not, impulses at the
-        non-smooth points.** Ballistic flight under constant gravity has an exact solution — which
-        is also precisely what velocity-Verlet produces for a constant force, so the closed form
-        and the symplectic scheme coincide with zero integration error. A body moving at constant
-        speed while turning at constant rate traces a circular arc, and the arc has a closed form
-        too. Contacts are the places smoothness dies: no closed form and no order statement
-        survives a trajectory being clipped, so they resolve as impulses — project to the surface,
-        change the velocity, report what was felt. Higher-order schemes would buy nothing here,
-        because their error bounds assume exactly the smoothness a contact destroys.
-    */
-    void stepBody(Creature& creature, const GroundFunction& ground)
-    {
-        constexpr float dt{TICK_SECONDS};
-        constexpr float TURN_EPSILON{1e-6f};
-
-        creature.contacts.clear();
-
-        const MathLib::Vec3 velocity_before{creature.velocity};
-        const MathLib::Vec3 position_before{creature.pose.position};
-
-        // Traction is a fact about contact: on the ground the actuators command their velocities
-        // directly; in the air the body keeps the velocity and spin it left the ground with.
-        if (creature.grounded) {
-            creature.forward_speed = creature.staged.desired_forward_speed;
-            creature.turn_rate = creature.staged.desired_turn_rate;
-        }
-
-        // The voice has no traction condition: a body calls as well in flight as standing, so the
-        // staged loudness simply is what the voice does this tick. Setting it here, in the physics
-        // pass that runs for the whole roster before any senses are filled, is what gives every
-        // ear one consistent answer to who is calling — the staged copies are overwritten one by
-        // one as the Programs run, and anything reading them mid-loop would hear a tick that never
-        // happened.
-        creature.vocalisation = creature.staged.vocalisation_strength;
-
-        float x{position_before.x};
-        float z{position_before.z};
-        const float yaw_before{creature.pose.yaw};
-        const float yaw_after{yaw_before + (creature.turn_rate * dt)};
-
-        if (creature.grounded) {
-            const float speed{creature.forward_speed};
-            const float turn{creature.turn_rate};
-
-            if ((turn > TURN_EPSILON) || (turn < -TURN_EPSILON)) {
-                /*
-                    The exact arc: with forward = (-sin yaw, -cos yaw), integrating speed * forward
-                    over the tick gives the closed form below. The approximation this replaces —
-                    integrate the yaw, then move straight along the new heading — walks a chord of
-                    the arc and drifts outward a little every tick; the closed form does not drift
-                    at all, which matters to a replay measured in bits.
-                */
-                x += (speed / turn) * (std::cos(yaw_after) - std::cos(yaw_before));
-                z -= (speed / turn) * (std::sin(yaw_after) - std::sin(yaw_before));
-            } else {
-                const MathLib::Vec3 forward{forwardFor(yaw_before)};
-                x += forward.x * speed * dt;
-                z += forward.z * speed * dt;
-            }
-        } else {
-            // Ballistic horizontally: straight at the velocity it left the ground with.
-            x += velocity_before.x * dt;
-            z += velocity_before.z * dt;
-        }
-
-        // Ballistic vertical motion, in closed form: exact for constant gravity.
-        float y{position_before.y + (velocity_before.y * dt) - (0.5f * GRAVITY * dt * dt)};
-        float velocity_y{velocity_before.y - (GRAVITY * dt)};
-
-        /*
-            A terrace riser taller than ankle height is a wall. The horizontal move is cancelled —
-            the turn is kept, since nothing stops a body swivelling against a step — and the stop
-            is felt on the front face, which is how the lattice becomes something a creature can
-            feel and count rather than glide over.
-        */
-        if (creature.grounded) {
-            const float rise{ground(x, z) - ground(position_before.x, position_before.z)};
-            if (rise > CLIMB_LIMIT_METRES) {
-                const float arrested{creature.forward_speed};
-                x = position_before.x;
-                z = position_before.z;
-                creature.forward_speed = 0.0f;
-
-                if (arrested != 0.0f) {
-                    // Pushed backward along the body's own +Z, however the body is facing.
-                    TglContact wall{};
-                    wall.position[2] = -BODY_HALF_LENGTH;
-                    wall.impulse[2] = BODY_MASS_KG * arrested;
-                    creature.contacts.push_back(wall);
-                }
-            }
-        }
-
-        // The ground claims everything at or below standing height.
-        const float standing{ground(x, z) + BODY_HALF_HEIGHT};
-        if (y <= standing) {
-            const float arrested{-velocity_y};
-
-            // One contact under the feet carrying the whole normal impulse of the tick: the
-            // support that holds a standing body up, plus whatever arrested a landing.
-            TglContact foot{};
-            foot.position[1] = -BODY_HALF_HEIGHT;
-            foot.impulse[1] = (BODY_MASS_KG * GRAVITY * dt) + (creature.grounded ? 0.0f : BODY_MASS_KG * arrested);
-            creature.contacts.push_back(foot);
-
-            y = standing;
-            velocity_y = 0.0f;
-            creature.grounded = true;
-        } else {
-            creature.grounded = false;
-        }
-
-        creature.pose.position = MathLib::Vec3{x, y, z};
-        creature.pose.yaw = yaw_after;
-
-        if (creature.grounded) {
-            const MathLib::Vec3 forward{forwardFor(yaw_after)};
-            creature.velocity = MathLib::Vec3{forward.x * creature.forward_speed, velocity_y, forward.z * creature.forward_speed};
-        } else {
-            creature.velocity = MathLib::Vec3{velocity_before.x, velocity_y, velocity_before.z};
-
-            // In the air the actuator drives nothing; what proprioception honestly reports is the
-            // forward component of the motion the body actually has.
-            creature.forward_speed = velocity_before.x * forwardFor(yaw_after).x + velocity_before.z * forwardFor(yaw_after).z;
-        }
-
-        /*
-            Specific force: acceleration minus gravity, which is the quantity an otolith senses. At
-            rest the acceleration is zero and this reads (0, +g, 0); in free fall the acceleration
-            is gravity and this reads zero, which is why falling feels like nothing.
-        */
-        const MathLib::Vec3 acceleration{(creature.velocity - velocity_before) * (1.0f / dt)};
-        const MathLib::Vec3 world_specific_force{acceleration.x, acceleration.y + GRAVITY, acceleration.z};
-
-        // Into the body frame: the inverse of the yaw rotation, which is the yaw rotation by -yaw.
-        const Pose inverse_yaw{.position = MathLib::Vec3{}, .yaw = -yaw_after};
-        creature.specific_force = worldDirectionFromBody(inverse_yaw, world_specific_force);
-
-        /*
-            Truncate to the body's contact budget by discarding the faintest, exactly as the
-            descriptor documents — while preserving generation order among the kept, because the
-            ABI promises the Grid's own contact order rather than a sort by strength.
-        */
-        while (creature.contacts.size() > creature.body.max_contact_count) {
-            size_t faintest{0u};
-            float faintest_magnitude{std::numeric_limits<float>::max()};
-            for (size_t index{0u}; index < creature.contacts.size(); ++index) {
-                const TglContact& contact{creature.contacts[index]};
-                const float magnitude{(contact.impulse[0] * contact.impulse[0]) + (contact.impulse[1] * contact.impulse[1]) + (contact.impulse[2] * contact.impulse[2])};
-                if (magnitude < faintest_magnitude) {
-                    faintest_magnitude = magnitude;
-                    faintest = index;
-                }
-            }
-            creature.contacts.erase(creature.contacts.begin() + static_cast<std::ptrdiff_t>(faintest));
-        }
-    }
-
     void Roster::tick(SensesSource& senses_source)
     {
         /*
-            The lifecycle's documented order, and the reason there are two loops rather than one.
-            Physics advances first for every body, acting on the intent staged last tick; then every
-            Program is called and its actions are staged. An action therefore takes effect on the
-            next tick for every creature alike, and roster order stays free of meaning.
+            The mind's half of the lifecycle, which is all that lives here since the physics
+            followed its owner to Master Control: the world's telling advances the bodies, and
+            this loop advances the minds - senses in, program called, intent staged. The voice
+            actuator is applied from the staged intent so every ear still hears one consistent
+            tick; over the wire it is the server's physics that applies it, from the very same
+            staged value this host sends.
         */
         for (Creature& creature : m_creatures) {
-            stepBody(creature, m_ground);
+            creature.vocalisation = creature.staged.vocalisation_strength;
         }
 
         // Physics has settled, so the roster is now one consistent tick: whoever is calling is
@@ -570,7 +383,8 @@ namespace RosterLib
             TglActions actions{};
             m_library.vtable().program_tick(creature.program, &senses, &actions);
 
-            sanitiseAndClamp(actions, creature.body);
+            // Staged raw: the host's clamp was convenience and the server's is the law -
+            // Master Control sanitises every intent before its physics ever sees it.
             creature.staged = actions;
         }
 
