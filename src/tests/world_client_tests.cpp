@@ -123,6 +123,24 @@ namespace
             flush();
         }
 
+        //! The keepalive's opening move: PING, and the citizen owes a PONG.
+        void ping(const std::uint64_t nonce)
+        {
+            check(m_library.vtable().send_ping(m_connection, nonce), "send_ping");
+            flush();
+        }
+
+        //! One poll: true when the PONG answering `nonce` arrived with it.
+        [[nodiscard]] bool sawPong(const std::uint64_t nonce)
+        {
+            LnkMessageView view{};
+            const LnkStatus status{m_library.vtable().poll(m_connection, &view)};
+            if ((status != LNK_OK) && (status != LNK_NOTHING_YET)) {
+                throw std::runtime_error{"the rehearsal's poll failed awaiting the PONG: status " + std::to_string(status)};
+            }
+            return (status == LNK_OK) && (view.type == LNK_MSG_PONG) && (view.as.pong.nonce == nonce);
+        }
+
         //! Ends the world the courteous way: BYE, then the socket closes.
         void endTheWorld()
         {
@@ -267,6 +285,35 @@ TEST_CASE(the_world_is_told_interpolated_and_ended)
         const std::string message{error.what()};
         TEST_CHECK((message.find("BYE") != std::string::npos) || (message.find("gone") != std::string::npos));
     }
+}
+
+TEST_CASE(a_pinged_spectator_answers_pong_because_silence_gets_it_reaped)
+{
+    RehearsalMasterControl rehearsal{};
+    std::thread server{[&rehearsal]() {
+        rehearsal.acceptAndWelcome(300u);
+    }};
+    WorldClientLib::Client client{rehearsal.address(), PATIENCE};
+    server.join();
+
+    /*
+        A spectator is legitimately mute - it never sends ACTIONS - so the PONG is the one proof
+        of life the keepalive contract lets it give, and Master Control reaps a citizen that
+        stays entirely silent past LNK_KEEPALIVE_DEAD_MILLIS. The first real heartbeat reaped
+        this very client before poll() learnt this answer.
+    */
+    rehearsal.ping(0xC0FFEEu);
+    const std::chrono::steady_clock::time_point deadline{std::chrono::steady_clock::now() + PATIENCE};
+    bool answered{false};
+    while (!answered) {
+        client.poll();
+        answered = rehearsal.sawPong(0xC0FFEEu);
+        if (std::chrono::steady_clock::now() >= deadline) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    TEST_CHECK(answered);
 }
 
 TEST_CASE(a_derez_between_snapshots_removes_the_creature)
