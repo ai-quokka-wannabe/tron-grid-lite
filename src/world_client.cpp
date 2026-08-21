@@ -99,6 +99,7 @@ namespace WorldClientLib
     void Client::poll()
     {
         LnkMessageView view{};
+        std::uint8_t pong_flush_remainder{0u};
 
         for (;;) {
             const LnkStatus status{m_library.vtable().poll(m_connection, &view)};
@@ -143,6 +144,17 @@ namespace WorldClientLib
             case LNK_MSG_DEREZ:
                 m_creatures.erase(view.as.derez.creature_id);
                 m_tick = std::max(m_tick, view.as.derez.tick);
+                break;
+            case LNK_MSG_PING:
+                /*
+                    The keepalive contract's client half: a spectator is legitimately mute - it
+                    never sends ACTIONS - so answering PONG is the one proof of life it owes,
+                    and a server that hears nothing for LNK_KEEPALIVE_DEAD_MILLIS rightly reaps
+                    it. Found the honest way: the first real Master Control reaped this very
+                    client in its own integration test.
+                */
+                m_library.vtable().send_pong(m_connection, view.as.ping.nonce);
+                m_library.vtable().flush(m_connection, &pong_flush_remainder);
                 break;
             case LNK_MSG_BYE:
                 throw std::runtime_error{"Master Control ended the world (BYE)."};

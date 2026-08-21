@@ -458,6 +458,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Grid speaks protocol v3.** The Link submodule advances to the wire the audit's rulings
+  built: ACTIONS resends the previous tick's intent, the keepalive contract is published as
+  header constants, and the spectator-ACTIONS refusal is enforced inside the library on both
+  ends. The spectator consumes it unchanged — it sends no ACTIONS, so the client half simply
+  recompiled against ABI v3, with versions 1 and 2 now refused as history by the loader the
+  residence rule already trusts. All three toolchains green, twenty tests on two of them,
+  `--version` answers "Link protocol 3", and the live constellation re-proven against the
+  rehearsal understudy end to end.
+
 - **The MMO lessons, audited and absorbed whole: TOPOLOGY.md now carries every mechanism the
   briefs taught, and the owner ruled for rigour everywhere.** A pre-heartbeat compliance audit
   re-read all five research briefs against the distillation and the shipped code. The code came
