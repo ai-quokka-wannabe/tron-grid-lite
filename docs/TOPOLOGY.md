@@ -442,15 +442,24 @@ one a mechanism behind a sentence this document already had, or a behaviour it h
   each `REZ` mesh**, built once at rez in a fixed vertex order. Two lessons stand behind the
   wording. *Welded*, because a square split into two coplanar triangles grows an interior edge,
   and a body sliding across that edge meets a spurious edge normal — the ghost-collision class
-  PhysX and Unity users know as internal-edge catching; contact normals come from faces, never
-  from an edge between coplanar neighbours, and the collision geometry derives from the same
-  source as the reflectors and the mesh, with adjacency. *Fixed order*, because the hull and the
-  axis enumeration are part of the replayed state and must not depend on how a container
-  happened to iterate. What is reported is also what is sensed: a contact is a **point on the
-  body, a world normal and a depth**, which is the creature host's touch sense and extends the
-  `TICK_STATE` debt already named for it (specific force plus contacts) rather than adding a
-  message. The response stays kinematic — minimal-translation separation and velocity
-  projection, as today; a constraint solver is a named non-goal below.
+  PhysX and Unity users know as internal-edge catching. The owner's ruling closes it at the
+  root: **a square is its own primitive, not two triangles** — the collision representation
+  keeps quads as quads, so no interior diagonal exists to catch on, and welding is only ever
+  owed to a genuine triangle soup; contact normals come from faces, never from an edge between
+  coplanar neighbours, and the collision geometry derives from the same source as the
+  reflectors and the mesh, with adjacency. *Fixed order*, because the hull and the axis
+  enumeration are part of the replayed state and must not depend on how a container happened
+  to iterate. **A body slides along any face, with friction, and the slide makes a sound**:
+  the contact persists across ticks as a sliding contact, the traction the physics already
+  applies to the floor applies to every face, and a sliding contact authors an acoustic event —
+  a *scratch*, its strength from slip speed against normal load, its position the contact
+  point — delivered through the same acoustics the voice already uses, so creatures hear each
+  other scrape along a wall and spectators hear it Doppler-shifted. What is reported is also
+  what is sensed: a contact is a **point on the body, a world normal, a depth and a slip
+  velocity**, which is the creature host's touch sense and extends the `TICK_STATE` debt
+  already named for it (specific force plus contacts) rather than adding a message; the scratch
+  is an `EVENT` kind beside the vocalisation. The response stays kinematic — minimal-translation
+  separation and velocity projection, as today; a constraint solver is a named non-goal below.
 - **Three named non-goals**, so nobody helpfully builds them: no node handoffs (single-process
   authority is the design, and the handoff seam is where UO's dupes lived), no time dilation
   (EVE's TiDi bends dt, and dt is sacred here), no database-backed hot persistence (the
