@@ -21,16 +21,17 @@
 #include <bvh/bvh.hpp>
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 /*!
-    The live view's scene: the Grid, plus one placeholder body per creature the world tells of.
+    The live view's scene: the Grid, plus a body per creature the world tells of.
 
-    A spectator knows a creature only as a pose on the wire — its real shape arrives with REZ in a
-    later etape — so every creature stands in the same placeholder body: a low neon dart the size
-    the roster's constants say a body is, nose towards -Z because that is the way `forwardFor`
-    faces. One geometry shared by every instance, which is exactly what the two-level hierarchy is
-    for: what changes per telling is placement alone, and nothing is ever rebuilt.
+    A creature's real shape arrives with REZ - the render model its host offered, relayed by
+    Master Control - and a creature whose REZ carried no rows wears the placeholder: a low neon
+    dart the size the roster's constants say a body is, nose towards -Z because that is the way
+    `forwardFor` faces. Geometry changes only when the set of shapes does (`setBodies`), which
+    is rare and rebuilds the device's world; what changes per telling is placement alone.
 
     No Vulkan here, so the whole thing is testable under ctest. The device half is the tracer's
     dynamic instance path, which consumes what `records` returns.
@@ -53,6 +54,15 @@ namespace WorldStageLib
         WorldStage& operator=(const WorldStage&) = delete;
         WorldStage(WorldStage&&) = delete;
         WorldStage& operator=(WorldStage&&) = delete;
+
+        /*!
+            The shapes the world has told: one geometry per body with rows, its materials appended
+            to the table. Replaces whatever shapes were set before, so the caller passes the whole
+            set each time; `flatScene`, `materials` and `records` all answer for the new set from
+            here on. Rare by construction - a REZ or a DEREZ of a shaped body - and the caller
+            rebuilds the device's world after it, because the concatenated buffers changed.
+        */
+        void setBodies(const std::unordered_map<std::uint32_t, WorldClientLib::Body>& bodies);
 
         //! The combined material table: the Grid's slots, then the placeholder body's one.
         [[nodiscard]] const std::vector<Material>& materials() const noexcept
@@ -84,9 +94,13 @@ namespace WorldStageLib
         [[nodiscard]] std::vector<BvhLib::InstanceRecord> records(const std::vector<WorldClientLib::InterpolatedCreature>& creatures) const;
 
     private:
+        void cacheOffsets();
+
         std::uint32_t m_creature_capacity;
-        BvhLib::Scene m_scene; //!< Geometry 0 the Grid, geometry 1 the placeholder body.
+        BvhLib::Scene m_scene; //!< Geometry 0 the Grid, 1 the placeholder body, then one per shaped body.
         std::vector<Material> m_materials;
+        std::size_t m_grid_material_count{0u}; //!< The Grid's slots plus the placeholder's: what setBodies keeps.
+        std::unordered_map<std::uint32_t, std::uint32_t> m_geometry_of; //!< Creature to its geometry index.
 
         //! Where each geometry landed in the concatenated buffers, cached as `Stage` caches its.
         std::vector<std::uint32_t> m_node_offsets;

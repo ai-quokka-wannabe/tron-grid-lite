@@ -19,10 +19,12 @@
 
 #include <math/matrix.hpp>
 
+#include <algorithm>
 #include <array>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -77,12 +79,21 @@ namespace WorldStageLib
         // Between the primary neon and the pillars in brightness: a being of light, not a lamp.
         m_materials.push_back(makeEmissive(MathLib::Vec3{0.60f, 0.85f, 0.95f}, MathLib::Vec3{2.00f, 3.40f, 4.00f}));
 
+        m_grid_material_count = m_materials.size();
+
         m_scene.geometries.push_back(std::move(grid));
         m_scene.geometries.push_back(BvhLib::build(makePlaceholderBody(body_material)));
         m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries.front(), 0u, MathLib::Mat4::identity()));
 
+        cacheOffsets();
+    }
+
+    void WorldStage::cacheOffsets()
+    {
         std::uint32_t node_offset{0u};
         std::uint32_t triangle_offset{0u};
+        m_node_offsets.clear();
+        m_triangle_offsets.clear();
         m_node_offsets.reserve(m_scene.geometries.size());
         m_triangle_offsets.reserve(m_scene.geometries.size());
         for (const BvhLib::Bvh& geometry : m_scene.geometries) {
@@ -91,6 +102,59 @@ namespace WorldStageLib
             node_offset += static_cast<std::uint32_t>(geometry.nodes.size());
             triangle_offset += static_cast<std::uint32_t>(geometry.triangles.size());
         }
+    }
+
+    void WorldStage::setBodies(const std::unordered_map<std::uint32_t, WorldClientLib::Body>& bodies)
+    {
+        // Back to the Grid and the placeholder, then every shaped body in creature order - a
+        // fixed order, so two spectators told the same bodies build the same buffers.
+        m_scene.geometries.resize(2u);
+        m_materials.resize(m_grid_material_count);
+        m_geometry_of.clear();
+
+        std::vector<std::uint32_t> ids;
+        ids.reserve(bodies.size());
+        for (const auto& [creature_id, body] : bodies) {
+            if (!body.empty()) {
+                ids.push_back(creature_id);
+            }
+        }
+        std::sort(ids.begin(), ids.end());
+
+        for (const std::uint32_t creature_id : ids) {
+            const WorldClientLib::Body& body{bodies.at(creature_id)};
+
+            // The body's materials in the Grid's own rows, its triangles' slots rewritten to the
+            // global table - exactly as `Stage` does for a hosted body; the model keeps its
+            // local numbering, the world sees only global slots.
+            const std::uint32_t material_base{static_cast<std::uint32_t>(m_materials.size())};
+            for (const LnkRezMaterial& offered : body.materials) {
+                Material material{};
+                material.colour = MathLib::Vec3{offered.colour[0], offered.colour[1], offered.colour[2]};
+                material.index_of_refraction = offered.index_of_refraction;
+                material.emission = MathLib::Vec3{offered.emission[0], offered.emission[1], offered.emission[2]};
+                material.transmission = offered.transmission;
+                m_materials.push_back(material);
+            }
+
+            std::vector<BvhLib::Triangle> triangles;
+            triangles.reserve(body.triangles.size());
+            for (const LnkRezTriangle& triangle : body.triangles) {
+                const LnkRezVertex& a{body.vertices[triangle.vertices[0]]};
+                const LnkRezVertex& b{body.vertices[triangle.vertices[1]]};
+                const LnkRezVertex& c{body.vertices[triangle.vertices[2]]};
+                const MathLib::Vec3 v0{a.position[0], a.position[1], a.position[2]};
+                const MathLib::Vec3 v1{b.position[0], b.position[1], b.position[2]};
+                const MathLib::Vec3 v2{c.position[0], c.position[1], c.position[2]};
+                triangles.push_back(
+                    BvhLib::Triangle{.v0 = v0, .material = material_base + triangle.material, .edge1 = v1 - v0, .padding0 = 0u, .edge2 = v2 - v0, .padding1 = 0u});
+            }
+
+            m_geometry_of[creature_id] = static_cast<std::uint32_t>(m_scene.geometries.size());
+            m_scene.geometries.push_back(BvhLib::build(std::move(triangles)));
+        }
+
+        cacheOffsets();
     }
 
     BvhLib::FlatScene WorldStage::flatScene() const
@@ -112,8 +176,12 @@ namespace WorldStageLib
 
         for (const WorldClientLib::InterpolatedCreature& creature : creatures) {
             const RosterLib::Pose pose{.position = MathLib::Vec3{creature.position[0], creature.position[1], creature.position[2]}, .yaw = creature.yaw};
-            const BvhLib::Instance instance{BvhLib::makeInstance(m_scene.geometries[1], 1u, poseTransform(pose))};
-            result.push_back(BvhLib::flattenInstance(instance, m_node_offsets[1], m_triangle_offsets[1], static_cast<std::uint32_t>(m_scene.geometries[1].nodes.size())));
+            // Its own shape when REZ gave it one; the placeholder otherwise.
+            const auto shaped{m_geometry_of.find(creature.creature_id)};
+            const std::uint32_t geometry{(shaped != m_geometry_of.end()) ? shaped->second : 1u};
+            const BvhLib::Instance instance{BvhLib::makeInstance(m_scene.geometries[geometry], geometry, poseTransform(pose))};
+            result.push_back(BvhLib::flattenInstance(
+                instance, m_node_offsets[geometry], m_triangle_offsets[geometry], static_cast<std::uint32_t>(m_scene.geometries[geometry].nodes.size())));
         }
         return result;
     }

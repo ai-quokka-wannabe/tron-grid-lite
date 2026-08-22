@@ -34,6 +34,24 @@
 namespace WorldClientLib
 {
 
+    /*!
+        A creature's body as REZ told it: the bounds and the render model the host offered and
+        Master Control relayed, verbatim. Kept by creature so the stage can build the real shape
+        the first telling stands it in; empty rows are a bodiless creature, which wears the
+        placeholder.
+    */
+    struct Body {
+        LnkRez rez{};
+        std::vector<LnkRezVertex> vertices;
+        std::vector<LnkRezTriangle> triangles;
+        std::vector<LnkRezMaterial> materials;
+
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return triangles.empty();
+        }
+    };
+
     //! One creature as the world last told it, with the previous telling kept for interpolation.
     struct CreatureTrack {
         LnkCreatureState newest{};
@@ -116,6 +134,19 @@ namespace WorldClientLib
         //! Everything EVENT delivered since the last drain, oldest first.
         [[nodiscard]] std::vector<LnkEvent> drainEvents();
 
+        //! Every body REZ has told and DEREZ has not yet taken, by creature.
+        [[nodiscard]] const std::unordered_map<std::uint32_t, Body>& bodies() const noexcept
+        {
+            return m_bodies;
+        }
+
+        //! Bumped whenever the set of shapes changes - a REZ with rows, or a DEREZ of one - so a
+        //! stage can tell a world whose geometry moved from one whose placements did.
+        [[nodiscard]] std::uint64_t bodiesGeneration() const noexcept
+        {
+            return m_bodies_generation;
+        }
+
     private:
         LinkLib::Library m_library;
         LnkClient* m_connection{nullptr};
@@ -123,6 +154,8 @@ namespace WorldClientLib
         std::uint64_t m_tick{0u};
         std::unordered_map<std::uint32_t, CreatureTrack> m_creatures;
         std::vector<LnkEvent> m_events;
+        std::unordered_map<std::uint32_t, Body> m_bodies;
+        std::uint64_t m_bodies_generation{0u};
     };
 
 }

@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The live view draws real bodies: a creature wears the shape its REZ carried.** The
+  spectator keeps every body REZ told (and DEREZ took) with a generation counter; when the set
+  of shapes changes, `WorldStage::setBodies` rebuilds its scene - the Grid, the placeholder,
+  then one geometry per shaped body in creature order, its materials appended and its
+  triangles' slots rewritten to the global table, exactly as `Stage` does for a hosted body -
+  and the event thread hands the render thread a new world to upload together with the
+  placements that name it. The render thread rebuilds `World` and `Tracer` under the same lock
+  it stages placements under, after one idle of the device, so a placement can never index a
+  world that is not on the device yet. A creature whose REZ carried no rows still wears the
+  placeholder dart. Rare by construction - a body arriving or leaving - and proven live: the
+  modelled driver's body appeared as its own four triangles and two materials, and the world
+  went back to baseline when it left, with the window alive throughout. The static modes and the
+  reference digest are untouched: only the live view's world ever rebuilds.
 - **The creature host: `--program` embodies the Program's creature in Master Control's world.**
   The topology's third box. `WorldHostLib::Host` dials the world as a creature host with the
   world fingerprint, gives each creature a wire identity (the client id's, so two hosts never

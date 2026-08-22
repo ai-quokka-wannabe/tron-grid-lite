@@ -76,6 +76,7 @@
 #include <fstream>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <queue>
 #include <string>
 #include <thread>
@@ -146,6 +147,22 @@ namespace
         std::atomic<std::uint64_t> world_generation{0u};
 
         /*!
+            Event thread to render thread: a new world to upload, because the set of shapes
+            changed - a REZ with rows, or a DEREZ of one. Rare, and the render thread rebuilds
+            its `World` and `Tracer` from it under `world_mutex`, in the same critical section
+            that stages the placements, so a placement can never index a world that is not on
+            the device yet. `world_instances` is replaced in the same publish for the same
+            reason: the records that name the new geometries travel with the geometries.
+        */
+        struct SceneUpload {
+            BvhLib::FlatScene flat;
+            std::vector<Material> materials;
+            uint32_t instance_capacity{0u};
+        };
+        std::optional<SceneUpload> pending_scene;
+        std::atomic<std::uint64_t> scene_generation{0u};
+
+        /*!
             Queues a message and wakes the render thread.
 
             The emit happens under the very mutex the render thread waits on, or the wakeup can be
@@ -183,6 +200,23 @@ namespace
                 const std::lock_guard<std::mutex> lock{world_mutex};
                 world_instances = std::move(records);
             }
+            world_generation.fetch_add(1u);
+
+            {
+                const std::lock_guard<std::mutex> lock{mutex};
+            }
+            cv.notify_one();
+        }
+
+        //! The rare publish: a world whose geometry changed, with the placements that name it.
+        void publishScene(SceneUpload upload, std::vector<BvhLib::InstanceRecord> records)
+        {
+            {
+                const std::lock_guard<std::mutex> lock{world_mutex};
+                pending_scene = std::move(upload);
+                world_instances = std::move(records);
+            }
+            scene_generation.fetch_add(1u);
             world_generation.fetch_add(1u);
 
             {
@@ -928,13 +962,18 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
 
     \param device Logical device, queues and physical device.
     \param swapchain Presentation chain. Recreated here on every resize.
-    \param tracer The compute ray tracer.
+    \param world The uploaded world. Owned by the caller, rebuilt here when the channel brings a
+           new scene - which is why it is a pointer and not a reference.
+    \param tracer The compute ray tracer, rebuilt with the world.
+    \param trace_shader Where trace.spv is, for the rebuild.
     \param post_process Bloom, tone mapping and sRGB encoding.
     \param logger Thread-safe logger.
     \param channel The only state shared with the event thread.
 */
-void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel)
+void runRenderLoop(const Device& device, Swapchain& swapchain, std::unique_ptr<const World>& world, std::unique_ptr<Tracer>& tracer,
+    const std::string& trace_shader, PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel)
 {
+    std::uint64_t scene_seen{channel.scene_generation.load()};
     const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
     const vk::raii::CommandPool command_pool{device.get(), pool_info};
 
@@ -1120,8 +1159,9 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
                 // chatter and sleeps until an event restores it; the placements are latest-wins,
                 // so nothing is missed by not waking for each of them.
                 std::unique_lock<std::mutex> lock{channel.mutex};
-                channel.cv.wait(lock, [&channel, &presented, blank]() {
-                    return !channel.queue.empty() || (!blank && (channel.world_generation.load() != presented.world_generation));
+                channel.cv.wait(lock, [&channel, &presented, blank, scene_seen]() {
+                    return !channel.queue.empty() || (!blank && (channel.world_generation.load() != presented.world_generation))
+                        || (channel.scene_generation.load() != scene_seen);
                 });
             }
 
@@ -1155,8 +1195,8 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
                 render_finished.emplace_back(device.get(), vk::SemaphoreCreateInfo{});
             }
 
-            tracer.resize(swapchain.extent());
-            post_process.resize(swapchain.extent(), tracer.outputViews());
+            tracer->resize(swapchain.extent());
+            post_process.resize(swapchain.extent(), tracer->outputViews());
             needs_recreate = false;
 
             /*
@@ -1209,9 +1249,33 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
             only for the copy; the event thread publishes latest-wins, so whatever is here is the
             newest telling there is.
         */
-        if (tracer.hasDynamicInstances()) {
+        {
             const std::lock_guard<std::mutex> lock{channel.world_mutex};
-            tracer.stageInstances(frame_index, channel.world_instances);
+
+            /*
+                A world whose geometry changed: rebuilt here, under the same lock the placements
+                are staged under, so the records staged next name geometries that exist. Rare -
+                a body arriving or leaving - and paid with one idle of the device, which is the
+                one thing that makes replacing buffers other frames may still read safe.
+            */
+            if (channel.scene_generation.load() != scene_seen) {
+                scene_seen = channel.scene_generation.load();
+                if (channel.pending_scene.has_value()) {
+                    RenderChannel::SceneUpload upload{std::move(*channel.pending_scene)};
+                    channel.pending_scene.reset();
+                    device.get().waitIdle();
+                    tracer.reset();
+                    world = std::make_unique<const World>(device, upload.flat, logger);
+                    tracer = std::make_unique<Tracer>(device, *world, upload.materials, MAX_FRAMES_IN_FLIGHT, trace_shader, logger, upload.instance_capacity);
+                    tracer->resize(swapchain.extent());
+                    post_process.resize(swapchain.extent(), tracer->outputViews());
+                    has_presented = false;
+                }
+            }
+
+            if (tracer->hasDynamicInstances()) {
+                tracer->stageInstances(frame_index, channel.world_instances);
+            }
         }
 
         const vk::raii::CommandBuffer& command_buffer{command_buffers[frame_index]};
@@ -1221,7 +1285,7 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, Tracer& tracer, P
         profiler.begin(command_buffer, frame_index, GpuPass::Frame);
 
         profiler.begin(command_buffer, frame_index, GpuPass::Trace);
-        tracer.record(command_buffer, frame_index, camera, MAX_BOUNCES);
+        tracer->record(command_buffer, frame_index, camera, MAX_BOUNCES);
         profiler.end(command_buffer, frame_index, GpuPass::Trace);
 
         profiler.begin(command_buffer, frame_index, GpuPass::Post);
@@ -1652,25 +1716,26 @@ int main(int argc, char** argv)
             world_stage = std::make_unique<WorldStageLib::WorldStage>(bvh, makeMaterials(), LNK_TICK_STATE_MAX_CREATURES);
         }
 
-        const std::unique_ptr<const World> world{
+        std::unique_ptr<const World> world{
             world_stage != nullptr ? std::make_unique<const World>(device, world_stage->flatScene(), logger) : std::make_unique<const World>(device, bvh, logger)};
 
-        Tracer tracer{device, *world, world_stage != nullptr ? world_stage->materials() : makeMaterials(), MAX_FRAMES_IN_FLIGHT,
-            (shader_directory / "trace.spv").string(), logger, world_stage != nullptr ? world_stage->instanceCapacity() : 0u};
+        const std::string trace_shader{(shader_directory / "trace.spv").string()};
+        std::unique_ptr<Tracer> tracer{std::make_unique<Tracer>(device, *world, world_stage != nullptr ? world_stage->materials() : makeMaterials(), MAX_FRAMES_IN_FLIGHT,
+            trace_shader, logger, world_stage != nullptr ? world_stage->instanceCapacity() : 0u)};
         PostProcess post_process{device, MAX_FRAMES_IN_FLIGHT, (shader_directory / "bloom.spv").string(), (shader_directory / "postprocess.spv").string(), logger};
 
         // Sized to the window only when there is one. `--record` and `--benchmark` size themselves.
         if (any_window) {
-            tracer.resize(swapchain->extent());
-            post_process.resize(swapchain->extent(), tracer.outputViews());
+            tracer->resize(swapchain->extent());
+            post_process.resize(swapchain->extent(), tracer->outputViews());
         }
 
         if (benchmarking) {
-            return benchmark(device, tracer, post_process, logger, record_width, record_height, record_frames);
+            return benchmark(device, *tracer, post_process, logger, record_width, record_height, record_frames);
         }
 
         if (recording) {
-            return recordCinematic(device, tracer, post_process, logger, record_width, record_height, record_frames, record_directory);
+            return recordCinematic(device, *tracer, post_process, logger, record_width, record_height, record_frames, record_directory);
         }
 
         /*
@@ -1700,9 +1765,9 @@ int main(int argc, char** argv)
             channel.world_instances = world_stage->records({});
         }
 
-        std::thread render_thread{[&device, &swapchain, &tracer, &post_process, &logger, &channel, &window]() {
+        std::thread render_thread{[&device, &swapchain, &world, &tracer, &trace_shader, &post_process, &logger, &channel, &window]() {
             try {
-                runRenderLoop(device, *swapchain, tracer, post_process, logger, channel);
+                runRenderLoop(device, *swapchain, world, tracer, trace_shader, post_process, logger, channel);
             } catch (const std::exception& error) {
                 channel.render_failed = true;
 
@@ -1837,6 +1902,7 @@ int main(int argc, char** argv)
 
         std::size_t watched_creatures{0u};
         std::uint64_t interpolation_tick{world_client != nullptr ? world_client->tick() : 0u};
+        std::uint64_t bodies_generation{0u};
         std::chrono::steady_clock::time_point telling_arrived{std::chrono::steady_clock::now()};
         float published_alpha{-1.0f};
 
@@ -1879,6 +1945,20 @@ int main(int argc, char** argv)
                     interpolation_tick = world_client->tick();
                     telling_arrived = std::chrono::steady_clock::now();
                     published_alpha = -1.0f;
+                }
+
+                // A body arrived or left with its shape: the stage rebuilds its scene, and the
+                // render thread is handed the new world with the placements that name it.
+                if (world_client->bodiesGeneration() != bodies_generation) {
+                    bodies_generation = world_client->bodiesGeneration();
+                    world_stage->setBodies(world_client->bodies());
+                    channel.publishScene(RenderChannel::SceneUpload{.flat = world_stage->flatScene(), .materials = world_stage->materials(),
+                                             .instance_capacity = world_stage->instanceCapacity()},
+                        world_stage->records(world_client->interpolated(1.0f)));
+                    published_alpha = -1.0f;
+                    if (verbose) {
+                        logger.logInfo("The world's shapes changed (generation " + std::to_string(bodies_generation) + "); the device's world was rebuilt.");
+                    }
                 }
                 const float nominal_dt{world_client->welcome().nominal_dt_seconds};
                 const float since_arrival{std::chrono::duration<float>{std::chrono::steady_clock::now() - telling_arrived}.count()};
