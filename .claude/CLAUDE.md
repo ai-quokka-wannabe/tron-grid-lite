@@ -296,6 +296,9 @@ verification modes run in CI on every push**, against lavapipe — Mesa's softwa
 satisfies everything this renderer asks for (Vulkan 1.3, dynamic rendering, synchronisation2, a
 graphics family that dispatches compute) and answers each comparison in about a second.
 
+CI quick-checks also run markdownlint and lychee offline over every markdown file (internal links
+and anchors; the external ones weekly in `links.yml`), and the stray-carriage-return check.
+
 That leaves `--benchmark` as the one still needing hardware, which is right: it measures a GPU, and a
 software implementation has nothing to say about that.
 
