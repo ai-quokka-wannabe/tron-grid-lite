@@ -270,7 +270,8 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
     LinkLib::Library library{LinkLib::Library::besideExecutable()};
     const LnkWorldDefinition definition{WorldClientLib::worldDefinition()};
     const std::uint64_t fingerprint{library.vtable().world_fingerprint(&definition)};
-    const std::filesystem::path disk{std::filesystem::temp_directory_path() / ("tgl-clu-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".disk")};
+    const std::filesystem::path disk{
+        std::filesystem::temp_directory_path() / ("tgl-clu-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".disk")};
     const std::string path{disk.string()};
 
     {
@@ -280,8 +281,12 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
         TEST_CHECK_EQUAL(status, LNK_OK);
         for (std::uint64_t tick{11u}; tick <= 13u; ++tick) {
             const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
-            const LnkCreatureState row{
-                .creature_id = 7u, .position = {static_cast<float>(tick), 0.05f, 0.0f}, .yaw = 0.0f, .velocity = {1.0f, 0.0f, 0.0f}, .yaw_rate = 0.0f, .vocalisation = 0.0f};
+            const LnkCreatureState row{.creature_id = 7u,
+                .position = {static_cast<float>(tick), 0.05f, 0.0f},
+                .yaw = 0.0f,
+                .velocity = {1.0f, 0.0f, 0.0f},
+                .yaw_rate = 0.0f,
+                .vocalisation = 0.0f};
             TEST_CHECK_EQUAL(library.vtable().send_tick_state(recorder, &header, &row), LNK_OK);
         }
         std::uint8_t everything_left{0u};
