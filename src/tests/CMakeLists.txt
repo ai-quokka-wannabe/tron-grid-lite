@@ -75,6 +75,16 @@ target_link_libraries(world_client_tests PRIVATE grid testing)
 add_test(NAME world_client_tests COMMAND world_client_tests)
 lnk_copy_beside(world_client_tests)
 
+# The creature host's half of a world, against the same loaded library playing Master Control:
+# REZ out, the telling and the owner's letter in, ACTIONS back. Deviceless - the roster ticks
+# with no traced senses, and needs the Program fixtures to rez.
+add_executable(world_host_tests world_host_tests.cpp)
+target_link_libraries(world_host_tests PRIVATE grid testing)
+target_compile_definitions(world_host_tests PRIVATE TGL_TEST_PROGRAM_DIR="$<TARGET_FILE_DIR:tgl_test_program>")
+add_dependencies(world_host_tests tgl_test_programs)
+add_test(NAME world_host_tests COMMAND world_host_tests)
+lnk_copy_beside(world_host_tests)
+
 # The live view's scene is host arithmetic like the stage's: what the tracer's dynamic instance
 # path is fed is plain records, checkable with no device.
 add_executable(world_stage_tests world_stage_tests.cpp)

@@ -46,6 +46,7 @@
 #include "spectator.hpp"
 #include "world_client.hpp"
 #include "world_definition.hpp"
+#include "world_host.hpp"
 #include "world_stage.hpp"
 
 #include <lnk/lnk_protocol.h>
@@ -848,6 +849,75 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
 }
 
 /*!
+    Hosts a Program's creatures in Master Control's world: the topology's third box.
+
+    Headless — no window, no swapchain — with a device for the eyes and the host acoustics for the
+    ears, exactly as the sensor interface was built for. The roster rezzes the Program's bodies;
+    the host rezzes them into the world; then, for as long as the world tells ticks (or for
+    `ticks` of them, when bounded), each whole telling — the rows and every own body's letter —
+    is handed to the roster, the minds tick against senses answered by the very `radiance` the
+    User's window renders with, and every intent goes back over the wire for Master Control's
+    physics to judge and act on. Poses advance only by the world's telling; this process moves
+    nothing itself.
+*/
+[[nodiscard]] int hostCreatures(const Device& device, const BvhLib::Bvh& bvh, const std::string& program_identifier, const std::string& master_control_address,
+    const uint32_t ticks, const std::filesystem::path& shader_directory, LoggingLib::Logger& logger)
+{
+    const std::filesystem::path directory{ProgramLib::defaultDirectory()};
+
+    // The ground is only the standing height the Program's bodies rez at on this side; the
+    // world's physics owns where they stand from the first telling on.
+    RosterLib::Roster roster{directory, program_identifier, 1u, [](float x, float z) {
+                                 return gridMeshHeight(x, z, GRID_FLOOR_CONFIG);
+                             }};
+
+    // The stage is assembled after the roster, because the bodies are the Programs' to offer.
+    // The device upload happens once: a rigid body's hierarchy is built at rez and only its
+    // placement ever moves again.
+    Stage stage{bvh, makeMaterials(), roster.creatures()};
+    const BvhLib::FlatScene flat{stage.flatten()};
+    const World world{device, flat, logger};
+
+    uint32_t max_rays{1u};
+    for (const RosterLib::Creature& creature : roster.creatures()) {
+        uint32_t body_rays{creature.body.irradiance_sample_count};
+        for (uint32_t eye{0u}; eye < creature.body.eye_count; ++eye) {
+            body_rays += creature.body.eyes[eye].sample_count;
+        }
+        max_rays = std::max(max_rays, body_rays);
+    }
+
+    SensesTracer senses_tracer{device, world, stage.materials(), flat.instances, max_rays, (shader_directory / "senses.spv").string(), logger};
+    GridSensesSource senses_source{stage.scene(), stage.acousticStrengths(), makeGridReflectors(), &senses_tracer, &stage};
+
+    WorldHostLib::Host host{master_control_address, std::chrono::milliseconds{5000}, roster};
+    logger.logInfo("Hosting: Master Control at " + master_control_address + ", tick " + std::to_string(host.welcome().current_tick) + ", client id "
+        + std::to_string(host.welcome().client_id) + "; creature " + std::to_string(host.wireIdentity(0u)) + " rezzed from Program \"" + program_identifier + "\".");
+
+    const uint64_t first_tick{host.toldTick()};
+    uint64_t minds_ticked{0u};
+    while ((ticks == 0u) || (minds_ticked < ticks)) {
+        if (!host.poll()) {
+            // Nothing whole yet: the world is the clock, and a host that spins would buy nothing
+            // but heat. A millisecond is a thirtieth of a tick.
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+            continue;
+        }
+        stage.update(roster.creatures());
+        roster.tick(senses_source);
+        host.act();
+        ++minds_ticked;
+    }
+
+    const RosterLib::Creature& creature{roster.creatures().front()};
+    logger.logInfo("Hosted for " + std::to_string(minds_ticked) + " world ticks (" + std::to_string(first_tick + 1u) + " to " + std::to_string(host.toldTick())
+        + "). Creature at (" + std::to_string(creature.pose.position.x) + ", " + std::to_string(creature.pose.position.y) + ", " + std::to_string(creature.pose.position.z)
+        + "), facing " + std::to_string(creature.pose.yaw) + " rad, moving at " + std::to_string(creature.forward_speed) + " m/s, " + (creature.grounded ? "grounded" : "airborne")
+        + ", " + std::to_string(creature.contacts.size()) + " contact(s). Leaving.");
+    return EXIT_SUCCESS;
+}
+
+/*!
     Draws the Grid until told to stop. Runs on the render thread and owns the Vulkan timeline.
 
     Every Vulkan object created here belongs to this thread for its whole life, which is the point:
@@ -1316,6 +1386,8 @@ int main(int argc, char** argv)
             elsewhere.
         */
         std::string program_identifier;
+        //! World ticks to host for before leaving; zero hosts until the world ends.
+        uint32_t host_ticks{0u};
 
         //! Report every Program in the directory and whether each one loads, then exit.
         bool list_programs{false};
@@ -1374,6 +1446,8 @@ int main(int argc, char** argv)
                 list_gpus = true;
             } else if ((argument == "--program") && ((index + 1) < argc)) {
                 program_identifier = argv[++index];
+            } else if (argument == "--ticks") {
+                host_ticks = value(host_ticks);
             } else if (argument == "--list-programs") {
                 list_programs = true;
             } else if (argument == "--width") {
@@ -1404,8 +1478,8 @@ int main(int argc, char** argv)
         */
         if (!wants_window && !wants_debug_view && !recording && !benchmarking && !verify_acoustics && !verify_scene && !verify_senses && !list_gpus && !list_programs
             && program_identifier.empty()) {
-            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world, --debug to inspect the stage, or one of --record, "
-                           "--benchmark, --verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs, --program <name>.");
+            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world, [host:port] --program <name> [--ticks N] to host a creature in it, --debug to inspect the stage, or one of --record, "
+                           "--benchmark, --verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs.");
             return EXIT_SUCCESS;
         }
 
@@ -1443,28 +1517,10 @@ int main(int argc, char** argv)
             return EXIT_SUCCESS;
         }
 
-        /*
-            Checking a Program needs no device, so it happens before one is opened. It is the only
-            mode that touches nothing of the Grid at all: it answers whether a library is something
-            the Grid could run, which is a question worth being able to ask on its own — a Program
-            that will not load is far easier to diagnose here than three seconds into a run.
-
-            It stops short of library_init deliberately. That call carries the tick length, the tick
-            rate is not chosen yet, and a check that invented one would hand a Program a number the
-            eventual run would contradict.
-        */
-        if (!program_identifier.empty() && !wants_window && !wants_debug_view) {
-            const std::filesystem::path directory{ProgramLib::defaultDirectory()};
-            const ProgramLib::Inspection inspection{ProgramLib::inspect(directory, program_identifier)};
-
-            logger.logInfo("Program \"" + program_identifier + "\" loads. ABI version " + std::to_string(inspection.abi_version) + ", vtable "
-                + std::to_string(inspection.struct_size) + " bytes, from " + ProgramLib::resolve(directory, program_identifier).string() + ".");
-            return EXIT_SUCCESS;
-        }
-
-        // One role at a time: --program probes a library, a window watches a world.
+        // One role at a time: --program hosts a creature in the world, a window watches it. The
+        // training constellation is two processes of this executable, not one wearing two hats.
         if (!program_identifier.empty() && (wants_window || wants_debug_view)) {
-            logger.logError("One role at a time: --program probes a library, a window watches a world. Hosting a creature in the world arrives with the wire host.");
+            logger.logError("One role at a time: --program hosts a creature in the world, --window watches it. Run two instances.");
             return EXIT_FAILURE;
         }
 
@@ -1577,6 +1633,11 @@ int main(int argc, char** argv)
         // A check on sight needs no post-processing: only the Grid, a device and senses.spv.
         if (verify_senses) {
             return verifySenses(device, bvh, logger, shader_directory);
+        }
+
+        // The creature host: headless, a device for the eyes, the world's clock for the tick.
+        if (!program_identifier.empty()) {
+            return hostCreatures(device, bvh, program_identifier, master_control_address, host_ticks, shader_directory, logger);
         }
 
         /*

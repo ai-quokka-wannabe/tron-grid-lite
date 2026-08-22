@@ -57,6 +57,9 @@ namespace WorldClientLib
     */
     [[nodiscard]] LnkWorldDefinition worldDefinition() noexcept;
 
+    //! A Link status in words, for the refusals this side throws.
+    [[nodiscard]] std::string statusName(LnkStatus status);
+
     class Client {
     public:
         /*!

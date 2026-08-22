@@ -332,7 +332,7 @@ sensor interface plugs in, and physics is what makes the senses stop being const
 
 - [x] `libs/program-abi` — the C99 header, an `INTERFACE` target, vendorable into other trees
 - [x] Load a Program: `LoadLibrary`/`dlopen`, one symbol, version refusal, vtable, lifecycle
-- [x] `--program <name>` — check a Program loads, without a device and without starting a run
+- [x] `--program <name>` — host the Program's creature in Master Control's world (the loading check lives in `--list-programs`)
 - [x] `--list-programs` — what is installed, and which of it would load
 - [x] Publish the ABI layout as data, so a binding in any language can check itself
 - [x] One body with no physics — a transform that changes between ticks
