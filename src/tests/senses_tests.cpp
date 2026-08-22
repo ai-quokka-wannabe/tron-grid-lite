@@ -19,6 +19,8 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <unordered_map>
+#include <vector>
 
 /*
     The first tests where a creature perceives something of a Grid: a singing surface, two ears, and
@@ -437,6 +439,87 @@ TEST_CASE(a_standing_body_blocks_the_hum_and_a_moving_one_stales_the_cache)
     TglSenses cleared{};
     source.fill(creatures[0], cleared);
     TEST_CHECK(std::memcmp(baseline.data(), cleared.ears[0].energy, sizeof(baseline)) == 0);
+}
+
+TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
+{
+    /*
+        The other bodies in the world, as a creature host meets them: shaped by their own hosts'
+        REZ and placed by the world's telling. The same claims as the hosted blocker's - a guest
+        standing between an ear and the singing floor shadows the hum, a guest that moves stales
+        the cache - and one more: a guest that calls is heard from where the world says it stands.
+    */
+    const MathLib::Vec3 a{-2.0f, 0.0f, -2.0f};
+    const MathLib::Vec3 b{2.0f, 0.0f, -2.0f};
+    const MathLib::Vec3 c{-2.0f, 0.0f, 2.0f};
+    const MathLib::Vec3 d{2.0f, 0.0f, 2.0f};
+    std::vector<BvhLib::Triangle> floor_triangles;
+    floor_triangles.push_back(BvhLib::Triangle{.v0 = a, .material = 0u, .edge1 = c - a, .padding0 = 0u, .edge2 = b - a, .padding1 = 0u});
+    floor_triangles.push_back(BvhLib::Triangle{.v0 = b, .material = 0u, .edge1 = c - b, .padding0 = 0u, .edge2 = d - b, .padding1 = 0u});
+
+    const std::array<TglEarDesc, 1u> ears{earAt(0.0f, 0.0f, 0.0f)};
+    std::vector<RosterLib::Creature> creatures;
+    creatures.push_back(hearingCreature(ears.data(), 1u));
+
+    Stage stage{BvhLib::build(std::move(floor_triangles)), {Material{}}, creatures};
+
+    // The guest's shape, exactly as REZ relays it: a broad horizontal shade, wider than the floor.
+    WorldClientLib::Body shade{};
+    shade.rez.creature_id = 777u;
+    shade.rez.vertex_count = 4u;
+    shade.rez.triangle_count = 2u;
+    shade.rez.material_count = 1u;
+    shade.vertices = {LnkRezVertex{.position = {-3.0f, 0.0f, -3.0f}}, LnkRezVertex{.position = {3.0f, 0.0f, -3.0f}}, LnkRezVertex{.position = {-3.0f, 0.0f, 3.0f}},
+        LnkRezVertex{.position = {3.0f, 0.0f, 3.0f}}};
+    shade.triangles = {LnkRezTriangle{.vertices = {0u, 2u, 1u}, .material = 0u}, LnkRezTriangle{.vertices = {1u, 2u, 3u}, .material = 0u}};
+    shade.materials = {LnkRezMaterial{.colour = {0.0f, 0.0f, 0.0f}, .index_of_refraction = 1.5f, .emission = {0.0f, 0.0f, 0.0f}, .transmission = 0.0f}};
+    std::unordered_map<uint32_t, WorldClientLib::Body> bodies;
+    bodies[777u] = shade;
+    stage.setGuests(bodies);
+    TEST_CHECK(stage.guestInstanceOf(777u) != BvhLib::NO_INSTANCE);
+    TEST_CHECK(stage.guestInstanceOf(778u) == BvhLib::NO_INSTANCE);
+
+    GridSensesSource source{stage.scene(), unitStrengths(), {}, nullptr, &stage};
+
+    // Far away first: the baseline is an unshaded hum.
+    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f}});
+    source.beginTick(creatures);
+    TglSenses clear_sky{};
+    source.fill(creatures[0], clear_sky);
+    std::array<float, Acoustics::BAND_COUNT * Acoustics::BIN_COUNT> baseline{};
+    std::memcpy(baseline.data(), clear_sky.ears[0].energy, sizeof(baseline));
+    TEST_CHECK(totalEnergy(clear_sky.ears[0]) > 0.0f);
+
+    // The guest slides under the listener: every path from ear to floor crosses its body.
+    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{0.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f}});
+    source.beginTick(creatures);
+    TglSenses shaded{};
+    source.fill(creatures[0], shaded);
+    TEST_CHECK(totalEnergy(shaded.ears[0]) == 0.0f);
+
+    // Away again, and calling from 3.6 m: the baseline back bit for bit, plus one arrival in the
+    // bin the distance dictates - the guest's voice, heard from where the world placed it.
+    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f}});
+    source.beginTick(creatures);
+    TglSenses cleared{};
+    source.fill(creatures[0], cleared);
+    TEST_CHECK(std::memcmp(baseline.data(), cleared.ears[0].energy, sizeof(baseline)) == 0);
+
+    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f},
+        Stage::GuestTelling{.creature_id = 778u, .pose = {.position = MathLib::Vec3{3.6f, 1.0f, 0.0f}, .yaw = 0.0f}, .vocalisation = 1.0f}});
+    source.beginTick(creatures);
+    TglSenses heard{};
+    source.fill(creatures[0], heard);
+    const uint32_t direct_bin{callBinOf(3.6f)};
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        const uint32_t index{(band * Acoustics::BIN_COUNT) + direct_bin};
+        TEST_CHECK_CLOSE(heard.ears[0].energy[index] - baseline[index], 1.0f / (3.6f * 3.6f), 1e-6f);
+    }
+
+    // Taking the guests away restores the hosted scene exactly: the stage forgets their shapes.
+    stage.setGuests({});
+    TEST_CHECK(stage.guestInstanceOf(777u) == BvhLib::NO_INSTANCE);
+    TEST_CHECK_EQUAL(stage.scene().geometries.size(), static_cast<size_t>(1u));
 }
 
 TEST_CASE(a_creatures_own_body_is_blanked_for_its_own_eyes)

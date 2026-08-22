@@ -17,10 +17,13 @@
 
 #include "link_library.hpp"
 #include "roster.hpp"
+#include "stage.hpp"
+#include "world_client.hpp"
 
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 /*!
@@ -85,6 +88,24 @@ namespace WorldHostLib
         //! the client id Master Control hands out is.
         [[nodiscard]] uint32_t wireIdentity(uint32_t index) const noexcept;
 
+        //! Every other creature's body REZ has told and DEREZ has not taken - never this host's own.
+        [[nodiscard]] const std::unordered_map<std::uint32_t, WorldClientLib::Body>& guestBodies() const noexcept
+        {
+            return m_guest_bodies;
+        }
+
+        //! Bumped when the set of guest shapes changes, so the stage and the tracers know to rebuild.
+        [[nodiscard]] std::uint64_t guestShapesGeneration() const noexcept
+        {
+            return m_guest_shapes_generation;
+        }
+
+        //! The other creatures as the last whole telling placed them: what the hosted senses meet.
+        [[nodiscard]] const std::vector<Stage::GuestTelling>& guests() const noexcept
+        {
+            return m_guests;
+        }
+
     private:
         void rezAll();
         void tell(const LnkTickStateView& view);
@@ -101,6 +122,12 @@ namespace WorldHostLib
         uint64_t m_telling_tick{0u};
         uint64_t m_told_tick{0u};
         bool m_ready{false};
+        //! Whether a wire identity is one of this host's own creatures.
+        [[nodiscard]] bool isOwn(std::uint32_t creature_id) const noexcept;
+        std::unordered_map<std::uint32_t, WorldClientLib::Body> m_guest_bodies;
+        std::uint64_t m_guest_shapes_generation{0u};
+        std::vector<Stage::GuestTelling> m_guests;
+        std::vector<Stage::GuestTelling> m_guests_being_told;
     };
 
 } // namespace WorldHostLib

@@ -16,6 +16,8 @@
 
 #include "acoustics.hpp"
 
+#include <algorithm>
+
 namespace
 {
 
@@ -105,10 +107,20 @@ Stage::Stage(BvhLib::Bvh grid, std::vector<Material> grid_materials, const std::
         m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries.back(), geometry_index, poseTransform(creature.pose)));
     }
 
-    // The offsets every per-tick record will need, cached now because geometry never moves in the
-    // concatenated buffers once uploaded.
+    m_own_geometry_count = m_scene.geometries.size();
+    m_own_material_count = m_materials.size();
+    m_own_instance_count = m_scene.instances.size();
+    cacheOffsets();
+}
+
+void Stage::cacheOffsets()
+{
+    // The offsets every per-tick record will need, cached because geometry moves in the
+    // concatenated buffers only when the guests change - and then the caller re-uploads.
     uint32_t node_offset{0u};
     uint32_t triangle_offset{0u};
+    m_node_offsets.clear();
+    m_triangle_offsets.clear();
     m_node_offsets.reserve(m_scene.geometries.size());
     m_triangle_offsets.reserve(m_scene.geometries.size());
     for (const BvhLib::Bvh& geometry : m_scene.geometries) {
@@ -117,6 +129,86 @@ Stage::Stage(BvhLib::Bvh grid, std::vector<Material> grid_materials, const std::
         node_offset += static_cast<uint32_t>(geometry.nodes.size());
         triangle_offset += static_cast<uint32_t>(geometry.triangles.size());
     }
+}
+
+void Stage::setGuests(const std::unordered_map<uint32_t, WorldClientLib::Body>& bodies)
+{
+    // Back to the Grid and the hosted bodies, then every shaped guest in creature order - a
+    // fixed order, so two hosts told the same guests build the same buffers.
+    m_scene.geometries.resize(m_own_geometry_count);
+    m_scene.instances.resize(m_own_instance_count);
+    m_materials.resize(m_own_material_count);
+    m_acoustic_strengths.resize(m_own_material_count);
+    m_guests.clear();
+
+    std::vector<uint32_t> ids;
+    ids.reserve(bodies.size());
+    for (const auto& [creature_id, body] : bodies) {
+        if (!body.empty()) {
+            ids.push_back(creature_id);
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+
+    for (const uint32_t creature_id : ids) {
+        const WorldClientLib::Body& offered{bodies.at(creature_id)};
+
+        const uint32_t material_base{static_cast<uint32_t>(m_materials.size())};
+        for (const LnkRezMaterial& material : offered.materials) {
+            Material row{};
+            row.colour = MathLib::Vec3{material.colour[0], material.colour[1], material.colour[2]};
+            row.index_of_refraction = material.index_of_refraction;
+            row.emission = MathLib::Vec3{material.emission[0], material.emission[1], material.emission[2]};
+            row.transmission = material.transmission;
+            m_materials.push_back(row);
+            m_acoustic_strengths.push_back(0.0f);
+        }
+
+        std::vector<BvhLib::Triangle> triangles;
+        triangles.reserve(offered.triangles.size());
+        for (const LnkRezTriangle& triangle : offered.triangles) {
+            const LnkRezVertex& a{offered.vertices[triangle.vertices[0]]};
+            const LnkRezVertex& b{offered.vertices[triangle.vertices[1]]};
+            const LnkRezVertex& c{offered.vertices[triangle.vertices[2]]};
+            const MathLib::Vec3 v0{a.position[0], a.position[1], a.position[2]};
+            const MathLib::Vec3 v1{b.position[0], b.position[1], b.position[2]};
+            const MathLib::Vec3 v2{c.position[0], c.position[1], c.position[2]};
+            triangles.push_back(
+                BvhLib::Triangle{.v0 = v0, .material = material_base + triangle.material, .edge1 = v1 - v0, .padding0 = 0u, .edge2 = v2 - v0, .padding1 = 0u});
+        }
+
+        Body guest{};
+        guest.creature_id = creature_id;
+        guest.geometry = static_cast<uint32_t>(m_scene.geometries.size());
+        guest.instance = static_cast<uint32_t>(m_scene.instances.size());
+        m_scene.geometries.push_back(BvhLib::build(std::move(triangles)));
+        m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries.back(), guest.geometry, MathLib::Mat4::identity()));
+        m_guests.push_back(guest);
+    }
+
+    cacheOffsets();
+}
+
+void Stage::placeGuests(const std::vector<GuestTelling>& guests)
+{
+    for (const Body& guest : m_guests) {
+        for (const GuestTelling& telling : guests) {
+            if (telling.creature_id == guest.creature_id) {
+                m_scene.instances[guest.instance] = BvhLib::makeInstance(m_scene.geometries[guest.geometry], guest.geometry, poseTransform(telling.pose));
+                break;
+            }
+        }
+    }
+}
+
+uint32_t Stage::guestInstanceOf(const uint32_t creature_id) const noexcept
+{
+    for (const Body& guest : m_guests) {
+        if (guest.creature_id == creature_id) {
+            return guest.instance;
+        }
+    }
+    return BvhLib::NO_INSTANCE;
 }
 
 void Stage::update(const std::vector<RosterLib::Creature>& creatures)

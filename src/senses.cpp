@@ -45,6 +45,13 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
                 poses.push_back(creature.pose);
             }
         }
+        // The guests' poses count as bodies moving too: a neighbour that walked into view is
+        // as much a reason to re-trace as the listener turning its head.
+        for (const Stage::GuestTelling& guest : m_guests) {
+            if (m_stage->guestInstanceOf(guest.creature_id) != BvhLib::NO_INSTANCE) {
+                poses.push_back(guest.pose);
+            }
+        }
 
         if (poses.size() != m_last_body_poses.size()) {
             m_bodies_moved = true;
@@ -59,6 +66,7 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
 
         m_last_body_poses = std::move(poses);
         m_stage->update(creatures);
+        m_stage->placeGuests(m_guests);
     }
 
     m_calls.clear();
@@ -72,6 +80,20 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
                 .caller_instance = (m_stage != nullptr) ? m_stage->instanceOf(creature.body.creature_id) : BvhLib::NO_INSTANCE});
         }
     }
+    // The guests' calls, exactly as the hosted ones: from where the world says they stand,
+    // through their own hulls when they have one.
+    for (const Stage::GuestTelling& guest : m_guests) {
+        if (guest.vocalisation > 0.0f) {
+            m_calls.push_back(Call{.position = guest.pose.position,
+                .strength = guest.vocalisation,
+                .caller_instance = (m_stage != nullptr) ? m_stage->guestInstanceOf(guest.creature_id) : BvhLib::NO_INSTANCE});
+        }
+    }
+}
+
+void GridSensesSource::tellGuests(std::vector<Stage::GuestTelling> guests)
+{
+    m_guests = std::move(guests);
 }
 
 GridSensesSource::CreatureEars& GridSensesSource::earStateFor(uint64_t creature_id, uint32_t ear_count)

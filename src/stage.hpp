@@ -16,11 +16,13 @@
 
 #include "components.hpp"
 #include "roster.hpp"
+#include "world_client.hpp"
 
 #include <bvh/bvh.hpp>
 #include <math/matrix.hpp>
 
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 /*!
@@ -75,7 +77,33 @@ public:
     */
     void update(const std::vector<RosterLib::Creature>& creatures);
 
-    //! The scene, for the host tracers. Instances move under `update`; geometries never do.
+    /*!
+        A creature this host does not drive, as the world tells it: where it stands and whether
+        it is calling. Guests are what the hosted creatures' senses meet - the other bodies in
+        the world, shaped by their own hosts' REZ and relayed by Master Control.
+    */
+    struct GuestTelling {
+        uint32_t creature_id{0u};
+        RosterLib::Pose pose{};
+        float vocalisation{0.0f};
+    };
+
+    /*!
+        The guests' shapes, replacing whatever guests were set before: one geometry per shaped
+        body in creature order, appended after the hosted bodies' own, its materials appended to
+        the table. Rare - a REZ or a DEREZ with rows - and the caller rebuilds the device's world
+        and the tracers that hold it afterwards, because the concatenated buffers changed. A
+        guest whose REZ carried no rows stands nowhere and is never seen or occluded.
+    */
+    void setGuests(const std::unordered_map<uint32_t, WorldClientLib::Body>& bodies);
+
+    //! Moves every shaped guest's instance to the pose the world told. Called each tick.
+    void placeGuests(const std::vector<GuestTelling>& guests);
+
+    //! The instance a shaped guest stands in, or `BvhLib::NO_INSTANCE` for one with no shape.
+    [[nodiscard]] uint32_t guestInstanceOf(uint32_t creature_id) const noexcept;
+
+    //! The scene, for the host tracers. Instances move under `update`; geometries change only under `setGuests`.
     [[nodiscard]] const BvhLib::Scene& scene() const noexcept
     {
         return m_scene;
@@ -126,6 +154,11 @@ private:
     std::vector<Material> m_materials;
     std::vector<float> m_acoustic_strengths;
     std::vector<Body> m_bodies; //!< Modelled creatures only, in roster order.
+    std::vector<Body> m_guests; //!< Shaped guests, in creature order, after the hosted bodies.
+    size_t m_own_geometry_count{0u}; //!< Geometries setGuests keeps: the Grid and the hosted bodies.
+    size_t m_own_material_count{0u};
+    size_t m_own_instance_count{0u};
+    void cacheOffsets();
 
     //! Where each geometry landed in the concatenated buffers, cached from construction so that
     //! per-tick records need no re-concatenation.
