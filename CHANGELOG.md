@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The spectator's ears: pings and scratches, spatialised against the camera, with Doppler.**
+  The first sound the Grid makes that a human hears. `AudioLib::Mixer` (deviceless, in `grid`)
+  turns every `EVENT` into one short parametric sound - a vocalisation is a decaying tone at
+  the creature's own pitch (a semitone lattice from A4 by identity, so two creatures are told
+  apart by ear), a scratch a burst of low-passed noise as loud as the slide - placed by
+  equal-power pan and distance against the camera the render thread publishes per frame, and
+  pitch-shifted by the source's replicated velocity along the line to the listener: the
+  owner's ruling that Doppler is realism owed now. `AudioLib::Output` is the speakers: WASAPI
+  shared mode on its own event-driven thread on Windows, the mixer built at the endpoint's own
+  rate; elsewhere a silent drain so the picture behaves alike. A missing endpoint is a warning
+  and a mute window, never a refusal to watch; `--mute` opens none. Tested without speakers -
+  a sound to the right is louder on the right, a far one quieter, an approaching one higher
+  and a receding one lower counted in zero crossings, silence is zeros, a finished voice
+  retires - with three breakage rounds; live, the window opened its ears at 96 kHz while a
+  walker's footsteps and the caller's pings went through them.
 - **Touch knows its face: `TglContact` grows the normal, the depth and the slip (ABI v5, Link
   v6).** The exact-contacts ruling reaches the brain: every contact a Program reads now carries
   the world normal of the face that touched, how deep the body stood past it before the world

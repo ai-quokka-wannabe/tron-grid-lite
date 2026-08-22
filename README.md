@@ -188,6 +188,7 @@ All of them also run over SSH or on a machine with no monitor attached.
 | `--benchmark` | What does each GPU pass cost? |
 | `[host:port] --program <name> [--ticks N]` | Host that Program's creature in the world at host:port (default localhost at Tron's port). |
 | `--replay <disk>` | Clu: play a Disk back into the window at the speed the world ran. No Master Control needed. |
+| `--mute` | The window without its ears: no audio endpoint opened, no pings, no scratches. |
 | `--list-programs` | Which Programs are installed, and which of them would load? Also needs no device. |
 
 ```text

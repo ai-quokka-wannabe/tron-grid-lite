@@ -30,6 +30,7 @@
 
 #include "acoustic_tracer.hpp"
 #include "acoustics.hpp"
+#include "audio.hpp"
 #include "camera.hpp"
 #include "cinematic.hpp"
 #include "components.hpp"
@@ -145,6 +146,23 @@ namespace
         //! Bumped once per publish: the generation counter ViewState was always waiting for, so
         //! the render loop can tell a moved world from a still one without comparing records.
         std::atomic<std::uint64_t> world_generation{0u};
+
+        //! Render thread to event thread: where the camera is and which way it faces, for the
+        //! ears. Written per frame, read per event; the mutex is held for a copy and no longer.
+        std::mutex listener_mutex;
+        AudioLib::Listener listener;
+
+        void publishListener(const AudioLib::Listener& heard)
+        {
+            const std::lock_guard<std::mutex> lock{listener_mutex};
+            listener = heard;
+        }
+
+        [[nodiscard]] AudioLib::Listener currentListener()
+        {
+            const std::lock_guard<std::mutex> lock{listener_mutex};
+            return listener;
+        }
 
         /*!
             Event thread to render thread: a new world to upload, because the set of shapes
@@ -1165,6 +1183,10 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, std::unique_ptr<c
             no flag to draw unconditionally — it would exist solely to do what holding W already
             does.
         */
+        channel.publishListener(AudioLib::Listener{.position = camera.position(),
+            .forward = camera.orientation().rotate(MathLib::Vec3{0.0f, 0.0f, -1.0f}),
+            .right = camera.orientation().rotate(MathLib::Vec3{1.0f, 0.0f, 0.0f})});
+
         const ViewState wanted{.position = camera.position(),
             .orientation = camera.orientation(),
             .fov_y = camera.fovY(),
@@ -1436,6 +1458,8 @@ int main(int argc, char** argv)
         bool wants_debug_view{false};
         bool wants_version{false};
         bool verbose{false};
+        //! The spectator's ears, off: no endpoint opened, no thread, no sound.
+        bool mute{false};
         std::string master_control_address{};
 
         //! Record a flight through the Grid to PPM files. Needs no window.
@@ -1522,6 +1546,8 @@ int main(int argc, char** argv)
                 wants_debug_view = true;
             } else if (argument == "--version") {
                 wants_version = true;
+            } else if (argument == "--mute") {
+                mute = true;
             } else if (argument == "--verbose") {
                 verbose = true;
             } else if (argument == "--record") {
@@ -1572,7 +1598,7 @@ int main(int argc, char** argv)
         */
         if (!wants_window && !wants_debug_view && !recording && !benchmarking && !verify_acoustics && !verify_scene && !verify_senses && !list_gpus && !list_programs
             && program_identifier.empty()) {
-            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world, --replay <disk> to play a Disk back, [host:port] --program <name> [--ticks N] to host a creature in it, --debug to inspect the stage, or one of --record, "
+            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world (--mute for no sound), --replay <disk> to play a Disk back, [host:port] --program <name> [--ticks N] to host a creature in it, --debug to inspect the stage, or one of --record, "
                            "--benchmark, --verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs.");
             return EXIT_SUCCESS;
         }
@@ -1799,6 +1825,24 @@ int main(int argc, char** argv)
             channel.world_instances = world_stage->records({});
         }
 
+        /*
+            The ears. Opened before the picture's thread, because a missing endpoint is news at
+            start, not a surprise mid-run; refused in words and carried on without - a spectator
+            with no speakers still has eyes. --mute never opens one at all.
+        */
+        std::unique_ptr<AudioLib::Mixer> mixer;
+        std::unique_ptr<AudioLib::Output> speakers;
+        if ((world_client != nullptr) && !mute) {
+            try {
+                mixer = std::make_unique<AudioLib::Mixer>(AudioLib::Output::preferredSampleRate());
+                speakers = std::make_unique<AudioLib::Output>(*mixer);
+                logger.logInfo("Ears open: " + std::to_string(mixer->sampleRate()) + " Hz, pings and scratches with Doppler. --mute silences them.");
+            } catch (const std::exception& error) {
+                logger.logWarning(std::string{"No ears this run: "} + error.what());
+                mixer.reset();
+            }
+        }
+
         std::thread render_thread{[&device, &swapchain, &world, &tracer, &trace_shader, &post_process, &logger, &channel, &window]() {
             try {
                 runRenderLoop(device, *swapchain, world, tracer, trace_shader, post_process, logger, channel);
@@ -1966,12 +2010,20 @@ int main(int argc, char** argv)
                 }
                 for (const LnkEvent& event : world_client->drainEvents()) {
                     if (verbose) {
-                        // The spectator's ears arrive with its audio; until then the events are
-                        // named in the log, scratches included - footsteps are scratches, so a
-                        // walking world is a chatty one at --verbose.
                         const char* const verb{(event.kind == LNK_EVENT_SCRATCH) ? " scratched at strength " : " vocalised at strength "};
                         logger.logDebug("Creature " + std::to_string(event.creature_id) + verb + std::to_string(static_cast<double>(event.strength)) + ", tick "
                             + std::to_string(event.tick) + ".");
+                    }
+                    if (mixer != nullptr) {
+                        // The ears: where it happened, how fast its source moves (the newest
+                        // telling's velocity - the Doppler the owner ruled owed now), how loud.
+                        const LnkCreatureState* const source{world_client->newest(event.creature_id)};
+                        mixer->setListener(channel.currentListener());
+                        mixer->sound(AudioLib::Sound{.kind = (event.kind == LNK_EVENT_SCRATCH) ? AudioLib::SoundKind::Scratch : AudioLib::SoundKind::Ping,
+                            .creature_id = event.creature_id,
+                            .position = MathLib::Vec3{event.position[0], event.position[1], event.position[2]},
+                            .velocity = (source != nullptr) ? MathLib::Vec3{source->velocity[0], source->velocity[1], source->velocity[2]} : MathLib::Vec3{},
+                            .strength = event.strength});
                     }
                 }
 
