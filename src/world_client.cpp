@@ -15,6 +15,9 @@
 
 #include "world_client.hpp"
 
+#include "roster.hpp"
+#include "world_definition.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -69,14 +72,36 @@ namespace
 namespace WorldClientLib
 {
 
+    LnkWorldDefinition worldDefinition() noexcept
+    {
+        return LnkWorldDefinition{
+            .floor_cells = GRID_FLOOR_CONFIG.cells,
+            .floor_cell_size = GRID_FLOOR_CONFIG.cell_size,
+            .floor_height = GRID_FLOOR_CONFIG.height,
+            .relief_amplitude = GRID_FLOOR_CONFIG.relief_amplitude,
+            .relief_wavelength = GRID_FLOOR_CONFIG.relief_wavelength,
+            .relief_octaves = GRID_FLOOR_CONFIG.relief_octaves,
+            .relief_terraces = GRID_FLOOR_CONFIG.relief_terraces,
+            .relief_seed = GRID_FLOOR_CONFIG.relief_seed,
+            .dt_seconds = RosterLib::TICK_SECONDS,
+            .body_half_height = RosterLib::BODY_HALF_HEIGHT,
+        };
+    }
+
     Client::Client(const std::string& address, const std::chrono::milliseconds handshake_timeout) :
         m_library(LinkLib::Library::besideExecutable())
     {
         LnkStatus status{LNK_PANIC};
         std::array<char, 256> detail{};
 
-        m_connection = m_library.vtable().connect(address.c_str(), LNK_ROLE_SPECTATOR, static_cast<std::uint32_t>(handshake_timeout.count()), &m_welcome, &status,
-            detail.data(), static_cast<std::uint32_t>(detail.size()));
+        // The world goes into the handshake: a Master Control built from a different floor or
+        // tick refuses this Grid at the door, and this Grid refuses such a Master Control's
+        // WELCOME - the skew bites both ways, in words naming both fingerprints.
+        const LnkWorldDefinition definition{worldDefinition()};
+        const std::uint64_t world_fingerprint{m_library.vtable().world_fingerprint(&definition)};
+
+        m_connection = m_library.vtable().connect(address.c_str(), LNK_ROLE_SPECTATOR, world_fingerprint, static_cast<std::uint32_t>(handshake_timeout.count()),
+            &m_welcome, &status, detail.data(), static_cast<std::uint32_t>(detail.size()));
 
         if (m_connection == nullptr) {
             const std::string words{detail.data()};
@@ -155,6 +180,11 @@ namespace WorldClientLib
                 */
                 m_library.vtable().send_pong(m_connection, view.as.ping.nonce);
                 m_library.vtable().flush(m_connection, &pong_flush_remainder);
+                break;
+            case LNK_MSG_REZ:
+                // A body's geometry, relayed for every citizen. The spectator still draws the
+                // shared placeholder dart; real bodies land in their own etape, and until then
+                // the rows are well-formed and uninteresting.
                 break;
             case LNK_MSG_BYE:
                 throw std::runtime_error{"Master Control ended the world (BYE)."};

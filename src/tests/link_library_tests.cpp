@@ -152,7 +152,7 @@ TEST_CASE(connect_refuses_a_null_address_through_the_loaded_table)
 
     LnkWelcome welcome{};
     LnkStatus status{-1};
-    LnkClient* const client{vtable.connect(nullptr, LNK_ROLE_CREATURE_HOST, 100u, &welcome, &status, nullptr, 0u)};
+    LnkClient* const client{vtable.connect(nullptr, LNK_ROLE_CREATURE_HOST, 0u, 100u, &welcome, &status, nullptr, 0u)};
     TEST_CHECK(client == nullptr);
     TEST_CHECK_EQUAL(status, LNK_BAD_ARGUMENT);
 }

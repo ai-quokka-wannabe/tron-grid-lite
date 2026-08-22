@@ -48,6 +48,15 @@ namespace WorldClientLib
         float vocalisation{0.0f};
     };
 
+    /*!
+        The world this Grid is built from, in Link's words: the floor (`GRID_FLOOR_CONFIG`), the
+        tick (`RosterLib::TICK_SECONDS`) and the body's half height — the fields Master Control
+        must agree on before a creature's position means the same thing at both ends. One
+        function, so the client and the tests describe the same world; the fingerprint over it
+        is the loaded library's to compute, never this side's.
+    */
+    [[nodiscard]] LnkWorldDefinition worldDefinition() noexcept;
+
     class Client {
     public:
         /*!
