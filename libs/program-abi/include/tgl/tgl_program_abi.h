@@ -52,7 +52,7 @@ extern "C"
     produces exactly the silent memory corruption the number exists to prevent, and produces it
     without failing anywhere.
 */
-#define TGL_ABI_VERSION 4u
+#define TGL_ABI_VERSION 5u
 
 /* ================================================================================================
    Toolchain glue
@@ -491,6 +491,22 @@ typedef struct TglContact {
         direction the body was pushed; magnitude is how hard. Never zero: a contact carrying no
         impulse is not reported at all, so a Program need not filter them. */
     float impulse[3];
+
+    /*! The face that touched, as the world has it: its unit normal in the WORLD frame - which way
+        the face pushes. The floor says { 0, 1, 0 }; a wall says which wall; another creature says
+        where it stands. A creature that knows its own yaw can turn this into its own frame; one that
+        does not still learns that something is above, beside, or beneath. */
+    float normal[3];
+
+    /*! Metres the body stood past the face before the world stood it back; zero for a body merely
+        resting. A landing or a bump reads as depth, a stance reads as none. */
+    float depth;
+
+    /*! The body's velocity along the face at this contact, body frame, metres per second: the slip.
+        Feet that walk slip on the floor; a flank dragged along a wall slips along the wall; a body
+        brushed by another slips relative to it. Zero for a foot planted and a body at rest. This is
+        the sense of scraping, and the sound of it is what the Grid's SCRATCH event carries. */
+    float slip[3];
 } TglContact;
 
 /*!
@@ -713,6 +729,7 @@ typedef const TglProgramVTable* (*TglGetProgramVTableFn)(uint32_t abi_version)TG
 #define TGL_SUM2(t, a, b) (TGL_SIZEOF_MEMBER(t, a) + TGL_SIZEOF_MEMBER(t, b))
 #define TGL_SUM3(t, a, b, c) (TGL_SUM2(t, a, b) + TGL_SIZEOF_MEMBER(t, c))
 #define TGL_SUM4(t, a, b, c, d) (TGL_SUM3(t, a, b, c) + TGL_SIZEOF_MEMBER(t, d))
+#define TGL_SUM5(t, a, b, c, d, e) (TGL_SUM4(t, a, b, c, d) + TGL_SIZEOF_MEMBER(t, e))
 #define TGL_SUM6(t, a, b, c, d, e, f) (TGL_SUM4(t, a, b, c, d) + TGL_SUM2(t, e, f))
 #define TGL_SUM7(t, a, b, c, d, e, f, g) (TGL_SUM4(t, a, b, c, d) + TGL_SUM3(t, e, f, g))
 #define TGL_SUM12(t, a, b, c, d, e, f, g, h, i, j, k, l) (TGL_SUM6(t, a, b, c, d, e, f) + TGL_SUM6(t, g, h, i, j, k, l))
@@ -734,7 +751,7 @@ TGL_STATIC_ASSERT(TGL_SUM7(TglRenderModel, vertex_positions, triangles, material
     "TglRenderModel has padding beyond its named padding member: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM3(TglEyeView, samples, sample_count, channels) == sizeof(TglEyeView), "TglEyeView has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM3(TglEarView, energy, band_count, bin_count) == sizeof(TglEarView), "TglEarView has padding: a member changed width.");
-TGL_STATIC_ASSERT(TGL_SUM2(TglContact, position, impulse) == sizeof(TglContact), "TglContact has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM5(TglContact, position, impulse, normal, depth, slip) == sizeof(TglContact), "TglContact has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM14(TglSenses, tick, eyes, ears, contacts, eye_count, ear_count, contact_count, dt_seconds, body_forward_speed, body_vertical_speed,
                       body_turn_rate, specific_force, angular_velocity, irradiance)
         == sizeof(TglSenses),
@@ -807,7 +824,10 @@ TGL_STATIC_ASSERT(offsetof(TglEarView, energy) == 0u, "TglEarView::energy must s
 TGL_STATIC_ASSERT(offsetof(TglEarView, band_count) == 8u, "TglEarView::band_count must sit at offset 8.");
 TGL_STATIC_ASSERT(offsetof(TglEarView, bin_count) == 12u, "TglEarView::bin_count must sit at offset 12.");
 
-TGL_STATIC_ASSERT(sizeof(TglContact) == 24u, "TglContact is an array element, so its size is a stride. It must be 24 bytes with no padding.");
+TGL_STATIC_ASSERT(sizeof(TglContact) == 52u, "TglContact is an array element, so its size is a stride. It must be 52 bytes with no padding.");
+TGL_STATIC_ASSERT(offsetof(TglContact, normal) == 24u, "TglContact::normal must follow the impulse.");
+TGL_STATIC_ASSERT(offsetof(TglContact, depth) == 36u, "TglContact::depth must follow the normal.");
+TGL_STATIC_ASSERT(offsetof(TglContact, slip) == 40u, "TglContact::slip must follow the depth.");
 TGL_STATIC_ASSERT(offsetof(TglContact, position) == 0u, "TglContact::position must sit at offset 0.");
 TGL_STATIC_ASSERT(offsetof(TglContact, impulse) == 12u, "TglContact::impulse must sit at offset 12.");
 

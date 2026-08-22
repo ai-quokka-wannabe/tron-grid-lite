@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Touch knows its face: `TglContact` grows the normal, the depth and the slip (ABI v5, Link
+  v6).** The exact-contacts ruling reaches the brain: every contact a Program reads now carries
+  the world normal of the face that touched, how deep the body stood past it before the world
+  stood it back, and the slip - the body's velocity along the face in its own frame - so a
+  planted foot, a landing, a flank along a wall and a brush past another creature all read
+  differently. The creature host copies the owner's letter whole (the wire carries the same
+  three fields since protocol v6); the ABI layout manifest and fingerprint are re-recorded at
+  v5, with the three offsets pinned. The spectator names scratches in its log (`--verbose`),
+  footsteps included, until its ears arrive with the audio etape.
 - **Clu: `--replay <disk>` plays a Disk back into the window.** A replay viewer is a spectator
   whose socket is a file: the same `WorldClientLib::Client`, opened through Link's
   `replay_open` instead of dialling, the Disk's header judged as a handshake is (another
