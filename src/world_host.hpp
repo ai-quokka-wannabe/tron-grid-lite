@@ -69,8 +69,12 @@ namespace WorldHostLib
         */
         [[nodiscard]] bool poll();
 
-        //! Sends every creature's staged intent for the tick after the last whole one, the previous
-        //! intent piggybacked, and flushes. Call after `RosterLib::Roster::tick`.
+        /*!
+            Sends every creature's staged intent, the previous intent piggybacked, and flushes.
+            Call after `RosterLib::Roster::tick`. Drains the wire first, so the intent is tagged
+            for the tick the world will step next even when the world told another tick while the
+            mind was thinking; a tick made whole by that drain is handed over by the next poll().
+        */
         void act();
 
         //! The last tick the world told whole.
@@ -107,6 +111,9 @@ namespace WorldHostLib
         }
 
     private:
+        //! Reads everything the wire holds, never blocking; m_ready says whether a tick is whole.
+        void drain();
+
         void rezAll();
         void tell(const LnkTickStateView& view);
         void feel(const LnkProprioceptionView& view);

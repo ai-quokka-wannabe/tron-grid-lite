@@ -1034,6 +1034,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A slow mind's intent is tagged for the tick the world will step next.** `Host::act` drains
+  the wire before it speaks, so when the world told another tick while the Program was
+  thinking (a first-tick warm-up, a world rebuilt for a new guest), the intent is tagged for
+  the tick after the newest whole telling rather than for one already stepped - which Master
+  Control would refuse as stale, on the record. A tick made whole by that drain is handed over
+  by the next `poll`, not swallowed; the rehearsal test tells a tick mid-think and checks both,
+  and one breakage round (the old reset-then-drain) caught the swallow.
 - **A hung Ubuntu mirror cannot eat half an hour of CI any more.** Twice in one afternoon the
   sanitiser jobs sat on `apt-get install libxcb1-dev` until their 30-minute job timeout killed
   them — a package mirror hang, nothing in the tree, while sibling jobs cleared the identical
