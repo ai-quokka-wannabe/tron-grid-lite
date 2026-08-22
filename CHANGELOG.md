@@ -458,6 +458,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The spectator tells Master Control which world it is built from, and both refuse a
+  mismatch (Link protocol v4).** `WorldClientLib::worldDefinition()` assembles the
+  `LnkWorldDefinition` from `GRID_FLOOR_CONFIG`, `RosterLib::TICK_SECONDS` and
+  `BODY_HALF_HEIGHT`; the loaded Link computes the fingerprint (never this side), and it goes
+  into the handshake. A Master Control built from a different floor or tick refuses this Grid at
+  the door in words naming both fingerprints, and this Grid refuses such a Master Control's
+  WELCOME the same way — tested both ways through a rehearsal listening as another world.
+  `REZ` frames, now real on the wire, are read and ignored: the spectator still draws the
+  shared placeholder dart until real bodies land in their own etape.
 - **The Grid speaks protocol v3.** The Link submodule advances to the wire the audit's rulings
   built: ACTIONS resends the previous tick's intent, the keepalive contract is published as
   header constants, and the spectator-ACTIONS refusal is enforced inside the library on both

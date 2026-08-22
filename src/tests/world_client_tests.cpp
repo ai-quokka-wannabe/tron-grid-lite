@@ -44,11 +44,14 @@ namespace
     //! Master Control's part, scripted: a listening vtable and the will to answer one client.
     class RehearsalMasterControl {
     public:
-        RehearsalMasterControl() :
+        //! Listens as the given world - the client's own by default, or a skewed one on purpose.
+        explicit RehearsalMasterControl(const std::uint64_t fingerprint_skew = 0u) :
             m_library(LinkLib::Library::besideExecutable())
         {
+            const LnkWorldDefinition definition{WorldClientLib::worldDefinition()};
+            m_world_fingerprint = m_library.vtable().world_fingerprint(&definition) + fingerprint_skew;
             LnkStatus status{LNK_PANIC};
-            m_server = m_library.vtable().listen(0u, &status, nullptr, 0u);
+            m_server = m_library.vtable().listen(0u, m_world_fingerprint, &status, nullptr, 0u);
             if ((m_server == nullptr) || (status != LNK_OK)) {
                 throw std::runtime_error{"the rehearsal could not listen"};
             }
@@ -99,9 +102,38 @@ namespace
                 throw std::runtime_error{"the client did not come as a spectator"};
             }
 
-            const LnkWelcome welcome{.current_tick = current_tick, .nominal_dt_seconds = 0.03125f, .client_id = 1u};
+            const LnkWelcome welcome{.current_tick = current_tick, .nominal_dt_seconds = 0.03125f, .client_id = 1u, .world_fingerprint = m_world_fingerprint};
             check(m_library.vtable().send_welcome(m_connection, &welcome), "send_welcome");
             flush();
+        }
+
+        //! The door's half of the world check: the knock must end in LNK_REFUSED, never a citizen.
+        void expectRefusal()
+        {
+            const std::chrono::steady_clock::time_point deadline{std::chrono::steady_clock::now() + PATIENCE};
+            LnkStatus status{LNK_PANIC};
+            LnkHello hello{};
+            std::array<char, 256> detail{};
+            for (;;) {
+                LnkClient* const knock{m_library.vtable().accept(m_server, 5000u, &hello, &status, detail.data(), static_cast<std::uint32_t>(detail.size()))};
+                if (knock != nullptr) {
+                    m_library.vtable().close(knock);
+                    throw std::runtime_error{"a citizen of another world was let in"};
+                }
+                if (status == LNK_REFUSED) {
+                    if (std::string{detail.data()}.find("different world") == std::string::npos) {
+                        throw std::runtime_error{"refused for the wrong reason: " + std::string{detail.data()}};
+                    }
+                    return;
+                }
+                if (status != LNK_NOTHING_YET) {
+                    throw std::runtime_error{"the rehearsal's accept failed: status " + std::to_string(status)};
+                }
+                if (std::chrono::steady_clock::now() >= deadline) {
+                    throw std::runtime_error{"nobody knocked within patience"};
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds{1});
+            }
         }
 
         void tellTick(const std::uint64_t tick, const std::vector<LnkCreatureState>& rows)
@@ -166,6 +198,7 @@ namespace
         LnkServer* m_server{nullptr};
         LnkClient* m_connection{nullptr};
         std::uint16_t m_port{0u};
+        std::uint64_t m_world_fingerprint{0u};
     };
 
     //! Polls the client until its world reaches the wanted tick, within patience.
@@ -204,6 +237,24 @@ TEST_CASE(nobody_listening_is_the_ruled_loud_refusal)
         TEST_CHECK(message.find("127.0.0.1:1") != std::string::npos);
         TEST_CHECK(message.find("is it running?") != std::string::npos);
     }
+}
+
+TEST_CASE(a_master_control_from_a_different_world_is_refused_in_words)
+{
+    RehearsalMasterControl other_world{1u};
+
+    std::thread server{[&other_world]() {
+        other_world.expectRefusal();
+    }};
+    try {
+        const WorldClientLib::Client client{other_world.address(), PATIENCE};
+        TEST_CHECK(false);
+    } catch (const std::runtime_error& error) {
+        const std::string message{error.what()};
+        TEST_CHECK(message.find("refused this Grid") != std::string::npos);
+        TEST_CHECK(message.find("different world") != std::string::npos);
+    }
+    server.join();
 }
 
 TEST_CASE(the_world_is_told_interpolated_and_ended)
