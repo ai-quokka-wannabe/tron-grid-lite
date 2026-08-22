@@ -673,3 +673,25 @@ creature to a world it does not run. The invitation is the milestone that makes 
 rather than argued; the trust tier's triggers (the first connection that is not `127.0.0.1`, the
 first stranger's host) are the work the invitation will pull in. OpenWorm is credited in
 `docs/RELATED_WORK.md`; they are the first to ask, because the worm is the first creature.
+
+## The operations console, ruled ahead of time
+
+The owner's direction (2026-08-22): Master Control will eventually be **a service — the Rust
+heartbeat as the backend, serving its own single-page management dashboard, in Svelte, over
+HTTP.** This is the shape every shipped world converges on: the game protocol is one thing, and
+beside it sits an operations plane — who is connected, what the world holds, tick pacing and
+overruns, the logs and the hash, kick and derez, pause and snapshot — on ordinary web
+technology, for the humans who *run* the world rather than the creatures who live in it. The
+owner ruled it **in-process**: one binary to run, one port to remember beside Tron's. Three
+conditions make that honest. **Its own thread, and a mailbox.** The heartbeat publishes a
+read-only snapshot of the world per tick; the HTTP thread serves from that and never touches
+the simulation, and an operator's action is a message the heartbeat drains at its own quota
+like any citizen's — a browser tab can stall nothing. **`std`-only stays.** A minimal HTTP/1.1
+and WebSocket server is a few hundred lines of the hand-rolled-parser discipline Link already
+lives by, validated the way the wire is; the Svelte bundle is built in its own directory of the
+repository and embedded at build time, because static bytes need no crates. **Localhost-bound
+until the trust tier.** The one real argument for a separate process is that a browser-facing
+parser then sits inside the authoritative process; at trust v1 that is accepted, and the first
+connection that is not `127.0.0.1` is the trigger to put TLS and authentication in front of it
+— a reverse proxy, or the split — rather than to grow them inside. Trigger to build it: the
+first time a human needs to operate the world without reading its logs.
