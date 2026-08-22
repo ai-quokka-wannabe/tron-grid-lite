@@ -18,7 +18,10 @@ when satisfied; a finished etape collapses to one line, because what it *decided
 
 What comes after Phase 6 — Master Control's heartbeat, the wire, the spectator — is blueprinted in
 [docs/TOPOLOGY.md](docs/TOPOLOGY.md) and staged in the `master-control` and `link` repositories'
-own TODO files: the world grows here first, per the extraction order recorded there.
+own TODO files: the world grows here first, per the extraction order recorded there. The
+organisation's long-term invitation — OpenWorm and the other AI-animal simulation groups,
+invited to let their creatures live in the Grid once it can host a stranger's — is recorded in
+[docs/TOPOLOGY.md § The long-term invitation](docs/TOPOLOGY.md#the-long-term-invitation).
 
 ## Completed etapes
 

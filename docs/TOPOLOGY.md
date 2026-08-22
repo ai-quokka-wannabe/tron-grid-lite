@@ -658,3 +658,17 @@ only ever visit.
    triggers are the vision's own milestones — the first foreign connection, the first stranger's
    host, the first competitive stake — so deferring now and building at the trigger *is* the
    convergence path, not a detour from it.
+
+## The long-term invitation
+
+The owner's standing goal for the organisation (2026-08-22): once the Grid can host a stranger's
+creature — the creature-host wire mode, the roster of record, a spectator that draws real bodies
+— **reach out to the OpenWorm community, and to the other groups simulating AI animals, and
+invite their creatures to live in the Grid.** The whole topology is built so that a brain
+written elsewhere needs only the Program ABI and a host process: Master Control owns the world,
+the wire is one shared binary, the sense spec is fixed per species, and a host that crashes
+leaves its creature embodied. Those are the properties a visiting lab needs before it lends a
+creature to a world it does not run. The invitation is the milestone that makes them real
+rather than argued; the trust tier's triggers (the first connection that is not `127.0.0.1`, the
+first stranger's host) are the work the invitation will pull in. OpenWorm is credited in
+`docs/RELATED_WORK.md`; they are the first to ask, because the worm is the first creature.
