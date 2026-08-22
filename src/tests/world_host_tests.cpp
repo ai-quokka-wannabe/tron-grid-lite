@@ -294,10 +294,18 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     // refused stale; and the tick told meanwhile is not lost: the very next poll hands it over.
     roster.tick(null_senses);
     rehearsal.tellTick(104u, host.wireIdentity(0u), 3.75f, 0.25f, true);
-    std::this_thread::sleep_for(std::chrono::milliseconds{50});
-    host.act();
-    const LnkMessageView late{rehearsal.awaitMessage(LNK_MSG_ACTIONS)};
-    TEST_CHECK_EQUAL(late.as.actions.tick, 105u);
+    // No poll between the telling and the act: act alone must read it. The wire is not a clock,
+    // so the act is repeated until the telling has landed - each act is an honest resend.
+    std::uint64_t late_tag{0u};
+    while (late_tag != 105u) {
+        TEST_CHECK(std::chrono::steady_clock::now() < deadline);
+        host.act();
+        late_tag = rehearsal.awaitMessage(LNK_MSG_ACTIONS).as.actions.tick;
+        TEST_CHECK(late_tag == 104u || late_tag == 105u);
+        if (late_tag != 105u) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+    }
     TEST_CHECK_EQUAL(host.toldTick(), 104u);
     TEST_CHECK(host.poll());
     TEST_CHECK(near(roster.creatures().front().pose.position.z, 3.75f));
