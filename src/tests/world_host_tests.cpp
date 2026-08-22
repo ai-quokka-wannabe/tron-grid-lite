@@ -289,8 +289,32 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     TEST_CHECK_EQUAL(second.as.actions.tick, 104u);
     TEST_CHECK(near(second.as.actions.previous_forward_speed, 0.5f));
 
+    // A slow mind: the world told tick 104 whole while the Program was still thinking about 103.
+    // The intent is tagged for the tick the world will step next - 105, not 104 - so it is never
+    // refused stale; and the tick told meanwhile is not lost: the very next poll hands it over.
+    roster.tick(null_senses);
+    rehearsal.tellTick(104u, host.wireIdentity(0u), 3.75f, 0.25f, true);
+    // No poll between the telling and the act: act alone must read it. The wire is not a clock,
+    // so the act is repeated until the telling has landed - each act is an honest resend.
+    std::uint64_t late_tag{0u};
+    while (late_tag != 105u) {
+        TEST_CHECK(std::chrono::steady_clock::now() < deadline);
+        host.act();
+        late_tag = rehearsal.awaitMessage(LNK_MSG_ACTIONS).as.actions.tick;
+        TEST_CHECK(late_tag == 104u || late_tag == 105u);
+        if (late_tag != 105u) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{1});
+        }
+    }
+    TEST_CHECK_EQUAL(host.toldTick(), 104u);
+    TEST_CHECK(host.poll());
+    TEST_CHECK(near(roster.creatures().front().pose.position.z, 3.75f));
+    roster.tick(null_senses);
+    host.act();
+    TEST_CHECK_EQUAL(rehearsal.awaitMessage(LNK_MSG_ACTIONS).as.actions.tick, 105u);
+
     // A letter for a tick not being told is never applied out of turn: a stray claiming tick
-    // 999 says the feet left the floor, and the body told at 103 keeps them.
+    // 999 says the feet left the floor, and the body told at 104 keeps them.
     rehearsal.tellLetter(999u, host.wireIdentity(0u), false);
     const std::chrono::steady_clock::time_point stray_settle{std::chrono::steady_clock::now() + std::chrono::milliseconds{100}};
     while (std::chrono::steady_clock::now() < stray_settle) {
@@ -298,10 +322,10 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
     TEST_CHECK(roster.creatures().front().grounded);
-    TEST_CHECK_EQUAL(host.toldTick(), 103u);
+    TEST_CHECK_EQUAL(host.toldTick(), 104u);
 
     // And a whole telling with the feet off the floor lands as told.
-    rehearsal.tellTick(104u, host.wireIdentity(0u), 3.5f, 0.25f, false);
+    rehearsal.tellTick(105u, host.wireIdentity(0u), 3.5f, 0.25f, false);
     while (!host.poll()) {
         TEST_CHECK(std::chrono::steady_clock::now() < deadline);
         std::this_thread::sleep_for(std::chrono::milliseconds{1});

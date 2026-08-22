@@ -141,7 +141,15 @@ namespace WorldHostLib
 
     bool Host::poll()
     {
+        drain();
+        // Handed over once: a tick made whole during act()'s drain waits here for this call.
+        const bool ready{m_ready};
         m_ready = false;
+        return ready;
+    }
+
+    void Host::drain()
+    {
         std::uint8_t pong_flush_remainder{0u};
 
         for (;;) {
@@ -204,8 +212,6 @@ namespace WorldHostLib
                 break;
             }
         }
-
-        return m_ready;
     }
 
     void Host::tell(const LnkTickStateView& view)
@@ -215,6 +221,7 @@ namespace WorldHostLib
             return; // Never rewind: a stale telling is ignored, per the latest-wins rule.
         }
         m_telling_tick = tick;
+        m_ready = false; // A newer telling has begun: whatever was whole is no longer the latest.
         std::fill(m_felt.begin(), m_felt.end(), false);
         m_guests_being_told.clear();
 
@@ -276,6 +283,11 @@ namespace WorldHostLib
 
     void Host::act()
     {
+        // The world did not wait for the mind. Whatever it told while the Program thought is read
+        // first, so the intent is tagged for the tick the world will step next - never for one it
+        // has already stepped, which Master Control would refuse as stale, on the record.
+        drain();
+
         const std::vector<RosterLib::Creature>& creatures{m_roster.creatures()};
         for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
             const TglActions& staged{creatures[index].staged};

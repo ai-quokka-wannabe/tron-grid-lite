@@ -161,14 +161,19 @@ accidentally network-shaped from the start:
    has finished with.
 3. **The creature host** updates its stage, renders its creature's senses from authoritative
    tick-N state (never interpolated — a brain fed fabricated poses is the divergence class the
-   audit warns about), calls `program_tick`, and sends `ACTIONS` tagged for tick N+1.
+   audit warns about), calls `program_tick`, and sends `ACTIONS` tagged for the tick the world
+   will step next — N+1 when the mind kept pace, later when it did not: the host reads the wire
+   again before it speaks, so a slow mind's intent is never tagged for a tick already stepped.
 4. **Master Control** accepts actions through a published window: an `ACTIONS` tagged for tick T
    is accepted while `T ∈ [N, N+1)` relative to the tick N being stepped — stale intents lose to
    newer ones (latest wins, deduplicated by creature and tick), and an intent tagged for a far
    future tick is refused outright rather than queued, because an interval rejects both
    directions of nonsense where "latest with tick ≤ T" rejected only one. Every acceptance and
    every refusal is logged with *which tick the intent actually applied to* — the field that
-   lets a replay distinguish an on-time action from a late-and-shifted one.
+   lets a replay distinguish an on-time action from a late-and-shifted one. One grace, because
+   it is not a loss: the piggyback on a stream's very first `ACTIONS` names the tick the
+   creature stepped before any word could have reached it (a host learns of a tick from its
+   telling), and is recorded as `before_first_intent`, never as a refusal.
 
 **Silence has two authors, and the rules differ because the information differs** (the owner's
 ruling, 2026-08-21 — the audit found briefs 12 and 14 disagreeing and the distillation had
