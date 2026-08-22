@@ -1034,6 +1034,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Eight findings of a bug hunt, fixed, the low and the cosmetic included.** The own ears hear
+  the world's call: a creature's `vocalisation` is now the value its own row carries back - what
+  Master Control sounded, clamped by its law - never the raw intent, so a Program asking for
+  five with a bound of one no longer hears itself five times louder than every other ear does
+  (`Roster::tellPose` takes it; the in-process assignment is gone). The intent's tag follows
+  the newest telling, whole or not: rows for N+1 already here are proof N+1 is stepped. A guest
+  stands on the stage only once the world has placed it, so a relayed body awaiting its first
+  row no longer occludes rays at the origin for a tick. A `Roster` whose constructor fails
+  partway derezzes every creature it rezzed before the library is shut - held by a new
+  fixture, `tgl_driver_refuses_second_rez`, which aborts at shutdown with a creature still
+  rezzed, the header's own contract made audible. A roster past 256 creatures is refused
+  rather than aliased in the wire identity's low byte. The WASAPI endpoint frees its mix format
+  on a refused shape, checks the event handle it waits on, and prints its HRESULTs in hex.
+- **The documents describe the repository as it is.** TOPOLOGY no longer awaits a Master Control
+  that has moved, a contact model that is built, or a creature-creature pass that exists; its
+  four-repositories table says what each holds today. PROGRAM_INTERFACE names `TGL_ABI_VERSION`
+  (the constant that exists), tells the truth about `--program` (it hosts, `--list-programs`
+  probes) and walks the tick across the wire. ACOUSTICS knows the header exists and that an ear
+  view carries arrivals. ARCHITECTURE's tick section says where the physics went and that the
+  tick is 32 Hz. TODO's `--window` note now belongs to `--debug`, Etape 13's questions 2, 6
+  and 9 are marked decided, and CLAUDE.md readmits `spectator` to the vocabulary. README calls
+  Master Control what it is.
 - **A slow mind's intent is tagged for the tick the world will step next.** `Host::act` drains
   the wire before it speaks, so when the world told another tick while the Program was
   thinking (a first-tick warm-up, a world rebuilt for a new guest), the intent is tagged for

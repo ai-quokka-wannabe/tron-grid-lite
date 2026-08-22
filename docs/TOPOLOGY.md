@@ -12,12 +12,12 @@ lineage from Core War through Screeps — archived as research briefs 11 to 15 i
 records for earlier research. This file carries the conclusions; the briefs carry the citations in
 full.
 
-Everything below lives, and is built, in this repository, with one exception: the protocol
-library grows in its own repository (`link`), because the wire between two repositories should
-live in neither. Master Control will eventually move to its own repository (`master-control`),
-and pieces of this one will follow their owners out; until that day this repository is the single
-home of everything else, and extraction is a decision recorded in
-[The four repositories](#the-four-repositories) rather than a prerequisite.
+Everything below is built, and the split this document planned has happened: the protocol
+library grew in its own repository (`link`), because the wire between two repositories should
+live in neither; Master Control moved to its own (`master-control`) and took the simulated world
+with it, the flagship deleting its copy in the same movement. This repository is the Grid as it
+is perceived - the renderer, the senses, both client roles - and the record of who owns what is
+[The four repositories](#the-four-repositories).
 
 ---
 
@@ -288,8 +288,8 @@ that the places protocols actually fail are the places this codebase already has
   ground, and the tick's contacts (the audit's codebase brief read the exact list out of
   `GridSensesSource::fill`). The earlier plan grew the rows; the ruling instead adds a
   **host-addressed `PROPRIOCEPTION` message** — tick, creature, specific force, grounded, and
-  up to `max_contact_count` contacts, each a point and an impulse today and, when Etape 5
-  lands, a point on the body, a world normal, a depth and a slip velocity — sent by Master
+  up to `max_contact_count` contacts, each a point on the body, an impulse, a world normal, a
+  depth and a slip velocity (since protocol v6, Etape 5) — sent by Master
   Control **only to the connection that owns the creature**, every tick, after that tick's
   `TICK_STATE`. Three reasons. A body's feel is private: nobody else can use it, and two hundred
   and fifty rows times sixteen contacts would multiply the snapshot for no one. It is the first
@@ -431,8 +431,8 @@ one a mechanism behind a sentence this document already had, or a behaviour it h
 - **Intents are requests, and conflicts resolve server-side.** Every brain runs against the
   settled, immutable snapshot of tick N (the two-stage pipeline Screeps ships); when two intents
   contend for the same outcome, Master Control resolves the conflict deterministically and logs
-  the resolution. Today no creature-creature contact exists and the sentence is trivially true;
-  it is written before it is needed.
+  the resolution. Creature-creature contact exists now - the separating-axis pass in Master
+  Control's physics, pairs in id order - and the sentence is what it obeys.
 - **The RNG of record has substreams.** One master seed, and per-creature substreams derived
   from it — so one creature's draws are independent of roster order and of how many neighbours
   exist, and admitting a newcomer does not perturb every incumbent's randomness. Client entropy
@@ -454,10 +454,11 @@ one a mechanism behind a sentence this document already had, or a behaviour it h
   the Grid and every creature are made of triangles and squares only — no curved surface exists
   anywhere — so every contact is a closed-form point-, segment- or polygon-against-plane test,
   and the contact *time* against a plane is a root of the same polynomial the ballistic closed
-  form already solves. Master Control therefore owes, once `REZ` carries real geometry:
-  **continuous (time-of-impact) contacts of the creature's mesh against the world's welded
-  planar faces**, and **Separating-Axis contacts between creatures using the convex hull of
-  each `REZ` mesh**, built once at rez in a fixed vertex order. Two lessons stand behind the
+  form already solves. Master Control therefore built, once `REZ` carried real geometry:
+  **continuous (time-of-impact) contacts of the creature's hull against the world's planar
+  faces** (the riser crossing as an exact root), and **Separating-Axis contacts between
+  creatures using the convex hull of each `REZ` mesh**, built once at rez in a fixed vertex
+  order - its Etape 5, done. Two lessons stand behind the
   wording. *Welded*, because a square split into two coplanar triangles grows an interior edge,
   and a body sliding across that edge meets a spurious edge normal — the ghost-collision class
   PhysX and Unity users know as internal-edge catching. The owner's ruling closes it at the
@@ -589,10 +590,10 @@ The claims survive networking and come out sharper, provided they are stated pre
 
 | Repository | Eventually owns | Today |
 |---|---|---|
-| **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Created; settings mirrored; documentation and CI furniture landed. The flesh waits for this repository's seams |
-| **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Created; settings mirrored; scaffolded. The protocol contract is its first etape |
-| **tron-grid-lite** | The client in both roles, the senses, the renderer, the shared world-definition and physics code the server consumes | Everything else, including the server's future flesh — this document and the split seams land here first |
-| **rc-worm** | The first brain: the DLL, its Qt telemetry GUI, eventually the Blender body | Cloned, parked until master-control and link have solid foundations |
+| **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Built: the heartbeat, the roster of record, the validator and its adversarial suite, the physics (hulls, exact contacts, friction, scratches), the Disk with rollover, the input log, and Clu |
+| **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Protocol v6, eleven messages, every one flowing its own way only; the Disk recorder and replayer |
+| **tron-grid-lite** | The client in both roles, the senses, the renderer, the shared world definition the server fingerprints | The Grid as perceived: `--window` watches and listens, `--program` hosts a creature, `--replay` plays a Disk; the physics left for Master Control |
+| **rc-worm** | The first brain: the DLL, its Qt telemetry GUI, eventually the Blender body | Cloned, parked until the ABI settled - which it has: the first inhabitant is next |
 
 The protocol went to its own repository for three reasons with names. The parser is the attack
 surface — the Dark Souls III remote-code execution and the CS:GO pre-auth overflows were

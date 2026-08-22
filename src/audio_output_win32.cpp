@@ -25,6 +25,7 @@
 #include "audio.hpp"
 
 #include <atomic>
+#include <cstdio>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -55,7 +56,9 @@ namespace AudioLib
 
         [[nodiscard]] std::string hresultWords(const char* what, const HRESULT result)
         {
-            return std::string{what} + " failed (HRESULT 0x" + std::to_string(static_cast<unsigned long>(result)) + ")";
+            char hex[16]{};
+            std::snprintf(hex, sizeof(hex), "%08lX", static_cast<unsigned long>(result));
+            return std::string{what} + " failed (HRESULT 0x" + hex + ")";
         }
 
         template<typename T>
@@ -154,7 +157,13 @@ namespace AudioLib
             if (FAILED(result) || format == nullptr) {
                 throw std::runtime_error{hresultWords("GetMixFormat", result)};
             }
-            const SampleShape shape{shapeOf(*format)};
+            SampleShape shape{};
+            try {
+                shape = shapeOf(*format);
+            } catch (...) {
+                CoTaskMemFree(format);
+                throw;
+            }
             const std::uint32_t channels{format->nChannels};
             const std::uint32_t rate{format->nSamplesPerSec};
             if (rate != mixer.sampleRate()) {
@@ -163,6 +172,10 @@ namespace AudioLib
             }
 
             const HANDLE event{CreateEventW(nullptr, FALSE, FALSE, nullptr)};
+            if (event == nullptr) {
+                CoTaskMemFree(format);
+                throw std::runtime_error{"CreateEventW failed: the render thread would have nothing to wait on"};
+            }
             result = client.pointer->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, BUFFER_HUNDRED_NANOSECONDS, 0, format, nullptr);
             CoTaskMemFree(format);
             if (FAILED(result)) {

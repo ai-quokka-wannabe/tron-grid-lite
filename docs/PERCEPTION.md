@@ -44,7 +44,10 @@ lists every such case.
 
 ## Sensor presets
 
-**None of these are implemented yet — they are the specification Phase 6 will build to.**
+**These are the specification the senses were built to. The Grid ships eyes as sample lists
+(`TglEyeDesc`: directions, acceptance angles, channels, quantisation), which is the shape every
+preset below reduces to; the presets themselves are the recommended sizes, not names the ABI
+knows - a body carries its own eye descriptors.**
 
 The Grid will offer a handful of sensor shapes, named after the animals whose measurements set
 their size. A preset is a **render specification** — sample count, sample directions, acceptance

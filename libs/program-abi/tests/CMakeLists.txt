@@ -70,6 +70,7 @@ set(TGL_DRIVER_PROGRAM_VARIANTS
     excessive
     silent
     refuses_rez
+    refuses_second_rez
     modelled
     misshapen
 )

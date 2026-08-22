@@ -107,10 +107,11 @@ exactly like a current one, and only loading it tells the two apart. Nothing the
 library that could never be accepted is listed with the reason rather than omitted, because a Program
 silently absent from a listing is the one somebody spends longest looking for.
 
-`--program <name>` asks the same question about one of them. Both perform every check below and then
-unload, so a Program that will not load can be diagnosed on its own rather than three seconds into a
-run. Both stop short of `library_init`, because that call carries the tick length and a check that
-invented one would hand a Program a number the run would later contradict.
+`--list-programs` performs every check below and then unloads, so a Program that will not load can
+be diagnosed on its own rather than three seconds into a run; it stops short of `library_init`,
+because that call carries the tick length and a check that invented one would hand a Program a
+number the run would later contradict. `--program <name>` performs the same checks and then goes
+on: it loads the Program for real and hosts its creature in Master Control's world.
 
 The Grid loads the resolved file with `LoadLibrary` (Windows) or `dlopen` (Linux) and resolves
 exactly one exported symbol:
@@ -142,21 +143,25 @@ below does not cover:
 ### Lifecycle
 
 ```text
-1. The Grid starts, reads its creature roster, resolves Program library paths.
+1. The host starts, reads its creature roster, resolves Program library paths, dials Master
+   Control.
 2. dlopen / LoadLibrary the Program library.
-3. tglGetProgramVTable(TGL_PROGRAM_ABI_VERSION) -> vtable, or NULL -> abort this Program.
+3. tglGetProgramVTable(TGL_ABI_VERSION) -> vtable, or NULL -> abort this Program.
 4. vtable->library_init(&library_info)               once per loaded library
 5. For each creature body assigned to this library:
        vtable->program_rez(&creature_desc, &render_model)   -> opaque Program handle,
-                                                               and the body's own shape back
+                                                               and the body's own shape back,
+                                                               sent to Master Control as REZ
 6. Per tick:
-       a. The Grid advances physics once, for every body on the roster.
-       b. The Grid renders each creature's eyes into their own tiny render targets.
-       c. The Grid gathers each creature's ears against the same hierarchy.
-       d. The Grid reads the eye targets back and fills TglSenses, with the body senses.
+       a. Master Control steps every body once, and tells the host the tick whole: the rows,
+          and the owner's letter of what each body felt.
+       b. The host renders each creature's eyes into their own tiny render targets.
+       c. The host gathers each creature's ears against the same hierarchy.
+       d. The host reads the eye targets back and fills TglSenses, with the body senses.
        e. For each live creature:
               vtable->program_tick(handle, &senses, &actions)
-       f. The Grid clamps every TglActions and stages it as the next tick's intent.
+       f. The host sends every TglActions up the wire as the intent for the tick the world
+          will step next; Master Control clamps it - the validator is the only path in.
 7. On creature death or Grid shutdown:
        vtable->program_derez(handle)
 8. vtable->library_shutdown()                        once per loaded library
@@ -169,12 +174,13 @@ drives. Steps 5 and 7 pair up strictly: every handle returned by `program_rez` r
 receives a `program_derez` — the Grid skips that body and there is nothing to release.
 
 **Only step 6e is inside the per-creature loop, and the two steps that sit outside it carry the
-whole of the ordering argument.** Physics advances once for every body, because advancing it per
-creature cannot express two creatures touching each other at all, and it makes roster iteration
-order physically observable in the world. Clamping and staging happen after every Program has been
-called, for the mirror reason: applying inside the loop would let the first creature's action move
-the world before the last creature's call, which makes "an action takes effect on the next tick"
-true for one creature and false for the rest.
+whole of the ordering argument** - which is now Master Control's to keep. Physics advances once
+for every body, because advancing it per creature cannot express two creatures touching each
+other at all, and it makes roster iteration order physically observable in the world. Clamping
+and staging happen after every Program has been called, for the mirror reason: applying inside
+the loop would let the first creature's action move the world before the last creature's call,
+which makes "an action takes effect on the next tick" true for one creature and false for the
+rest.
 
 ---
 
@@ -203,7 +209,7 @@ true for one creature and false for the rest.
   Grid and is valid only for the duration of that call. The Program must copy anything it wishes to
   keep. Symmetrically, the Grid never frees anything a Program allocated.
 - **One version number, checked once, and it moves whenever the header does.**
-  `TGL_PROGRAM_ABI_VERSION` catches a stale library; it does not express compatibility. A constant
+  `TGL_ABI_VERSION` catches a stale library; it does not express compatibility. A constant
   that never moves catches nothing, because the stale library carries the identical constant — see
   [Versioning](#versioning), which holds the mechanism that keeps the number honest. There are no
   per-struct size fields and no compatibility shims.
@@ -222,7 +228,7 @@ true for one creature and false for the rest.
 [the header](../libs/program-abi/include/tgl/tgl_program_abi.h), like everything else in the
 interface. This document deliberately does not restate it — the listing this section used to
 carry proved the rule by drifting three ways at once: it still named the version constant
-`TGL_PROGRAM_ABI_VERSION` pinned at 1, showed a vtable without the `struct_size` and
+`TGL_ABI_VERSION` pinned at 1, showed a vtable without the `struct_size` and
 `abi_version` header members, and spelt `program_rez` without the model it now carries back.
 
 The whole interface is one exported symbol, a two-member vtable header — `struct_size`, the one
@@ -236,7 +242,7 @@ The two library-scope members keep plain names on purpose. They are `LoadLibrary
 name events on the Grid; plain words name events in the operating system.
 
 A change to any name, type or member in this vtable is a change an already-built Program could
-notice, so it moves `TGL_PROGRAM_ABI_VERSION`. See [Versioning](#versioning).
+notice, so it moves `TGL_ABI_VERSION`. See [Versioning](#versioning).
 
 ### Library and creature descriptors
 
@@ -492,7 +498,7 @@ does not perform it.
 ### Chemoreception: deliberately absent, and worth revisiting
 
 Smell has no place on the Grid as it stands because there is no chemistry in it — only geometry,
-light and, soon, sound. Adding it would mean a diffusing scalar field, the first subsystem the BVH
+light and sound. Adding it would mean a diffusing scalar field, the first subsystem the BVH
 cannot help with at all.
 
 It is recorded here rather than dismissed because there is a real argument on the other side. The
@@ -881,7 +887,7 @@ for a picture.
 
 **There is none, and that is deliberate until 0.1.0.**
 
-`TGL_PROGRAM_ABI_VERSION` is a build stamp rather than a compatibility statement. This interface
+`TGL_ABI_VERSION` is a build stamp rather than a compatibility statement. This interface
 changes whenever it needs to — structs gain fields, functions change signature, semantics get
 corrected — and none of that buys anyone backward compatibility, because nobody is owed it by a
 project that has not reached its first release. Every Program that exists is built from this

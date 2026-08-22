@@ -503,8 +503,9 @@ reason.
 The terrain half of this argument resolved the other way when physics shipped: ground contact runs
 against the closed-form `gridMeshHeight` through the `GroundFunction` seam, because an analytic
 ground gives contacts that replay exactly and devicelessly, which the world server's endgame
-demands. What follows stands as the argument for the half that has not shipped — creature-creature
-contact — and the two load-bearing properties at the end are load-bearing still.
+demands. What follows stands as the argument behind the contact model Master Control then built
+(hulls, exact riser crossings, the separating-axis pass between creatures) and the two
+load-bearing properties at the end are load-bearing still.
 
 **One Grid, three senses if touch counts as one.** Nothing in the hierarchy, its layout or its
 traversal changes to serve physics, and that is not a coincidence — `Triangle` already stores `v0`,
@@ -715,12 +716,19 @@ global rate by name. It buys nothing the key does not.
 
 ## The Tick
 
-Phase 6 built this tick deviceless-first: phases 2 through 9 and 11 run in the program mode in the
-tabled order, while phases 1 and 10 belong to the windowed mode — which hosts no creatures, so the
-two halves of the table never meet in one process. They meet again across the wire:
-[TOPOLOGY.md](TOPOLOGY.md) moves the spectator into its own process, and the paragraphs below that
+**Where this section stands now.** The tick it describes was built here and then moved: the
+physics phase lives in Master Control (its `physics.rs` is the port, held to the goldens this
+repository recorded), the flagship deleted its copy, and a `--program` host today runs the
+sense phases against the tick the world tells it and sends the intent up the wire. The argument
+below - why physics advances once for every body, why staging waits for every Program - is
+unchanged and is what Master Control obeys; read "the Grid" in it as the world, wherever the
+world runs. The tick is 32 Hz (`dt = 0.03125`), not the 50 Hz some worked examples assume.
+
+Phase 6 built this tick deviceless-first: phases 2 through 9 and 11 ran in the program mode in the
+tabled order, while phases 1 and 10 belong to the windowed mode. They meet across the wire:
+[TOPOLOGY.md](TOPOLOGY.md) put the spectator in its own process, and the paragraphs below that
 speak of a window beside a live roster describe the single-process general form that blueprint
-supersedes.
+superseded.
 
 The frame flow below is the picture's. This is the world's, and the two meet only at the last step.
 Eleven phases, in this order, and the order is forced at every point where it looks arbitrary:
@@ -986,7 +994,7 @@ Each omission below is a design decision, and each one is what keeps the rendere
 | Rendergraph, event bus, service locator, resource handles | Not enough passes or entity variety to justify the abstraction. Revisit only with a concrete second use case |
 | Component / entity layout | Same reason, and it has already been tried here: `components.hpp` carried a `Transform`/`Bounds`/`Geometry`/`MaterialIndex` layout that nothing ever instantiated, which is why it is not there now. Re-proposing it is re-treading ground already paid for once |
 | An `Engine` class owning subsystems | Every candidate has exactly one consumer. The Khronos "Building a Simple Engine" chapter is the useful case study precisely because its prose and its shipped reference implementation disagree: the prose teaches component systems, service locators, an event bus with priorities and a topologically-sorted pass manager; the shipped `Engine` is a concrete non-virtual class holding eight named `unique_ptr`s, wired by straight-line construction order, with input arriving through four `std::function` callbacks and no rendergraph at all. Its own conclusion page then says each layer should solve a problem actually encountered rather than an anticipated one, and that "each abstraction adds cognitive overhead and potential failure points" |
-| A `libs/physics` extraction | One consumer today — [TOPOLOGY.md](TOPOLOGY.md) names the second, Master Control, and stages the extraction behind its seams. `src/tests/CMakeLists.txt` already says this in as many words, and the reason usually offered for the extraction — so that the check can run in CI — is simply false: the GPU-free ctest targets already run in CI without it |
+| A `libs/physics` extraction | Moot: the physics followed its owner out to Master Control, in Rust, as the one implementation, and this repository keeps none. The rest of this row is the reasoning that stood while it was here. `src/tests/CMakeLists.txt` already says this in as many words, and the reason usually offered for the extraction — so that the check can run in CI — is simply false: the GPU-free ctest targets already run in CI without it |
 
 One pattern from the same chapter is worth taking rather than refusing, because it is an anti-pattern
 this repository currently has: **state indexed by the frame in flight belongs in one array of a

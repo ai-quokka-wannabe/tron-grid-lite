@@ -61,7 +61,7 @@ through the API — but you are missing out.
 | senses | What a creature perceives during a tick |
 | actions | What a Program asks its creature's body to do |
 | rez / derez | A Program arriving on the Grid, and leaving it |
-| Master Control | The world server — the one authority every running instance of the Grid will answer to. Blueprint today: [docs/TOPOLOGY.md](docs/TOPOLOGY.md) |
+| Master Control | The world server — the one authority every running instance of the Grid answers to; its own repository, blueprinted in [docs/TOPOLOGY.md](docs/TOPOLOGY.md) |
 | Link | The protocol library Master Control and the Grid's instances both load — the wire of the Grid. `link` names only [its repository](https://github.com/ai-quokka-wannabe/link) |
 
 ## Status
@@ -83,8 +83,8 @@ through the C ABI in `libs/program-abi` — and what remains of the phase is lis
 
 The Grid is one repository of four. This one is the flagship — the renderer, the senses, both
 client roles, and the ground where every subsystem grows before it moves out.
-[master-control](https://github.com/ai-quokka-wannabe/master-control) is the world server the
-blueprint builds towards; [the link repository](https://github.com/ai-quokka-wannabe/link) is **Link** — the wire of the
+[master-control](https://github.com/ai-quokka-wannabe/master-control) is the world server every
+instance here dials; [the link repository](https://github.com/ai-quokka-wannabe/link) is **Link** — the wire of the
 Grid, the protocol library the server and every client load as the same shared binary; and
 [rc-worm](https://github.com/ai-quokka-wannabe/rc-worm) is the first Program. Who owns what, and
 why every delegation is the way it is, lives in [docs/TOPOLOGY.md](docs/TOPOLOGY.md) — one table,
