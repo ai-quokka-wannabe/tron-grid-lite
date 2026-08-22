@@ -168,6 +168,12 @@ namespace WorldClientLib
                 break;
             case LNK_MSG_DEREZ:
                 m_creatures.erase(view.as.derez.creature_id);
+                if (const auto body{m_bodies.find(view.as.derez.creature_id)}; body != m_bodies.end()) {
+                    if (!body->second.empty()) {
+                        ++m_bodies_generation;
+                    }
+                    m_bodies.erase(body);
+                }
                 m_tick = std::max(m_tick, view.as.derez.tick);
                 break;
             case LNK_MSG_PING:
@@ -181,11 +187,24 @@ namespace WorldClientLib
                 m_library.vtable().send_pong(m_connection, view.as.ping.nonce);
                 m_library.vtable().flush(m_connection, &pong_flush_remainder);
                 break;
-            case LNK_MSG_REZ:
-                // A body's geometry, relayed for every citizen. The spectator still draws the
-                // shared placeholder dart; real bodies land in their own etape, and until then
-                // the rows are well-formed and uninteresting.
+            case LNK_MSG_REZ: {
+                // A body's geometry, relayed for every citizen, validated whole by the wire:
+                // kept by creature for the stage. A re-rez replaces; a bodiless one is kept too,
+                // so the late joiner and the first citizen hold the same record.
+                const LnkRezView& told{view.as.rez};
+                Body body{};
+                body.rez = told.rez;
+                body.vertices.assign(told.vertices, told.vertices + told.rez.vertex_count);
+                body.triangles.assign(told.triangles, told.triangles + told.rez.triangle_count);
+                body.materials.assign(told.materials, told.materials + told.rez.material_count);
+                const auto previous{m_bodies.find(told.rez.creature_id)};
+                const bool shape_changes{!body.empty() || ((previous != m_bodies.end()) && !previous->second.empty())};
+                m_bodies[told.rez.creature_id] = std::move(body);
+                if (shape_changes) {
+                    ++m_bodies_generation;
+                }
                 break;
+            }
             case LNK_MSG_BYE:
                 throw std::runtime_error{"Master Control ended the world (BYE)."};
             default:

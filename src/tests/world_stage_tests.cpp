@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 #include <testing/testing.hpp>
@@ -119,6 +120,60 @@ TEST_CASE(a_creature_stands_in_the_placeholder_body_at_its_pose)
     TEST_CHECK_CLOSE(returned.x, nose_body.x, 1e-5f);
     TEST_CHECK_CLOSE(returned.y, nose_body.y, 1e-5f);
     TEST_CHECK_CLOSE(returned.z, nose_body.z, 1e-5f);
+}
+
+TEST_CASE(a_creature_whose_rez_carried_a_shape_wears_it_and_the_rest_keep_the_placeholder)
+{
+    WorldStageLib::WorldStage stage{makeLittleGrid(), makeLittleMaterials(), 4u};
+    const std::size_t bare_materials{stage.materials().size()};
+    const BvhLib::FlatScene bare{stage.flatScene()};
+
+    // One shaped body (a single triangle, one material, emissive green) and one bodiless one.
+    WorldClientLib::Body shaped{};
+    shaped.rez.creature_id = 7u;
+    shaped.rez.vertex_count = 3u;
+    shaped.rez.triangle_count = 1u;
+    shaped.rez.material_count = 1u;
+    shaped.vertices = {LnkRezVertex{.position = {0.0f, 0.0f, 0.0f}}, LnkRezVertex{.position = {0.1f, 0.0f, 0.0f}}, LnkRezVertex{.position = {0.0f, 0.1f, -0.3f}}};
+    shaped.triangles = {LnkRezTriangle{.vertices = {0u, 1u, 2u}, .material = 0u}};
+    shaped.materials = {LnkRezMaterial{.colour = {0.1f, 0.2f, 0.3f}, .index_of_refraction = 1.5f, .emission = {0.0f, 4.0f, 0.0f}, .transmission = 0.0f}};
+    WorldClientLib::Body bodiless{};
+    bodiless.rez.creature_id = 9u;
+
+    std::unordered_map<std::uint32_t, WorldClientLib::Body> bodies;
+    bodies[7u] = shaped;
+    bodies[9u] = bodiless;
+    stage.setBodies(bodies);
+
+    // The table grew by the shaped body's one material, mapped field for field; the scene grew
+    // by one geometry, placed after the Grid and the placeholder in the concatenated buffers.
+    TEST_CHECK_EQUAL(stage.materials().size(), bare_materials + 1u);
+    TEST_CHECK_CLOSE(stage.materials().back().emission.y, 4.0f, 1e-6f);
+    const BvhLib::FlatScene shaped_scene{stage.flatScene()};
+    TEST_CHECK(shaped_scene.triangles.size() == bare.triangles.size() + 1u);
+    TEST_CHECK_EQUAL(shaped_scene.triangles.back().material, static_cast<std::uint32_t>(bare_materials));
+
+    WorldClientLib::InterpolatedCreature seven{};
+    seven.creature_id = 7u;
+    seven.position[1] = 0.05f;
+    WorldClientLib::InterpolatedCreature nine{};
+    nine.creature_id = 9u;
+    nine.position[0] = 2.0f;
+    const std::vector<BvhLib::InstanceRecord> records{stage.records({seven, nine})};
+    TEST_CHECK_EQUAL(records.size(), 3u);
+    // Seven's record names the new geometry: beyond the placeholder's nodes; nine's is the
+    // placeholder's, exactly where a creature without a shape always stood.
+    const std::uint32_t placeholder_offset{records[0].node_count};
+    TEST_CHECK(records[1].node_offset > placeholder_offset);
+    TEST_CHECK_EQUAL(records[1].triangle_offset, static_cast<std::uint32_t>(bare.triangles.size()));
+    TEST_CHECK_EQUAL(records[2].node_offset, placeholder_offset);
+
+    // Taking the shape away brings the stage back to exactly the bare scene.
+    bodies.erase(7u);
+    stage.setBodies(bodies);
+    TEST_CHECK_EQUAL(stage.materials().size(), bare_materials);
+    TEST_CHECK(stage.flatScene().triangles.size() == bare.triangles.size());
+    TEST_CHECK_EQUAL(stage.records({seven})[1].node_offset, placeholder_offset);
 }
 
 TEST_CASE(the_placeholder_wears_its_own_material_slot)
