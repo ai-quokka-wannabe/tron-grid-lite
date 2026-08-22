@@ -114,6 +114,29 @@ namespace WorldClientLib
         m_tick = m_welcome.current_tick;
     }
 
+    Client::Client(const std::filesystem::path& disk) :
+        m_library(LinkLib::Library::besideExecutable())
+    {
+        LnkStatus status{LNK_PANIC};
+        std::array<char, 256> detail{};
+
+        const LnkWorldDefinition definition{worldDefinition()};
+        const std::uint64_t world_fingerprint{m_library.vtable().world_fingerprint(&definition)};
+        const std::string path{disk.string()};
+
+        m_connection = m_library.vtable().replay_open(path.c_str(), world_fingerprint, &m_welcome, &status, detail.data(), static_cast<std::uint32_t>(detail.size()));
+        if (m_connection == nullptr) {
+            const std::string words{detail.data()};
+            if (status == LNK_REFUSED) {
+                throw std::runtime_error{"The Disk at " + path + " refused this Grid: " + (words.empty() ? statusName(status) : words)};
+            }
+            throw std::runtime_error{"No Disk at " + path + " (" + (words.empty() ? statusName(status) : words) + ")"};
+        }
+
+        m_tick = m_welcome.current_tick;
+        m_replay = Replay{.began = std::chrono::steady_clock::now(), .first_tick = 0u, .pending = std::nullopt};
+    }
+
     Client::~Client()
     {
         if (m_connection != nullptr) {
@@ -123,96 +146,146 @@ namespace WorldClientLib
 
     void Client::poll()
     {
+        if (m_ended) {
+            return;
+        }
         LnkMessageView view{};
-        std::uint8_t pong_flush_remainder{0u};
 
         for (;;) {
+            /*
+                Clu's pacing: a telling read ahead of its time waits here, whole, until the
+                wall clock reaches its tick - the Disk plays at the speed the world ran, and
+                the picture interpolates between tellings exactly as it does for a live world.
+                Everything before that telling on the Disk has already been applied, so the
+                order of the record is the order of the picture.
+            */
+            if (m_replay.has_value() && m_replay->pending.has_value()) {
+                const float dt{(m_welcome.nominal_dt_seconds > 0.0f) ? m_welcome.nominal_dt_seconds : 0.03125f};
+                const float elapsed{std::chrono::duration<float>{std::chrono::steady_clock::now() - m_replay->began}.count()};
+                const std::uint64_t due{m_replay->first_tick + static_cast<std::uint64_t>(elapsed / dt)};
+                if (m_replay->pending->header.tick > due) {
+                    return;
+                }
+                const PendingTelling telling{std::move(*m_replay->pending)};
+                m_replay->pending.reset();
+                applyTelling(telling.header, telling.rows.empty() ? nullptr : telling.rows.data());
+            }
+
             const LnkStatus status{m_library.vtable().poll(m_connection, &view)};
 
             if (status == LNK_NOTHING_YET) {
                 return;
             }
             if (status == LNK_PEER_CLOSED) {
+                if (m_replay.has_value()) {
+                    m_ended = true; // The Disk is played out: the last telling stands.
+                    return;
+                }
                 throw std::runtime_error{"Master Control is gone: the connection closed."};
             }
             if (status != LNK_OK) {
                 throw std::runtime_error{"The wire refused: " + statusName(status) + "."};
             }
 
-            switch (view.type) {
-            case LNK_MSG_TICK_STATE: {
-                /*
-                        The broadcast is a full snapshot: everything alive is in it, so a
-                        creature it does not mention is gone, exactly as if a DEREZ had said so.
-                        Snapshot-authoritative removal keeps a lost DEREZ from leaving a ghost.
-                    */
+            if (m_replay.has_value() && (view.type == LNK_MSG_TICK_STATE)) {
+                // Read ahead: kept whole, because the rows are borrowed only until the next poll.
                 const LnkTickStateHeader& header{view.as.tick_state.header};
-                const LnkCreatureState* const rows{view.as.tick_state.states};
-
-                std::unordered_map<std::uint32_t, CreatureTrack> next;
-                next.reserve(header.creature_count);
-                for (std::uint32_t row = 0u; row < header.creature_count; ++row) {
-                    const LnkCreatureState& state{rows[row]};
-                    const auto known{m_creatures.find(state.creature_id)};
-                    CreatureTrack track{};
-                    track.newest = state;
-                    track.previous = (known != m_creatures.end()) ? known->second.newest : state;
-                    next.emplace(state.creature_id, track);
+                PendingTelling telling{};
+                telling.header = header;
+                telling.rows.assign(view.as.tick_state.states, view.as.tick_state.states + header.creature_count);
+                if (m_replay->first_tick == 0u) {
+                    m_replay->first_tick = header.tick;
+                    m_replay->began = std::chrono::steady_clock::now();
                 }
-                m_creatures = std::move(next);
-                m_tick = header.tick;
-                break;
+                m_replay->pending = std::move(telling);
+                continue;
             }
-            case LNK_MSG_EVENT:
-                m_events.push_back(view.as.event);
-                break;
-            case LNK_MSG_DEREZ:
-                m_creatures.erase(view.as.derez.creature_id);
-                if (const auto body{m_bodies.find(view.as.derez.creature_id)}; body != m_bodies.end()) {
-                    if (!body->second.empty()) {
-                        ++m_bodies_generation;
-                    }
-                    m_bodies.erase(body);
-                }
-                m_tick = std::max(m_tick, view.as.derez.tick);
-                break;
-            case LNK_MSG_PING:
-                /*
-                    The keepalive contract's client half: a spectator is legitimately mute - it
-                    never sends ACTIONS - so answering PONG is the one proof of life it owes,
-                    and a server that hears nothing for LNK_KEEPALIVE_DEAD_MILLIS rightly reaps
-                    it. Found the honest way: the first real Master Control reaped this very
-                    client in its own integration test.
-                */
-                m_library.vtable().send_pong(m_connection, view.as.ping.nonce);
-                m_library.vtable().flush(m_connection, &pong_flush_remainder);
-                break;
-            case LNK_MSG_REZ: {
-                // A body's geometry, relayed for every citizen, validated whole by the wire:
-                // kept by creature for the stage. A re-rez replaces; a bodiless one is kept too,
-                // so the late joiner and the first citizen hold the same record.
-                const LnkRezView& told{view.as.rez};
-                Body body{};
-                body.rez = told.rez;
-                body.vertices.assign(told.vertices, told.vertices + told.rez.vertex_count);
-                body.triangles.assign(told.triangles, told.triangles + told.rez.triangle_count);
-                body.materials.assign(told.materials, told.materials + told.rez.material_count);
-                const auto previous{m_bodies.find(told.rez.creature_id)};
-                const bool shape_changes{!body.empty() || ((previous != m_bodies.end()) && !previous->second.empty())};
-                m_bodies[told.rez.creature_id] = std::move(body);
-                if (shape_changes) {
+            if (m_replay.has_value() && (view.type == LNK_MSG_BYE)) {
+                m_ended = true;
+                return;
+            }
+
+            apply(view);
+        }
+    }
+
+    void Client::apply(const LnkMessageView& view)
+    {
+        std::uint8_t pong_flush_remainder{0u};
+        switch (view.type) {
+        case LNK_MSG_TICK_STATE:
+            applyTelling(view.as.tick_state.header, view.as.tick_state.states);
+            break;
+        case LNK_MSG_EVENT:
+            m_events.push_back(view.as.event);
+            break;
+        case LNK_MSG_DEREZ:
+            m_creatures.erase(view.as.derez.creature_id);
+            if (const auto body{m_bodies.find(view.as.derez.creature_id)}; body != m_bodies.end()) {
+                if (!body->second.empty()) {
                     ++m_bodies_generation;
                 }
-                break;
+                m_bodies.erase(body);
             }
-            case LNK_MSG_BYE:
-                throw std::runtime_error{"Master Control ended the world (BYE)."};
-            default:
-                // A message a spectator has no use for - a stray PONG, a WELCOME repeated.
-                // Ignored rather than fatal: it is well-formed, merely uninteresting.
-                break;
+            m_tick = std::max(m_tick, view.as.derez.tick);
+            break;
+        case LNK_MSG_PING:
+            /*
+                The keepalive contract's client half: a spectator is legitimately mute - it
+                never sends ACTIONS - so answering PONG is the one proof of life it owes,
+                and a server that hears nothing for LNK_KEEPALIVE_DEAD_MILLIS rightly reaps
+                it. Found the honest way: the first real Master Control reaped this very
+                client in its own integration test.
+            */
+            m_library.vtable().send_pong(m_connection, view.as.ping.nonce);
+            m_library.vtable().flush(m_connection, &pong_flush_remainder);
+            break;
+        case LNK_MSG_REZ: {
+            // A body's geometry, relayed for every citizen, validated whole by the wire:
+            // kept by creature for the stage. A re-rez replaces; a bodiless one is kept too,
+            // so the late joiner and the first citizen hold the same record.
+            const LnkRezView& told{view.as.rez};
+            Body body{};
+            body.rez = told.rez;
+            body.vertices.assign(told.vertices, told.vertices + told.rez.vertex_count);
+            body.triangles.assign(told.triangles, told.triangles + told.rez.triangle_count);
+            body.materials.assign(told.materials, told.materials + told.rez.material_count);
+            const auto previous{m_bodies.find(told.rez.creature_id)};
+            const bool shape_changes{!body.empty() || ((previous != m_bodies.end()) && !previous->second.empty())};
+            m_bodies[told.rez.creature_id] = std::move(body);
+            if (shape_changes) {
+                ++m_bodies_generation;
             }
+            break;
         }
+        case LNK_MSG_BYE:
+            throw std::runtime_error{"Master Control ended the world (BYE)."};
+        default:
+            // A message a spectator has no use for - a stray PONG, a WELCOME repeated.
+            // Ignored rather than fatal: it is well-formed, merely uninteresting.
+            break;
+        }
+    }
+
+    void Client::applyTelling(const LnkTickStateHeader& header, const LnkCreatureState* const rows)
+    {
+        /*
+            The broadcast is a full snapshot: everything alive is in it, so a creature it does
+            not mention is gone, exactly as if a DEREZ had said so. Snapshot-authoritative
+            removal keeps a lost DEREZ from leaving a ghost.
+        */
+        std::unordered_map<std::uint32_t, CreatureTrack> next;
+        next.reserve(header.creature_count);
+        for (std::uint32_t row = 0u; row < header.creature_count; ++row) {
+            const LnkCreatureState& state{rows[row]};
+            const auto known{m_creatures.find(state.creature_id)};
+            CreatureTrack track{};
+            track.newest = state;
+            track.previous = (known != m_creatures.end()) ? known->second.newest : state;
+            next.emplace(state.creature_id, track);
+        }
+        m_creatures = std::move(next);
+        m_tick = header.tick;
     }
 
     std::vector<InterpolatedCreature> Client::interpolated(const float alpha) const

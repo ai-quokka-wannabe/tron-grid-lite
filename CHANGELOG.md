@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Clu: `--replay <disk>` plays a Disk back into the window.** A replay viewer is a spectator
+  whose socket is a file: the same `WorldClientLib::Client`, opened through Link's
+  `replay_open` instead of dialling, the Disk's header judged as a handshake is (another
+  contract or another world refused in words), and the same picture - real bodies, the device
+  world rebuilt as they arrive and leave. The frames are paced by the recorded dt against the
+  wall clock, a telling read ahead of its time held whole until its tick comes, so the Disk
+  plays at the speed the world ran and the picture interpolates between tellings exactly as
+  live. At the end of the Disk the world stands still - the last telling stays on screen -
+  rather than ending. Tested deviceless against a Disk written through the loaded library
+  (first telling at once, the second after a dt, the end a standing world); two breakage rounds
+  discriminated; proven live with a Disk of a hosted body's whole life.
 - **A hosted creature meets the other bodies in the world.** The host keeps every other
   creature's body REZ relayed (never its own, which comes back as the acknowledgement) and, per
   whole telling, where the others stand and whether they call. `Stage::setGuests` appends one

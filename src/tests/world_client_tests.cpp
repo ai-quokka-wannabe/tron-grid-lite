@@ -29,6 +29,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -255,6 +256,70 @@ TEST_CASE(a_master_control_from_a_different_world_is_refused_in_words)
         TEST_CHECK(message.find("different world") != std::string::npos);
     }
     server.join();
+}
+
+TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
+{
+    /*
+        A Disk written through the loaded library's own record_open - three ticks a creature
+        walks, then the farewell - and played back by the same client that watches a live
+        world. The pacing is the recorded dt: the first telling lands at once, the second only
+        after a tick's worth of wall clock, and the end of the Disk is a standing world, never a
+        thrown one.
+    */
+    LinkLib::Library library{LinkLib::Library::besideExecutable()};
+    const LnkWorldDefinition definition{WorldClientLib::worldDefinition()};
+    const std::uint64_t fingerprint{library.vtable().world_fingerprint(&definition)};
+    const std::filesystem::path disk{std::filesystem::temp_directory_path() / ("tgl-clu-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".disk")};
+    const std::string path{disk.string()};
+
+    {
+        LnkStatus status{LNK_PANIC};
+        // A slow Disk - a tenth of a second per tick - so the pacing is observable.
+        LnkClient* const recorder{library.vtable().record_open(path.c_str(), fingerprint, 10u, 0.1f, 1'700'000'000u, &status, nullptr, 0u)};
+        TEST_CHECK_EQUAL(status, LNK_OK);
+        for (std::uint64_t tick{11u}; tick <= 13u; ++tick) {
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
+            const LnkCreatureState row{
+                .creature_id = 7u, .position = {static_cast<float>(tick), 0.05f, 0.0f}, .yaw = 0.0f, .velocity = {1.0f, 0.0f, 0.0f}, .yaw_rate = 0.0f, .vocalisation = 0.0f};
+            TEST_CHECK_EQUAL(library.vtable().send_tick_state(recorder, &header, &row), LNK_OK);
+        }
+        std::uint8_t everything_left{0u};
+        TEST_CHECK_EQUAL(library.vtable().flush(recorder, &everything_left), LNK_OK);
+        library.vtable().close(recorder);
+    }
+
+    WorldClientLib::Client clu{disk};
+    TEST_CHECK(clu.replaying());
+    TEST_CHECK_EQUAL(clu.welcome().current_tick, 10u);
+    TEST_CHECK_CLOSE(clu.welcome().nominal_dt_seconds, 0.1f, 1e-6f);
+
+    // The first telling lands at once; the second waits for its time.
+    clu.poll();
+    TEST_CHECK_EQUAL(clu.tick(), 11u);
+    TEST_CHECK_EQUAL(clu.creatureCount(), 1u);
+    clu.poll();
+    TEST_CHECK_EQUAL(clu.tick(), 11u);
+    TEST_CHECK(!clu.ended());
+
+    // Past one dt the second lands; past three, the Disk is played out and the last stands.
+    const std::chrono::steady_clock::time_point deadline{std::chrono::steady_clock::now() + std::chrono::seconds{3}};
+    while ((clu.tick() < 12u) && (std::chrono::steady_clock::now() < deadline)) {
+        clu.poll();
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    TEST_CHECK_EQUAL(clu.tick(), 12u);
+    while (!clu.ended() && (std::chrono::steady_clock::now() < deadline)) {
+        clu.poll();
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    TEST_CHECK(clu.ended());
+    TEST_CHECK_EQUAL(clu.tick(), 13u);
+    TEST_CHECK_CLOSE(clu.interpolated(1.0f).front().position[0], 13.0f, 1e-6f);
+    clu.poll(); // Polling a played-out Disk is a no-op, never a throw.
+    TEST_CHECK_EQUAL(clu.creatureCount(), 1u);
+
+    std::filesystem::remove(disk);
 }
 
 TEST_CASE(the_world_is_told_interpolated_and_ended)
