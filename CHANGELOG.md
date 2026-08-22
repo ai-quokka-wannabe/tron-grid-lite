@@ -1039,6 +1039,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Formatting is a gate, under a pinned formatter.** Adopted from the owner's
+  `claude-chats-browser`: quick-checks installs `clang-format~=22.1` and runs it `--dry-run
+  --Werror` over every tracked C and C++ file, so STYLE.md's claim that the tree is
+  clang-format clean is enforced rather than hoped for. The desk runs the same major. The one
+  reformat this needed - ten files, indentation only, most of them the last fortnight's - is in
+  this change.
 - **Eight findings of a bug hunt, fixed, the low and the cosmetic included.** The own ears hear
   the world's call: a creature's `vocalisation` is now the value its own row carries back - what
   Master Control sounded, clamped by its law - never the raw intent, so a Program asking for

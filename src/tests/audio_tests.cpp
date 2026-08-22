@@ -117,8 +117,10 @@ TEST_CASE(an_approaching_source_is_higher_and_a_receding_one_lower)
     const AudioLib::Listener listener{};
     // Ahead, at 20 m: approaching at 34.3 m/s (a tenth of sound) raises the pitch a tenth.
     const AudioLib::Sound still{.kind = AudioLib::SoundKind::Ping, .creature_id = 0u, .position = {0.0f, 0.0f, -20.0f}, .velocity = {}, .strength = 1.0f};
-    const AudioLib::Sound approaching{.kind = AudioLib::SoundKind::Ping, .creature_id = 0u, .position = {0.0f, 0.0f, -20.0f}, .velocity = {0.0f, 0.0f, 34.3f}, .strength = 1.0f};
-    const AudioLib::Sound receding{.kind = AudioLib::SoundKind::Ping, .creature_id = 0u, .position = {0.0f, 0.0f, -20.0f}, .velocity = {0.0f, 0.0f, -34.3f}, .strength = 1.0f};
+    const AudioLib::Sound approaching{
+        .kind = AudioLib::SoundKind::Ping, .creature_id = 0u, .position = {0.0f, 0.0f, -20.0f}, .velocity = {0.0f, 0.0f, 34.3f}, .strength = 1.0f};
+    const AudioLib::Sound receding{
+        .kind = AudioLib::SoundKind::Ping, .creature_id = 0u, .position = {0.0f, 0.0f, -20.0f}, .velocity = {0.0f, 0.0f, -34.3f}, .strength = 1.0f};
 
     constexpr std::uint32_t FRAMES{RATE / 10u}; // a tenth of a second: 44 cycles of A4 = 88 crossings
     const std::uint32_t base{crossings(renderOne(still, listener, FRAMES))};
@@ -128,7 +130,8 @@ TEST_CASE(an_approaching_source_is_higher_and_a_receding_one_lower)
     TEST_CHECK(up > base + 6u); // 440 * 1/0.9 = 489 Hz: ~98 crossings
     TEST_CHECK(down < base - 6u); // 440 * 1/1.1 = 400 Hz: ~80 crossings
     // And a sideways source, not closing, keeps its pitch exactly.
-    const AudioLib::Sound sideways{.kind = AudioLib::SoundKind::Ping, .creature_id = 0u, .position = {0.0f, 0.0f, -20.0f}, .velocity = {34.3f, 0.0f, 0.0f}, .strength = 1.0f};
+    const AudioLib::Sound sideways{
+        .kind = AudioLib::SoundKind::Ping, .creature_id = 0u, .position = {0.0f, 0.0f, -20.0f}, .velocity = {34.3f, 0.0f, 0.0f}, .strength = 1.0f};
     TEST_CHECK_EQUAL(crossings(renderOne(sideways, listener, FRAMES)), base);
 }
 

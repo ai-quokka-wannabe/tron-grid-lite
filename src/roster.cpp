@@ -275,56 +275,56 @@ namespace RosterLib
 
         m_creatures.reserve(creature_count);
         try {
-        for (uint32_t index{0u}; index < creature_count; ++index) {
-            const TglCreatureDesc desc{firstBody(index)};
+            for (uint32_t index{0u}; index < creature_count; ++index) {
+                const TglCreatureDesc desc{firstBody(index)};
 
-            // Zeroed by the Grid before the call, exactly as actions are: a Program that offers
-            // no body must not inherit whatever was on the stack and be judged on it.
-            TglRenderModel model{};
+                // Zeroed by the Grid before the call, exactly as actions are: a Program that offers
+                // no body must not inherit whatever was on the stack and be judged on it.
+                TglRenderModel model{};
 
-            TglProgram* const program{m_library.vtable().program_rez(&desc, &model)};
-            if (program == nullptr) {
-                throw std::runtime_error{"Program \"" + m_library.identifier() + "\" refused to rez creature " + std::to_string(index) + "."};
+                TglProgram* const program{m_library.vtable().program_rez(&desc, &model)};
+                if (program == nullptr) {
+                    throw std::runtime_error{"Program \"" + m_library.identifier() + "\" refused to rez creature " + std::to_string(index) + "."};
+                }
+
+                Creature creature;
+                creature.program = program;
+                creature.body = desc;
+
+                try {
+                    creature.model = copyValidatedModel(model);
+                } catch (const std::exception& defect) {
+                    // The rez succeeded, so the handle is real and owed its derez before the refusal
+                    // leaves this frame — a Program is entitled to unwind in program_derez what it
+                    // built in program_rez.
+                    m_library.vtable().program_derez(program);
+                    throw std::runtime_error{
+                        "Program \"" + m_library.identifier() + "\" offered creature " + std::to_string(index) + " a model the Grid refuses: " + defect.what() + "."};
+                }
+
+                // Spaced along +X so that two creatures do not begin inside one another. A body has no
+                // extent yet, so this is a convention waiting for a reason rather than a clearance.
+                const float x{static_cast<float>(index) * 2.0f};
+
+                // Rezzed standing rather than dropped: a body that spawns in the air arrives with a
+                // landing thump on tick one, which would make the first recorded contact an artefact of
+                // rezzing rather than a fact about the world.
+                creature.pose.position = MathLib::Vec3{x, m_ground(x, 0.0f) + BODY_HALF_HEIGHT, 0.0f};
+                creature.grounded = true;
+
+                m_creatures.push_back(creature);
             }
-
-            Creature creature;
-            creature.program = program;
-            creature.body = desc;
-
-            try {
-                creature.model = copyValidatedModel(model);
-            } catch (const std::exception& defect) {
-                // The rez succeeded, so the handle is real and owed its derez before the refusal
-                // leaves this frame — a Program is entitled to unwind in program_derez what it
-                // built in program_rez.
-                m_library.vtable().program_derez(program);
-                throw std::runtime_error{
-                    "Program \"" + m_library.identifier() + "\" offered creature " + std::to_string(index) + " a model the Grid refuses: " + defect.what() + "."};
-            }
-
-            // Spaced along +X so that two creatures do not begin inside one another. A body has no
-            // extent yet, so this is a convention waiting for a reason rather than a clearance.
-            const float x{static_cast<float>(index) * 2.0f};
-
-            // Rezzed standing rather than dropped: a body that spawns in the air arrives with a
-            // landing thump on tick one, which would make the first recorded contact an artefact of
-            // rezzing rather than a fact about the world.
-            creature.pose.position = MathLib::Vec3{x, m_ground(x, 0.0f) + BODY_HALF_HEIGHT, 0.0f};
-            creature.grounded = true;
-
-            m_creatures.push_back(creature);
-        }
         } catch (...) {
-        // A destructor never runs for a constructor that threw, and the library's own
-        // destructor would shut the Program with creatures still rezzed - which the header
-        // forbids: a Program touches its state in program_derez, never after library_shutdown.
-        // Every creature this constructor rezzed is derezzed here, in reverse, before the
-        // refusal leaves.
-        for (auto creature{m_creatures.rbegin()}; creature != m_creatures.rend(); ++creature) {
-            m_library.vtable().program_derez(creature->program);
-        }
-        m_creatures.clear();
-        throw;
+            // A destructor never runs for a constructor that threw, and the library's own
+            // destructor would shut the Program with creatures still rezzed - which the header
+            // forbids: a Program touches its state in program_derez, never after library_shutdown.
+            // Every creature this constructor rezzed is derezzed here, in reverse, before the
+            // refusal leaves.
+            for (auto creature{m_creatures.rbegin()}; creature != m_creatures.rend(); ++creature) {
+                m_library.vtable().program_derez(creature->program);
+            }
+            m_creatures.clear();
+            throw;
         }
     }
 

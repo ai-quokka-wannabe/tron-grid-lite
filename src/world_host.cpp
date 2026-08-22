@@ -291,11 +291,14 @@ namespace WorldHostLib
                     .depth = felt.depth,
                     .slip = {felt.slip[0], felt.slip[1], felt.slip[2]}});
             }
-            m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]}, std::move(contacts));
+            m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]},
+                std::move(contacts));
             m_felt[index] = true;
         }
 
-        if (std::all_of(m_felt.begin(), m_felt.end(), [](const bool felt) { return felt; })) {
+        if (std::all_of(m_felt.begin(), m_felt.end(), [](const bool felt) {
+                return felt;
+            })) {
             m_told_tick = m_telling_tick;
             m_guests = m_guests_being_told;
             // A guest the world has now placed for the first time may take the stage.

@@ -48,7 +48,9 @@ namespace
 
     [[nodiscard]] RosterLib::GroundFunction flatGround()
     {
-        return [](float, float) { return 0.0f; };
+        return [](float, float) {
+            return 0.0f;
+        };
     }
 
     //! Master Control's part, scripted: it listens as the host's own world, and keeps what it hears.
@@ -142,14 +144,12 @@ namespace
         void tellTick(const std::uint64_t tick, const std::uint32_t creature_id, const float z, const float yaw, const bool grounded, const bool with_letter = true)
         {
             const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
-            const LnkCreatureState row{.creature_id = creature_id, .position = {1.0f, 0.05f, z}, .yaw = yaw, .velocity = {0.0f, 0.0f, -0.5f}, .yaw_rate = 0.1f, .vocalisation = 0.0f};
+            const LnkCreatureState row{
+                .creature_id = creature_id, .position = {1.0f, 0.05f, z}, .yaw = yaw, .velocity = {0.0f, 0.0f, -0.5f}, .yaw_rate = 0.1f, .vocalisation = 0.0f};
             check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
             if (with_letter) {
-                const std::array<LnkContact, 1> contacts{LnkContact{.position = {0.0f, -0.05f, 0.0f},
-                    .impulse = {0.0f, 0.3f, 0.0f},
-                    .normal = {0.0f, 1.0f, 0.0f},
-                    .depth = 0.004f,
-                    .slip = {0.0f, 0.0f, -0.5f}}};
+                const std::array<LnkContact, 1> contacts{LnkContact{
+                    .position = {0.0f, -0.05f, 0.0f}, .impulse = {0.0f, 0.3f, 0.0f}, .normal = {0.0f, 1.0f, 0.0f}, .depth = 0.004f, .slip = {0.0f, 0.0f, -0.5f}}};
                 const LnkProprioception letter{.tick = tick,
                     .creature_id = creature_id,
                     .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u),
@@ -164,8 +164,12 @@ namespace
         //! A letter on its own, for whatever tick it claims - the stray a host must not obey.
         void tellLetter(const std::uint64_t tick, const std::uint32_t creature_id, const bool grounded)
         {
-            const LnkProprioception letter{
-                .tick = tick, .creature_id = creature_id, .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u), .reserved0 = {}, .specific_force = {0.0f, 9.81f, 0.0f}, .contact_count = 0u};
+            const LnkProprioception letter{.tick = tick,
+                .creature_id = creature_id,
+                .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u),
+                .reserved0 = {},
+                .specific_force = {0.0f, 9.81f, 0.0f},
+                .contact_count = 0u};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
@@ -216,7 +220,9 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     RehearsalMasterControl rehearsal{};
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, flatGround()};
 
-    std::thread server{[&rehearsal]() { rehearsal.acceptAndWelcome(100u, 9u); }};
+    std::thread server{[&rehearsal]() {
+        rehearsal.acceptAndWelcome(100u, 9u);
+    }};
     WorldHostLib::Host host{rehearsal.address(), PATIENCE, roster};
     server.join();
 
@@ -390,7 +396,9 @@ TEST_CASE(a_master_control_from_a_different_world_refuses_the_host)
     } other_world{};
 
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, flatGround()};
-    std::thread server{[&other_world]() { other_world.refuseOne(); }};
+    std::thread server{[&other_world]() {
+        other_world.refuseOne();
+    }};
     try {
         const WorldHostLib::Host host{other_world.address(), PATIENCE, roster};
         TEST_CHECK(false);
