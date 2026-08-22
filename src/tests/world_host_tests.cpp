@@ -148,7 +148,7 @@ namespace
                 const std::array<LnkContact, 1> contacts{LnkContact{.position = {0.0f, -0.05f, 0.0f}, .impulse = {0.0f, 0.3f, 0.0f}}};
                 const LnkProprioception letter{.tick = tick,
                     .creature_id = creature_id,
-                    .grounded = grounded ? 1u : 0u,
+                    .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u),
                     .reserved0 = {},
                     .specific_force = {0.0f, 9.81f, 0.0f},
                     .contact_count = grounded ? 1u : 0u};
@@ -161,7 +161,7 @@ namespace
         void tellLetter(const std::uint64_t tick, const std::uint32_t creature_id, const bool grounded)
         {
             const LnkProprioception letter{
-                .tick = tick, .creature_id = creature_id, .grounded = grounded ? 1u : 0u, .reserved0 = {}, .specific_force = {0.0f, 9.81f, 0.0f}, .contact_count = 0u};
+                .tick = tick, .creature_id = creature_id, .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u), .reserved0 = {}, .specific_force = {0.0f, 9.81f, 0.0f}, .contact_count = 0u};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
