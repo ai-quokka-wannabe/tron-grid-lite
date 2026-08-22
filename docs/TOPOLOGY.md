@@ -432,10 +432,41 @@ one a mechanism behind a sentence this document already had, or a behaviour it h
   Ultima Online caught its duplication bugs by seeding items with traceable hashes — costing
   nothing now, and becoming the only way to *notice* the duplication class if persistence ever
   lands.
+- **Contacts are exact, because the world is planar.** The owner's observation (2026-08-22):
+  the Grid and every creature are made of triangles and squares only — no curved surface exists
+  anywhere — so every contact is a closed-form point-, segment- or polygon-against-plane test,
+  and the contact *time* against a plane is a root of the same polynomial the ballistic closed
+  form already solves. Master Control therefore owes, once `REZ` carries real geometry:
+  **continuous (time-of-impact) contacts of the creature's mesh against the world's welded
+  planar faces**, and **Separating-Axis contacts between creatures using the convex hull of
+  each `REZ` mesh**, built once at rez in a fixed vertex order. Two lessons stand behind the
+  wording. *Welded*, because a square split into two coplanar triangles grows an interior edge,
+  and a body sliding across that edge meets a spurious edge normal — the ghost-collision class
+  PhysX and Unity users know as internal-edge catching. The owner's ruling closes it at the
+  root: **a square is its own primitive, not two triangles** — the collision representation
+  keeps quads as quads, so no interior diagonal exists to catch on, and welding is only ever
+  owed to a genuine triangle soup; contact normals come from faces, never from an edge between
+  coplanar neighbours, and the collision geometry derives from the same source as the
+  reflectors and the mesh, with adjacency. *Fixed order*, because the hull and the axis
+  enumeration are part of the replayed state and must not depend on how a container happened
+  to iterate. **A body slides along any face, with friction, and the slide makes a sound**:
+  the contact persists across ticks as a sliding contact, the traction the physics already
+  applies to the floor applies to every face, and a sliding contact authors an acoustic event —
+  a *scratch*, its strength from slip speed against normal load, its position the contact
+  point — delivered through the same acoustics the voice already uses, so creatures hear each
+  other scrape along a wall and spectators hear it Doppler-shifted. What is reported is also
+  what is sensed: a contact is a **point on the body, a world normal, a depth and a slip
+  velocity**, which is the creature host's touch sense and extends the `TICK_STATE` debt
+  already named for it (specific force plus contacts) rather than adding a message; the scratch
+  is an `EVENT` kind beside the vocalisation. The response stays kinematic — minimal-translation
+  separation and velocity projection, as today; a constraint solver is a named non-goal below.
 - **Three named non-goals**, so nobody helpfully builds them: no node handoffs (single-process
   authority is the design, and the handoff seam is where UO's dupes lived), no time dilation
   (EVE's TiDi bends dt, and dt is sacred here), no database-backed hot persistence (the
-  snapshot-plus-action-log is stronger until the first world anyone regrets losing).
+  snapshot-plus-action-log is stronger until the first world anyone regrets losing), and **no
+  rigid-body constraint solver** (stacking, resting-contact stability, friction cones,
+  restitution — the decades engines spend; the accuracy this world wants lives in detection and
+  the reported contact, not in a solver; see the deferred table for its trigger).
 
 ## Trust, in writing
 
@@ -533,6 +564,7 @@ The claims survive networking and come out sharper, provided they are stated pre
 | Persistence (the world survives the server) | The first world anyone regrets losing; until then, snapshot + action log is stronger than a database |
 | Spectator delay | Participants able to consume the spectator feed as a side channel |
 | Audio beyond parametric pings and Doppler (HRTF, spectator-side occlusion) | The spectator's ears caring, which is a taste decision, not a measurement. Doppler itself left this row on 2026-08-21 — the owner ruled it realism owed now |
+| Rigid-body dynamics (constraint solver, stacking, friction cones, restitution) | A creature whose body is articulated or whose task needs objects to rest on one another; until then, exact detection with kinematic response, and a mesh proxy that is the convex hull of the `REZ` mesh |
 | WebAssembly brain tier, out-of-process DLL runner | The first community brain from outside the circle of trust |
 
 ## The four repositories
