@@ -15,6 +15,7 @@
 #include "senses.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -76,6 +77,7 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
             // TglActions::vocalisation_strength — and it sees through its own hull, which is what
             // the caller instance is for.
             m_calls.push_back(Call{.position = creature.pose.position,
+                .velocity = creature.velocity,
                 .strength = creature.vocalisation,
                 .caller_instance = (m_stage != nullptr) ? m_stage->instanceOf(creature.body.creature_id) : BvhLib::NO_INSTANCE});
         }
@@ -85,6 +87,7 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
     for (const Stage::GuestTelling& guest : m_guests) {
         if (guest.vocalisation > 0.0f) {
             m_calls.push_back(Call{.position = guest.pose.position,
+                .velocity = guest.velocity,
                 .strength = guest.vocalisation,
                 .caller_instance = (m_stage != nullptr) ? m_stage->guestInstanceOf(guest.creature_id) : BvhLib::NO_INSTANCE});
         }
@@ -109,6 +112,8 @@ GridSensesSource::CreatureEars& GridSensesSource::earStateFor(uint64_t creature_
     state.keys.resize(ear_count);
     state.responses.resize(ear_count);
     state.delivered.resize(ear_count);
+    state.arrivals.resize(ear_count);
+    state.arrival_counts.assign(ear_count, 0u);
     m_ear_states.push_back(std::move(state));
     return m_ear_states.back();
 }
@@ -207,6 +212,7 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
             */
             AlignedResponse& scratch{state.delivered[index]};
             scratch.energy = stored.energy;
+            state.arrival_counts[index] = 0u;
 
             Acoustics::CallConfig call_config{};
             /*
@@ -220,18 +226,61 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
             call_config.source_radius_metres = RosterLib::BODY_HALF_HEIGHT;
             call_config.listener_instance = own_instance;
 
+            call_config.listener_velocity = creature.velocity;
             for (const Call& call : m_calls) {
                 call_config.caller_instance = call.caller_instance;
+                call_config.source_velocity = call.velocity;
                 const Acoustics::ImpulseResponse arrivals{Acoustics::deliverCall(m_scene, m_reflectors, call.position, call.strength, world, call_config)};
                 for (size_t bin{0u}; bin < arrivals.bins.size(); ++bin) {
                     scratch.energy[bin] += arrivals.bins[bin];
+                }
+                // The discrete arrivals, in delivery order, the loudest kept when the ear is full.
+                for (uint32_t arrived{0u}; arrived < arrivals.arrival_count; ++arrived) {
+                    const Acoustics::Arrival& record{arrivals.arrivals[arrived]};
+                    TglArrival arrival{};
+                    arrival.onset_seconds = record.onset_seconds;
+                    arrival.radial_velocity = record.radial_velocity;
+                    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+                        arrival.energy[band] = record.energy[band];
+                    }
+                    uint32_t& count{state.arrival_counts[index]};
+                    if (count < TGL_EAR_ARRIVALS_MAX) {
+                        state.arrivals[index][count] = arrival;
+                        ++count;
+                    } else {
+                        uint32_t faintest{0u};
+                        float faintest_total{std::numeric_limits<float>::max()};
+                        for (uint32_t at{0u}; at < TGL_EAR_ARRIVALS_MAX; ++at) {
+                            float total{0.0f};
+                            for (const float energy : state.arrivals[index][at].energy) {
+                                total += energy;
+                            }
+                            if (total < faintest_total) {
+                                faintest_total = total;
+                                faintest = at;
+                            }
+                        }
+                        float total{0.0f};
+                        for (const float energy : arrival.energy) {
+                            total += energy;
+                        }
+                        if (total > faintest_total) {
+                            state.arrivals[index][faintest] = arrival;
+                        }
+                    }
                 }
             }
 
             delivery = scratch.energy.data();
         }
 
-        m_ear_views[index] = TglEarView{.energy = delivery, .band_count = ear.band_count, .bin_count = ear.bin_count};
+        const uint32_t arrival_count{m_calls.empty() ? 0u : state.arrival_counts[index]};
+        m_ear_views[index] = TglEarView{.energy = delivery,
+            .arrivals = (arrival_count > 0u) ? state.arrivals[index].data() : nullptr,
+            .arrival_count = arrival_count,
+            .band_count = ear.band_count,
+            .bin_count = ear.bin_count,
+            .reserved0 = 0u};
     }
 
     senses.ears = m_ear_views.data();

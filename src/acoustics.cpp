@@ -15,6 +15,7 @@
 #include "acoustics.hpp"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <numeric>
 
@@ -59,6 +60,52 @@ namespace Acoustics
 
                     response.at(band, bin) += scale * spectrum[band] * spreading * air;
                 }
+            }
+        }
+
+        /*!
+            Deposits an arrival into the histogram *and* records it as a discrete arrival - what a
+            call does, and the hum never does. The record keeps the deposited band energies, the
+            exact onset and the radial velocity the caller hands down; a sixteenth arrival displaces
+            the faintest only when it is louder, so the loudest sixteen are what survive.
+        */
+        void depositCallArrival(ImpulseResponse& response, float path, float scale, const CallConfig& config, float radial_velocity)
+        {
+            ImpulseResponse only_this{};
+            depositArrival(only_this, path, scale, config.spectrum, config.air_absorption_db_per_km);
+            Arrival arrival{};
+            arrival.onset_seconds = path / SPEED_OF_SOUND;
+            arrival.radial_velocity = radial_velocity;
+            float total{0.0f};
+            for (uint32_t band{0u}; band < BAND_COUNT; ++band) {
+                for (uint32_t bin{0u}; bin < BIN_COUNT; ++bin) {
+                    arrival.energy[band] += only_this.at(band, bin);
+                    response.at(band, bin) += only_this.at(band, bin);
+                }
+                total += arrival.energy[band];
+            }
+            if (total <= 0.0f) {
+                return; // Past the last bin, or silent: in neither histogram nor record.
+            }
+            if (response.arrival_count < ARRIVALS_MAX) {
+                response.arrivals[response.arrival_count] = arrival;
+                ++response.arrival_count;
+                return;
+            }
+            uint32_t faintest{0u};
+            float faintest_total{std::numeric_limits<float>::max()};
+            for (uint32_t index{0u}; index < ARRIVALS_MAX; ++index) {
+                float candidate{0.0f};
+                for (const float energy : response.arrivals[index].energy) {
+                    candidate += energy;
+                }
+                if (candidate < faintest_total) {
+                    faintest_total = candidate;
+                    faintest = index;
+                }
+            }
+            if (total > faintest_total) {
+                response.arrivals[faintest] = arrival;
             }
         }
 
@@ -169,7 +216,7 @@ namespace Acoustics
             from a point nudged off the surface towards the listener's side.
         */
         void deliverImage(ImpulseResponse& response, const BvhLib::Scene& scene, const MathLib::Vec3& source, float strength, const MathLib::Vec3& ear,
-            const CallConfig& config, const MathLib::Vec3& plane_normal, const MirrorPath& mirror)
+            const CallConfig& config, const MathLib::Vec3& plane_normal, const MirrorPath& mirror, float radial_velocity)
         {
             if (!mirror.valid || (mirror.path > config.range_metres)) {
                 return;
@@ -185,7 +232,7 @@ namespace Acoustics
                 return;
             }
 
-            depositArrival(response, mirror.path, strength, config.spectrum, config.air_absorption_db_per_km);
+            depositCallArrival(response, mirror.path, strength, config, radial_velocity);
         }
 
     } // namespace
@@ -354,6 +401,12 @@ namespace Acoustics
             return response;
         }
 
+        // The radial velocity: how fast the path from ear to source lengthens - positive
+        // receding, negative approaching - from the settled velocities the gather already reads.
+        const MathLib::Vec3 ear_to_source{source - ear};
+        const float separation{ear_to_source.length()};
+        const float radial_velocity{(separation > 1e-6f) ? (config.source_velocity - config.listener_velocity).dot(ear_to_source * (1.0f / separation)) : 0.0f};
+
         /*
             The direct path, graded rather than gated. The probe asks how much of a small sphere
             around the source the ear can see, and the fraction scales the arrival — so a thin post
@@ -380,14 +433,14 @@ namespace Acoustics
 
             if (clear_count > 0u) {
                 const float fraction{static_cast<float>(clear_count) / static_cast<float>(sample_count)};
-                depositArrival(response, direct_distance, strength * fraction, config.spectrum, config.air_absorption_db_per_km);
+                depositCallArrival(response, direct_distance, strength * fraction, config, radial_velocity);
             }
         }
 
         // The terrace levels: horizontal mirror planes at the floor's own heights.
         const MathLib::Vec3 up{0.0f, 1.0f, 0.0f};
         for (const float height : reflectors.level_heights) {
-            deliverImage(response, scene, source, strength, ear, config, up, mirrorInPlane(source, ear, up, height));
+            deliverImage(response, scene, source, strength, ear, config, up, mirrorInPlane(source, ear, up, height), radial_velocity);
         }
 
         // The box faces: finite rectangles, so the reflection point must land inside the face
@@ -413,7 +466,7 @@ namespace Acoustics
                 continue;
             }
 
-            deliverImage(response, scene, source, strength, ear, config, normal, mirror);
+            deliverImage(response, scene, source, strength, ear, config, normal, mirror, radial_velocity);
         }
 
         return response;

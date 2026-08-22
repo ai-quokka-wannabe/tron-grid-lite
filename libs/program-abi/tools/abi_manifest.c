@@ -111,8 +111,16 @@
 
 #define TGL_EAR_VIEW_MEMBERS(X) \
     X(TglEarView, energy) \
+    X(TglEarView, arrivals) \
+    X(TglEarView, arrival_count) \
     X(TglEarView, band_count) \
-    X(TglEarView, bin_count)
+    X(TglEarView, bin_count) \
+    X(TglEarView, reserved0)
+
+#define TGL_ARRIVAL_MEMBERS(X) \
+    X(TglArrival, onset_seconds) \
+    X(TglArrival, radial_velocity) \
+    X(TglArrival, energy)
 
 #define TGL_CONTACT_MEMBERS(X) \
     X(TglContact, position) \
@@ -162,6 +170,7 @@
     S(TglEyeView, TGL_EYE_VIEW_MEMBERS) \
     S(TglEarView, TGL_EAR_VIEW_MEMBERS) \
     S(TglContact, TGL_CONTACT_MEMBERS) \
+    S(TglArrival, TGL_ARRIVAL_MEMBERS) \
     S(TglSenses, TGL_SENSES_MEMBERS) \
     S(TglActions, TGL_ACTIONS_MEMBERS) \
     S(TglProgramVTable, TGL_PROGRAM_VTABLE_MEMBERS)

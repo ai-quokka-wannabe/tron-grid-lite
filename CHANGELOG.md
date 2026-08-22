@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Direction on the ear: every call arrival carries its exact onset and its radial velocity
+  (ABI v6).** Etape 17, the owner's ruling that a creature must be able to sense where a voice
+  comes from and that Doppler is realism owed now. `Acoustics::Arrival` records each call
+  arrival a delivery makes - the direct path and every validated image, at most sixteen, the
+  loudest displacing the faintest - with its onset in seconds (the path over the speed of
+  sound, the sub-bin interaural structure a millisecond histogram destroys: two ears 10 cm
+  apart hear a caller due east 0.29 ms apart), its radial velocity (positive receding, negative
+  approaching, from the settled velocities of caller and listener that now ride on every call
+  and every guest telling; images take the direct path's value, an approximation written where
+  it is made) and the energy it deposited per band. The ABI carries it as `TglArrival` and
+  `TglEarView` grows `arrivals`, `arrival_count` and an explicit `reserved0`; the fingerprint
+  moved with the version. The hum records nothing, and the gather's test holds it to that.
+  Three breakage rounds: an onset rounded to its bin, the sign of the radial velocity flipped,
+  the hum recording arrivals - each caught.
 - **The spectator's ears: pings and scratches, spatialised against the camera, with Doppler.**
   The first sound the Grid makes that a human hears. `AudioLib::Mixer` (deviceless, in `grid`)
   turns every `EVENT` into one short parametric sound - a vocalisation is a decaying tone at
@@ -586,7 +600,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same day: Doppler is realism owed now** — the spectator pitch-shifts events from replicated
   velocities from the start, off the deferred list — **and creatures must be able to sense a
   voice's direction**: the interaural extension ACOUSTICS.md anticipated is committed (sub-bin
-  onsets per ear plus radial velocity per arrival), staged as Etape 17. Housekeeping the audit
+  onsets per ear plus radial velocity per arrival), staged as Etape 17 (since landed). Housekeeping the audit
   caught in passing: DEV_ENV_SETUP's walkthroughs gained the submodule init a fresh clone
   refuses without and now demonstrate `--debug`; the pre-topology "debug window" vocabulary is
   retired across VISION, ARCHITECTURE, PERCEPTION and PROGRAM_INTERFACE; the live view's

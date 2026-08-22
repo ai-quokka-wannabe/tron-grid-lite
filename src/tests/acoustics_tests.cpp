@@ -132,6 +132,14 @@ TEST_CASE(the_gather_is_bit_identical_between_runs)
     for (uint32_t index{0u}; index < first.bins.size(); ++index) {
         TEST_CHECK(first.bins[index] == second.bins[index]);
     }
+
+    // The hum has sound but no onset and no bearing: it fills the histogram and records nothing.
+    float hum_energy{0.0f};
+    for (const float energy : first.bins) {
+        hum_energy += energy;
+    }
+    TEST_CHECK(hum_energy > 0.0f);
+    TEST_CHECK_EQUAL(first.arrival_count, 0u);
 }
 
 TEST_CASE(fibonacci_directions_are_unit_length_and_distinct)

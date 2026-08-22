@@ -85,6 +85,7 @@ public:
     struct GuestTelling {
         uint32_t creature_id{0u};
         RosterLib::Pose pose{};
+        MathLib::Vec3 velocity{};
         float vocalisation{0.0f};
     };
 
