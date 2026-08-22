@@ -28,10 +28,19 @@
 #define TGL_PROGRAM_IMPLEMENTATION
 
 #include <math.h>
+#include <stdlib.h>
 
 #include <tgl/tgl_program_abi.h>
 
 static int g_creature_state = 0;
+
+#if defined(TGL_DRIVER_REFUSES_SECOND_REZ)
+/* How many creatures this Program wears right now. The variant takes the first and refuses the
+   second, and holds the Grid to the header's word in the one place a fixture can: a shutdown
+   with a creature still rezzed is the contract broken, and aborts the process rather than
+   letting the test pass by not looking. */
+static int g_rezzed = 0;
+#endif
 
 #if defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN)
 /* A little pyramid of a body: four vertices, four faces, a near-black mirror hull and one glowing
@@ -87,7 +96,13 @@ static TglProgram* programRez(const TglCreatureDesc* desc, TglRenderModel* model
     (void)desc;
     (void)model;
 
-#if defined(TGL_DRIVER_REFUSES_REZ)
+#if defined(TGL_DRIVER_REFUSES_SECOND_REZ)
+    if (g_rezzed >= 1) {
+        return NULL;
+    }
+    g_rezzed += 1;
+    return (TglProgram*)&g_creature_state;
+#elif defined(TGL_DRIVER_REFUSES_REZ)
     /* A Program that cannot take this body. Nothing is wrong with the library — the ABI says a rez
        may fail, and the Grid has to treat a null handle as a refusal rather than as a creature.
 
@@ -154,10 +169,21 @@ static void programTick(TglProgram* program, const TglSenses* senses, TglActions
 static void programDerez(TglProgram* program) TGL_NOEXCEPT
 {
     (void)program;
+#if defined(TGL_DRIVER_REFUSES_SECOND_REZ)
+    g_rezzed -= 1;
+#endif
 }
 
 static void libraryShutdown(void) TGL_NOEXCEPT
 {
+#if defined(TGL_DRIVER_REFUSES_SECOND_REZ)
+    if (g_rezzed != 0) {
+        /* A Program is entitled to touch its state in program_derez and never after
+           library_shutdown; a Grid that shuts the library with a creature still rezzed has
+           broken that, and this fixture says so the only way a fixture can. */
+        abort();
+    }
+#endif
 }
 
 static const TglProgramVTable g_vtable = {TGL_PROGRAM_VTABLE_HEADER, libraryInit, programRez, programTick, programDerez, libraryShutdown};

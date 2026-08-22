@@ -243,6 +243,10 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     TEST_CHECK_EQUAL(host.toldTick(), 100u);
     // The pose, though, was told: rows land as they arrive.
     TEST_CHECK(near(roster.creatures().front().pose.position.z, 5.0f));
+    // And an intent sent now is tagged for the tick after the rows already here - 102 - not
+    // for 101, which the world has stepped: rows for a tick are proof it is past.
+    host.act();
+    TEST_CHECK_EQUAL(rehearsal.awaitMessage(LNK_MSG_ACTIONS).as.actions.tick, 102u);
 
     // The whole telling: rows, then the letter. Now the minds may tick.
     rehearsal.tellTick(102u, host.wireIdentity(0u), 4.5f, 0.25f, true);

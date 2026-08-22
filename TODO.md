@@ -16,9 +16,9 @@ when satisfied; a finished etape collapses to one line, because what it *decided
 | 5     | Acoustic rays                 | Echoes and occlusion via same BVH  | **Done** |
 | 6     | Programs                      | Creature sensor interface plugs in | **In progress** |
 
-What comes after Phase 6 — Master Control's heartbeat, the wire, the spectator — is blueprinted in
-[docs/TOPOLOGY.md](docs/TOPOLOGY.md) and staged in the `master-control` and `link` repositories'
-own TODO files: the world grows here first, per the extraction order recorded there. The
+What came after Phase 6 — Master Control's heartbeat, the wire, the spectator — is blueprinted in
+[docs/TOPOLOGY.md](docs/TOPOLOGY.md) and built: the world lives in `master-control`, the wire in
+`link`, and this repository hosts creatures and watches. The
 organisation's long-term invitation — OpenWorm and the other AI-animal simulation groups,
 invited to let their creatures live in the Grid once it can host a stranger's — is recorded in
 [docs/TOPOLOGY.md § The long-term invitation](docs/TOPOLOGY.md#the-long-term-invitation).
@@ -62,10 +62,11 @@ are worth knowing before touching the areas they govern:
 - **The Grid is an instance at the identity, not a special case.** The path a creature body will take
   is the path the only body in the world takes today, so it is exercised by every frame rather than by
   a test written for one instance and a comment promising the rest.
-- **With `--window` there are no creatures.** The window is a debug view of the Grid so the User can
-  check things are in their place, not a viewport onto a running simulation. That is what licenses the
-  on-demand gate to skip whole frames while somebody drags a window edge: nothing alive can miss a
-  tick, because the tick and the swapchain never coexist.
+- **With `--debug` there are no creatures.** That mode is a view of the Grid so the User can check
+  things are in their place, not a viewport onto a running simulation, and that is what licenses
+  its on-demand gate to skip whole frames while somebody drags a window edge. `--window` is the
+  live view of Master Control's world, and nothing alive can miss a tick there either: the tick
+  is the server's, and the window only watches.
 - **The reference render digests are the only genuine one-way door here.** Regenerating the two rows
   in `.claude/CLAUDE.md` needs physical access to both GPUs. Never move a digest speculatively, and
   batch anything that must move it into a single commit.
@@ -205,7 +206,9 @@ are decisions waiting on the owner, not conclusions.
    invisible to every check, because a Program cannot tell it has been frozen. The rule keeps its
    text and gains a boundary: only *presentation* may be skipped for a User-side reason. See
    [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) § Nothing Runs Without a Reason.
-2. **Does the world tick share the render thread, or get its own?** Sharing it for v1 keeps the render
+2. ~~Does the world tick share the render thread, or get its own?~~ **Decided by the topology: the
+   world ticks in Master Control, in its own process; the window only watches.** The original
+   reasoning: sharing it for v1 keeps the render
    channel's audit comment true — *if a name is not a member of this struct, exactly one thread
    touches it* — and keeps the mapped instance array from becoming shared mutable state across three
    parties.
@@ -240,8 +243,8 @@ are decisions waiting on the owner, not conclusions.
    a reflection in its own visual field. The mirror self-recognition test materialises out of the
    material model without anyone building it.
 6. ~~How many segments, and does the first worm get its two eyes?~~ **Decided: one rigid segment.**
-   A body that bends needs a solver able to bend it, and no physics exists in this repository at all
-   yet; an articulated multi-body solver with joint limits is a substantially larger first step than a
+   A body that bends needs a solver able to bend it, and the world's physics (in Master Control
+   now) is rigid and kinematic; an articulated multi-body solver with joint limits is a substantially larger first step than a
    rigid body with contacts. So no segment addressing and no joint angles reach ABI v1 — a `segment`
    index would be a number the Grid writes and nothing can act on, which is the same test that removed
    `TglEarDesc::direction`. Both arrive together in v2, and the bump costs nothing while no Program
@@ -260,7 +263,8 @@ are decisions waiting on the owner, not conclusions.
    than redundant, and it spares a Program differencing a noisy position across ticks. Load is a third
    channel and arrives when a body can strain against something. See
    [docs/PERCEPTION.md](docs/PERCEPTION.md) § How an animal knows where its own limbs are.
-9. **Does `desired_vertical_speed` survive into the written header?** On a Grid with no water, nothing
+9. ~~Does `desired_vertical_speed` survive into the written header?~~ **Decided: retired.**
+   `TglActions` has three members, and there is deliberately no vertical intent. On a Grid with no water, nothing
    climbable and nothing to fall off, it clamps to zero for every plausible v1 body, and it is the one
    action field with no proprioceptive counterpart. Retiring it now is the honest reading of *every
    field is populated*; keeping it and marking it reserved avoids a second break later.

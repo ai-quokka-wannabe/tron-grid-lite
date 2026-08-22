@@ -72,6 +72,17 @@ namespace WorldHostLib
         }
     }
 
+    std::unordered_map<std::uint32_t, WorldClientLib::Body> Host::guestBodies() const
+    {
+        std::unordered_map<std::uint32_t, WorldClientLib::Body> placed;
+        for (const auto& [creature_id, body] : m_guest_bodies) {
+            if (m_placed_guests.contains(creature_id)) {
+                placed.emplace(creature_id, body);
+            }
+        }
+        return placed;
+    }
+
     bool Host::isOwn(const std::uint32_t creature_id) const noexcept
     {
         return (creature_id >> 8u) == m_welcome.client_id && (creature_id & 0xFFu) < m_roster.creatures().size();
@@ -87,6 +98,11 @@ namespace WorldHostLib
     void Host::rezAll()
     {
         const std::vector<RosterLib::Creature>& creatures{m_roster.creatures()};
+        if (creatures.size() > 256u) {
+            // The low byte of the wire identity is the roster index; a 257th creature would
+            // wear the first's name.
+            throw std::runtime_error{"a host may wear at most 256 creatures; this roster has " + std::to_string(creatures.size())};
+        }
         for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
             const RosterLib::Creature& creature{creatures[index]};
 
@@ -191,18 +207,21 @@ namespace WorldHostLib
                 const auto previous{m_guest_bodies.find(told.rez.creature_id)};
                 const bool shape_changes{!body.empty() || ((previous != m_guest_bodies.end()) && !previous->second.empty())};
                 m_guest_bodies[told.rez.creature_id] = std::move(body);
-                if (shape_changes) {
+                // A shape stands on the stage only once the world has placed it: a body whose
+                // first row is still to come would otherwise stand at the origin for a tick.
+                if (shape_changes && m_placed_guests.contains(told.rez.creature_id)) {
                     ++m_guest_shapes_generation;
                 }
                 break;
             }
             case LNK_MSG_DEREZ:
                 if (const auto body{m_guest_bodies.find(view.as.derez.creature_id)}; body != m_guest_bodies.end()) {
-                    if (!body->second.empty()) {
+                    if (!body->second.empty() && m_placed_guests.contains(view.as.derez.creature_id)) {
                         ++m_guest_shapes_generation;
                     }
                     m_guest_bodies.erase(body);
                 }
+                m_placed_guests.erase(view.as.derez.creature_id);
                 break;
             case LNK_MSG_BYE:
                 throw std::runtime_error{"Master Control ended the world (BYE)."};
@@ -234,7 +253,9 @@ namespace WorldHostLib
             if (isOwn(state.creature_id)) {
                 for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
                     if (state.creature_id == wireIdentity(index)) {
-                        m_roster.tellPose(index, pose, MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]}, state.yaw_rate);
+                        // The voice too: what the world sounded, clamped by its law, so the
+                        // own ears hear the same call every other ear hears.
+                        m_roster.tellPose(index, pose, MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]}, state.yaw_rate, state.vocalisation);
                     }
                 }
             } else {
@@ -277,6 +298,15 @@ namespace WorldHostLib
         if (std::all_of(m_felt.begin(), m_felt.end(), [](const bool felt) { return felt; })) {
             m_told_tick = m_telling_tick;
             m_guests = m_guests_being_told;
+            // A guest the world has now placed for the first time may take the stage.
+            for (const Stage::GuestTelling& guest : m_guests) {
+                if (m_placed_guests.insert(guest.creature_id).second) {
+                    const auto body{m_guest_bodies.find(guest.creature_id)};
+                    if ((body != m_guest_bodies.end()) && !body->second.empty()) {
+                        ++m_guest_shapes_generation;
+                    }
+                }
+            }
             m_ready = true;
         }
     }
@@ -292,7 +322,9 @@ namespace WorldHostLib
         for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
             const TglActions& staged{creatures[index].staged};
             const TglActions& previous{m_previous[index]};
-            const LnkActions actions{.tick = m_told_tick + 1u,
+            // The tick the world will step next: after the newest telling, whole or not - rows
+            // for N+1 already here mean N+1 is stepped, and an intent for it would be stale.
+            const LnkActions actions{.tick = m_telling_tick + 1u,
                 .creature_id = wireIdentity(index),
                 .desired_forward_speed = staged.desired_forward_speed,
                 .desired_turn_rate = staged.desired_turn_rate,

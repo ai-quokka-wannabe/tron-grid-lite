@@ -803,9 +803,9 @@ nowhere to put the second ear. The item is gone and the shape it named never exi
 carries instead is one `TglEarView` per ear, each with its own energy array — see
 [The ABI shape](#the-abi-shape).
 
-The wider point survives the item that prompted it: `tgl_program_abi.h` still does not exist as a
-file, and the ABI lives only as C snippets inside
-[PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md). Every shape in it is still free.
+The wider point survives the item that prompted it: `tgl_program_abi.h` exists now, at ABI v6,
+every shape in it pinned by static asserts and a fingerprint - and the shape it gives the ear is
+the one this section argued for.
 
 ### Solve rate: two rates, for two different things
 
@@ -872,7 +872,7 @@ Echolocation needs no new sense once hearing and vocalisation both exist, which 
 from the creature's own position, in the same units an ear reports.
 
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
-time bin per ear, and stops.** Anything that names a source, separates streams, reports "a wall is
+time bin per ear, plus the arrivals' onsets, radial velocities and energies, and stops.** Anything that names a source, separates streams, reports "a wall is
 three metres to your left", or performs auditory scene analysis of any kind belongs in a Program
 repository.
 

@@ -57,8 +57,9 @@ tron-grid-lite/
 - **Platforms:** Windows (Win32) and Linux (X11) only. No macOS. No Wayland. No mobile.
 - **Spelling:** British English everywhere (colour, optimise, metres, synchronise, etc.). The LICENCE file content is untouchable (legal document).
 - **Vocabulary:** Tron terms, one word per concept — the Grid, Program, creature, User, tick, senses, actions.
-  Glossary in [README.md](../README.md#a-note-on-the-vocabulary); retired: brain, agent, entity, mind, spectator,
-  sensor data, motor commands. Tron words name events on the Grid, plain words name events in the OS — which is why
+  Glossary in [README.md](../README.md#a-note-on-the-vocabulary); retired: brain, agent, entity, mind,
+  sensor data, motor commands. (`spectator` came back with the wire: it is the name of the
+  `--window` role, and of the ears that listen beside it.) Tron words name events on the Grid, plain words name events in the OS — which is why
   `library_init` and `library_shutdown` keep plain names. **Program** and **User** are capitalised only as Tron terms:
   GPL boilerplate ("this program is free software") and British "programme" are both left exactly as they are.
 - **Formatting:** Run `.clang-format`. Allman braces for functions/namespaces, 4-space indent, 170 column limit.
@@ -452,7 +453,9 @@ against the other side's literal — and each of those can name the mistake it p
 
 - Alerts on `argv` reaching a path or a subprocess are **dismissed as false positives** in this
   repository, and correctly so while the only person supplying the argument is the person running
-  the process. **That reasoning expires in Phase 6** — see Etape 12 in TODO.md.
+  the process. **That reasoning expired with Phase 6** — Etape 12 in TODO.md confined the
+  Program library paths, and the policy since is in the org's memory: operator paths are judged
+  (no `..`) and the alerts dismissed with the reason written down.
 - **A dismissal is bound to the code it was granted against.** Editing a flagged line re-raises the
   alert as new. Expect that, and do not read it as a regression.
 - **Expect a fresh batch whenever a new language first lands on main.** Default setup adds analysers

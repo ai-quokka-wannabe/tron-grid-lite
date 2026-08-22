@@ -24,6 +24,7 @@
 #include <cstdint>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 /*!
@@ -92,11 +93,10 @@ namespace WorldHostLib
         //! the client id Master Control hands out is.
         [[nodiscard]] uint32_t wireIdentity(uint32_t index) const noexcept;
 
-        //! Every other creature's body REZ has told and DEREZ has not taken - never this host's own.
-        [[nodiscard]] const std::unordered_map<std::uint32_t, WorldClientLib::Body>& guestBodies() const noexcept
-        {
-            return m_guest_bodies;
-        }
+        //! Every other creature's body REZ has told, DEREZ has not taken, and the world has placed
+        //! at least once - never this host's own. A body still awaiting its first row is not yet
+        //! on the stage, because nobody knows where it stands.
+        [[nodiscard]] std::unordered_map<std::uint32_t, WorldClientLib::Body> guestBodies() const;
 
         //! Bumped when the set of guest shapes changes, so the stage and the tracers know to rebuild.
         [[nodiscard]] std::uint64_t guestShapesGeneration() const noexcept
@@ -133,6 +133,8 @@ namespace WorldHostLib
         [[nodiscard]] bool isOwn(std::uint32_t creature_id) const noexcept;
         std::unordered_map<std::uint32_t, WorldClientLib::Body> m_guest_bodies;
         std::uint64_t m_guest_shapes_generation{0u};
+        //! The guests a whole telling has placed at least once: the ones whose shapes may stand.
+        std::unordered_set<std::uint32_t> m_placed_guests;
         std::vector<Stage::GuestTelling> m_guests;
         std::vector<Stage::GuestTelling> m_guests_being_told;
     };

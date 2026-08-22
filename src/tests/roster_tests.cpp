@@ -153,6 +153,23 @@ TEST_CASE(a_program_that_declines_to_rez_stops_the_roster)
     TEST_CHECK(message.find("refused to rez") != std::string::npos);
 }
 
+TEST_CASE(a_refusal_partway_through_a_roster_derezzes_what_was_rezzed_before_the_library_shuts)
+{
+    // The fixture takes the first creature and refuses the second - and aborts the process if
+    // its library is shut with a creature still rezzed, which is the header's contract: a
+    // Program touches its state in program_derez, never after library_shutdown. A constructor
+    // that threw has no destructor, so it must unwind its own rezzes before the refusal leaves.
+    std::string message;
+    try {
+        RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_refuses_second_rez", 2u, flatGround()};
+        roster.tick(nullSenses());
+    } catch (const std::runtime_error& error) {
+        message = error.what();
+    }
+
+    TEST_CHECK(message.find("refused to rez creature 1") != std::string::npos);
+}
+
 TEST_CASE(every_creature_in_a_roster_gets_its_own_turn_and_its_own_seed)
 {
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 3u, flatGround()};
@@ -234,18 +251,23 @@ TEST_CASE(a_program_that_offers_no_model_stays_bodiless)
 TEST_CASE(a_call_sounds_on_the_tick_after_it_is_staged)
 {
     /*
-        The voice is an actuator like the wheels: what a Program returns is staged, and physics
-        acts on it next tick for every creature alike. The fixture calls from its very first tick,
-        so the first tick's voice is the zeroed default and the second tick's is the call — the
-        staging delay, observed in the one actuator with no traction condition.
+        The voice is an actuator like the wheels: what a Program returns is staged, and the
+        world applies it next tick, clamped by its law. The call every ear hears - the own ears
+        included - is the one the world's rows carry back, never the raw intent: a Program
+        asking for five with a bound of one must not hear itself five times louder than the
+        world sounded it. The fixture calls from its very first tick: the intent is staged at
+        once, and the voice is whatever the world last said.
     */
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_calling", 1u, flatGround()};
 
     roster.tick(nullSenses());
+    TEST_CHECK_EQUAL(roster.creatures().front().staged.vocalisation_strength, 0.75f);
     TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.0f);
 
     roster.tick(nullSenses());
-    TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.75f);
+    TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.0f);
+    roster.tellPose(0u, roster.creatures().front().pose, {}, 0.0f, 0.5f);
+    TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.5f);
 }
 int main()
 {

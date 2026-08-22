@@ -274,6 +274,7 @@ namespace RosterLib
         }
 
         m_creatures.reserve(creature_count);
+        try {
         for (uint32_t index{0u}; index < creature_count; ++index) {
             const TglCreatureDesc desc{firstBody(index)};
 
@@ -313,6 +314,18 @@ namespace RosterLib
 
             m_creatures.push_back(creature);
         }
+        } catch (...) {
+        // A destructor never runs for a constructor that threw, and the library's own
+        // destructor would shut the Program with creatures still rezzed - which the header
+        // forbids: a Program touches its state in program_derez, never after library_shutdown.
+        // Every creature this constructor rezzed is derezzed here, in reverse, before the
+        // refusal leaves.
+        for (auto creature{m_creatures.rbegin()}; creature != m_creatures.rend(); ++creature) {
+            m_library.vtable().program_derez(creature->program);
+        }
+        m_creatures.clear();
+        throw;
+        }
     }
 
     Roster::~Roster()
@@ -347,9 +360,6 @@ namespace RosterLib
             tick; over the wire it is the server's physics that applies it, from the very same
             staged value this host sends.
         */
-        for (Creature& creature : m_creatures) {
-            creature.vocalisation = creature.staged.vocalisation_strength;
-        }
 
         // Physics has settled, so the roster is now one consistent tick: whoever is calling is
         // calling for everyone. The source reads that context here, once, rather than
@@ -391,12 +401,13 @@ namespace RosterLib
         ++m_tick;
     }
 
-    void Roster::tellPose(const uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, const float yaw_rate)
+    void Roster::tellPose(const uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, const float yaw_rate, const float vocalisation)
     {
         Creature& creature{m_creatures.at(index)};
         creature.pose = pose;
         creature.velocity = velocity;
         creature.turn_rate = yaw_rate;
+        creature.vocalisation = vocalisation;
         const MathLib::Vec3 forward{forwardFor(pose.yaw)};
         creature.forward_speed = (velocity.x * forward.x) + (velocity.z * forward.z);
     }
