@@ -27,7 +27,28 @@
 namespace
 {
 
-    [[nodiscard]] std::string statusName(const LnkStatus status)
+    //! The two poses' straight blend, except yaw, which takes the shortest arc across ±pi.
+    [[nodiscard]] WorldClientLib::InterpolatedCreature blend(const WorldClientLib::CreatureTrack& track, const float alpha)
+    {
+        constexpr float TWO_PI{6.2831853071795864769f};
+
+        WorldClientLib::InterpolatedCreature result{};
+        result.creature_id = track.newest.creature_id;
+        for (std::size_t axis = 0u; axis < 3u; ++axis) {
+            result.position[axis] = track.previous.position[axis] + (track.newest.position[axis] - track.previous.position[axis]) * alpha;
+        }
+        const float turn{std::remainder(track.newest.yaw - track.previous.yaw, TWO_PI)};
+        result.yaw = track.previous.yaw + turn * alpha;
+        result.vocalisation = track.previous.vocalisation + (track.newest.vocalisation - track.previous.vocalisation) * alpha;
+        return result;
+    }
+
+}
+
+namespace WorldClientLib
+{
+
+    std::string statusName(const LnkStatus status)
     {
         switch (status) {
         case LNK_REFUSED:
@@ -50,27 +71,6 @@ namespace
             return "status " + std::to_string(status);
         }
     }
-
-    //! The two poses' straight blend, except yaw, which takes the shortest arc across ±pi.
-    [[nodiscard]] WorldClientLib::InterpolatedCreature blend(const WorldClientLib::CreatureTrack& track, const float alpha)
-    {
-        constexpr float TWO_PI{6.2831853071795864769f};
-
-        WorldClientLib::InterpolatedCreature result{};
-        result.creature_id = track.newest.creature_id;
-        for (std::size_t axis = 0u; axis < 3u; ++axis) {
-            result.position[axis] = track.previous.position[axis] + (track.newest.position[axis] - track.previous.position[axis]) * alpha;
-        }
-        const float turn{std::remainder(track.newest.yaw - track.previous.yaw, TWO_PI)};
-        result.yaw = track.previous.yaw + turn * alpha;
-        result.vocalisation = track.previous.vocalisation + (track.newest.vocalisation - track.previous.vocalisation) * alpha;
-        return result;
-    }
-
-}
-
-namespace WorldClientLib
-{
 
     LnkWorldDefinition worldDefinition() noexcept
     {

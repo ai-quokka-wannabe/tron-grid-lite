@@ -13,6 +13,7 @@ add_library(grid STATIC
     stage.cpp
     senses.cpp
     world_client.cpp
+    world_host.cpp
     world_stage.cpp
     link_library.cpp
 )

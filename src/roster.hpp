@@ -275,6 +275,17 @@ namespace RosterLib
         */
         void tick(SensesSource& senses_source);
 
+        /*!
+            The world's telling for one creature: where it is and how it moves, as Master
+            Control's physics settled it. The actuators' proprioception follows from it - the
+            forward speed is the velocity along the body's facing, the turn rate is the yaw
+            rate - because that is what the body actually did, which is what a Program reads back.
+        */
+        void tellPose(uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, float yaw_rate);
+
+        //! The owner's letter for one creature: what the body felt this tick, in body frame.
+        void tellFeel(uint32_t index, bool grounded, const MathLib::Vec3& specific_force, std::vector<TglContact> contacts);
+
         [[nodiscard]] const std::vector<Creature>& creatures() const noexcept;
 
         //! Ticks elapsed since the run began. Shared by every creature.

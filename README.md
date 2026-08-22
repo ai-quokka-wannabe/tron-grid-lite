@@ -139,9 +139,12 @@ neon reads as neon — even where no world is running.
 is what compatibility means here; `--verbose` makes the run talkative.
 
 A Program that wants to show its own internals opens its own window. The Grid knows nothing about how
-a Program works inside and provides it no display. Hosting a creature in the world arrives with the
-wire host, its own etape: since the physics followed its owner to Master Control, there is no local
-world left to tick, and `--program` today answers the loading question alone.
+a Program works inside and provides it no display. `[host:port] --program <name>` **hosts** the
+Program's creature in Master Control's world: the body is rezzed over the wire with the render model
+the Program offered, the senses are answered from the world's telling and the owner's letter (its
+feel: specific force, footing, contacts), and every intent goes back for the world's physics to
+judge. The host has no clock of its own - the world is the clock - and `--ticks N` bounds a run to
+N world ticks before leaving politely. Watch it from a second instance with `--window`.
 
 **A Program is named, never pathed.** Programs live in `programs/` beside the executable — as many
 as you like — and a name selects one. `--list-programs` reports what is there and which of it the
@@ -160,7 +163,7 @@ loading it tells them apart — which is why the listing loads each one rather t
 Nothing in the folder is hidden: a library the Grid could never accept is listed with the reason
 rather than left out.
 
-`--program <name>` asks the same question about one of them, and neither needs a device.
+`--list-programs` needs no device; hosting does, for the eyes.
 
 The name may contain letters, digits, underscore and hyphen only. That alphabet has no dot and no
 separator in it, so a name cannot reach out of that directory — which matters because the roster
@@ -183,7 +186,7 @@ All of them also run over SSH or on a machine with no monitor attached.
 | `--verify-scene` | Do they still agree with the Grid placed at an angle, where transform arithmetic can actually be wrong? |
 | `--verify-senses` | Does a creature's eye agree with the host's first hit? At one bounce the walk collapses, so the agreement is exact. |
 | `--benchmark` | What does each GPU pass cost? |
-| `--program <name>` | Is that library something the Grid could run? Needs no device at all. |
+| `[host:port] --program <name> [--ticks N]` | Host that Program's creature in the world at host:port (default localhost at Tron's port). |
 | `--list-programs` | Which Programs are installed, and which of them would load? Also needs no device. |
 
 ```text

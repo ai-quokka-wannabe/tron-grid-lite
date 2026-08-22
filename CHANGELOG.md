@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The creature host: `--program` embodies the Program's creature in Master Control's world.**
+  The topology's third box. `WorldHostLib::Host` dials the world as a creature host with the
+  world fingerprint, gives each creature a wire identity (the client id's, so two hosts never
+  collide), rezzes its bounds and the render model the Grid accepted at rez, and then lives on
+  the world's telling: `TICK_STATE` rows land as poses (the actuators' proprioception derived
+  from them), the owner's letter `PROPRIOCEPTION` lands as the body's feel - specific force,
+  footing, contacts, body frame on the wire and body frame in the ABI, one shape copied - and
+  only when a tick is whole (every own body's letter after its rows) do the minds tick, against
+  senses answered by the same `radiance` the window renders with. Every intent goes back as
+  `ACTIONS` tagged for the next tick with the previous one piggybacked; a stale telling is never
+  rewound, a letter for another tick is never applied. The host has no clock of its own;
+  `--ticks N` bounds a run, and leaving is a `BYE` the world turns into `DEREZ`. The loading
+  probe `--program` used to be lives on in `--list-programs`. Tested against the loaded Link
+  playing Master Control (REZ out, telling and letter in, ACTIONS back, the stray letter refused,
+  the other world refused), four breakage rounds discriminated - two of which first caught the
+  tests themselves - and proven live: the modelled driver embodied for 96 world ticks beside a
+  `--window` spectator that watched it arrive and leave.
 - **The live view draws the creatures: neon darts on the Grid, moving as the world tells them.**
   The window now renders what TICK_STATE says. A new `WorldStageLib::WorldStage` assembles the
   live view's scene — the Grid plus one shared placeholder body, a low neon dart sized by the

@@ -391,6 +391,24 @@ namespace RosterLib
         ++m_tick;
     }
 
+    void Roster::tellPose(const uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, const float yaw_rate)
+    {
+        Creature& creature{m_creatures.at(index)};
+        creature.pose = pose;
+        creature.velocity = velocity;
+        creature.turn_rate = yaw_rate;
+        const MathLib::Vec3 forward{forwardFor(pose.yaw)};
+        creature.forward_speed = (velocity.x * forward.x) + (velocity.z * forward.z);
+    }
+
+    void Roster::tellFeel(const uint32_t index, const bool grounded, const MathLib::Vec3& specific_force, std::vector<TglContact> contacts)
+    {
+        Creature& creature{m_creatures.at(index)};
+        creature.grounded = grounded;
+        creature.specific_force = specific_force;
+        creature.contacts = std::move(contacts);
+    }
+
     const std::vector<Creature>& Roster::creatures() const noexcept
     {
         return m_creatures;
