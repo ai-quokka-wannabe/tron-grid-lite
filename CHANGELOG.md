@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A hosted creature meets the other bodies in the world.** The host keeps every other
+  creature's body REZ relayed (never its own, which comes back as the acknowledgement) and, per
+  whole telling, where the others stand and whether they call. `Stage::setGuests` appends one
+  geometry per shaped guest after the hosted bodies, in creature order; `placeGuests` moves them
+  each tick; `GridSensesSource::tellGuests` makes the senses source count their motion as motion
+  the caches must respect, place them before any sense is filled, and hear their calls from
+  where the world says they stand, through their own hulls. When the guests' shapes change the
+  host rebuilds its device world and the tracers that hold it, as the live view does. A guest
+  whose REZ carried no rows stands nowhere. Tested deviceless - a guest's body shades the hum, a
+  moving guest stales the cache, a guest's call arrives in the bin its distance dictates - with
+  three breakage rounds; proven live with two hosts, each rebuilding its world as the other's
+  body arrived and left.
 - **The live view draws real bodies: a creature wears the shape its REZ carried.** The
   spectator keeps every body REZ told (and DEREZ took) with a generation counter; when the set
   of shapes changes, `WorldStage::setBodies` rebuilds its scene - the Grid, the placeholder,

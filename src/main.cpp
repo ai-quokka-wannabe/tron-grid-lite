@@ -910,7 +910,6 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     // placement ever moves again.
     Stage stage{bvh, makeMaterials(), roster.creatures()};
     const BvhLib::FlatScene flat{stage.flatten()};
-    const World world{device, flat, logger};
 
     uint32_t max_rays{1u};
     for (const RosterLib::Creature& creature : roster.creatures()) {
@@ -921,10 +920,20 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
         max_rays = std::max(max_rays, body_rays);
     }
 
-    SensesTracer senses_tracer{device, world, stage.materials(), flat.instances, max_rays, (shader_directory / "senses.spv").string(), logger};
-    GridSensesSource senses_source{stage.scene(), stage.acousticStrengths(), makeGridReflectors(), &senses_tracer, &stage};
+    /*
+        The device's world and the tracers that hold it are rebuilt whenever the guests' shapes
+        change - another creature's REZ or DEREZ with rows - because the concatenated buffers
+        changed underneath them. Rare, and paid with one idle of the device; the senses source is
+        rebuilt with them because it borrows the stage's scene by reference and caches against it.
+    */
+    const std::string senses_shader{(shader_directory / "senses.spv").string()};
+    std::unique_ptr<const World> world{std::make_unique<const World>(device, flat, logger)};
+    std::unique_ptr<SensesTracer> senses_tracer{std::make_unique<SensesTracer>(device, *world, stage.materials(), flat.instances, max_rays, senses_shader, logger)};
+    std::unique_ptr<GridSensesSource> senses_source{
+        std::make_unique<GridSensesSource>(stage.scene(), stage.acousticStrengths(), makeGridReflectors(), senses_tracer.get(), &stage)};
 
     WorldHostLib::Host host{master_control_address, std::chrono::milliseconds{5000}, roster};
+    std::uint64_t guest_shapes_seen{0u};
     logger.logInfo("Hosting: Master Control at " + master_control_address + ", tick " + std::to_string(host.welcome().current_tick) + ", client id "
         + std::to_string(host.welcome().client_id) + "; creature " + std::to_string(host.wireIdentity(0u)) + " rezzed from Program \"" + program_identifier + "\".");
 
@@ -937,8 +946,22 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
             std::this_thread::sleep_for(std::chrono::milliseconds{1});
             continue;
         }
+        if (host.guestShapesGeneration() != guest_shapes_seen) {
+            guest_shapes_seen = host.guestShapesGeneration();
+            stage.setGuests(host.guestBodies());
+            const BvhLib::FlatScene reshaped{stage.flatten()};
+            device.get().waitIdle();
+            senses_source.reset();
+            senses_tracer.reset();
+            world = std::make_unique<const World>(device, reshaped, logger);
+            senses_tracer = std::make_unique<SensesTracer>(device, *world, stage.materials(), reshaped.instances, max_rays, senses_shader, logger);
+            senses_source = std::make_unique<GridSensesSource>(stage.scene(), stage.acousticStrengths(), makeGridReflectors(), senses_tracer.get(), &stage);
+            logger.logInfo("The world's shapes changed (generation " + std::to_string(guest_shapes_seen) + "); " + std::to_string(stage.scene().geometries.size() - 1u)
+                + " body geometries on the stage, the device's world rebuilt.");
+        }
+        senses_source->tellGuests(host.guests());
         stage.update(roster.creatures());
-        roster.tick(senses_source);
+        roster.tick(*senses_source);
         host.act();
         ++minds_ticked;
     }

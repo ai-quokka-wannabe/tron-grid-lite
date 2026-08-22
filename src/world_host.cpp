@@ -72,6 +72,11 @@ namespace WorldHostLib
         }
     }
 
+    bool Host::isOwn(const std::uint32_t creature_id) const noexcept
+    {
+        return (creature_id >> 8u) == m_welcome.client_id && (creature_id & 0xFFu) < m_roster.creatures().size();
+    }
+
     std::uint32_t Host::wireIdentity(const std::uint32_t index) const noexcept
     {
         // The client id is unique for the server's life and at most 2^24 hosts deep before this
@@ -163,11 +168,39 @@ namespace WorldHostLib
                 m_library.vtable().send_pong(m_connection, view.as.ping.nonce);
                 m_library.vtable().flush(m_connection, &pong_flush_remainder);
                 break;
+            case LNK_MSG_REZ: {
+                // Another creature's body, relayed: kept for the stage, so the hosted senses meet
+                // it. Our own come back too - the acknowledgement - and are not guests.
+                const LnkRezView& told{view.as.rez};
+                if (isOwn(told.rez.creature_id)) {
+                    break;
+                }
+                WorldClientLib::Body body{};
+                body.rez = told.rez;
+                body.vertices.assign(told.vertices, told.vertices + told.rez.vertex_count);
+                body.triangles.assign(told.triangles, told.triangles + told.rez.triangle_count);
+                body.materials.assign(told.materials, told.materials + told.rez.material_count);
+                const auto previous{m_guest_bodies.find(told.rez.creature_id)};
+                const bool shape_changes{!body.empty() || ((previous != m_guest_bodies.end()) && !previous->second.empty())};
+                m_guest_bodies[told.rez.creature_id] = std::move(body);
+                if (shape_changes) {
+                    ++m_guest_shapes_generation;
+                }
+                break;
+            }
+            case LNK_MSG_DEREZ:
+                if (const auto body{m_guest_bodies.find(view.as.derez.creature_id)}; body != m_guest_bodies.end()) {
+                    if (!body->second.empty()) {
+                        ++m_guest_shapes_generation;
+                    }
+                    m_guest_bodies.erase(body);
+                }
+                break;
             case LNK_MSG_BYE:
                 throw std::runtime_error{"Master Control ended the world (BYE)."};
             default:
-                // REZ relays (our own acknowledgement among them), EVENT, DEREZ: well-formed and,
-                // until the host stages other bodies for its creatures' senses, uninteresting.
+                // EVENT: well-formed and, for a host whose guests' calls come from the rows,
+                // uninteresting.
                 break;
             }
         }
@@ -183,17 +216,23 @@ namespace WorldHostLib
         }
         m_telling_tick = tick;
         std::fill(m_felt.begin(), m_felt.end(), false);
+        m_guests_being_told.clear();
 
         const std::vector<RosterLib::Creature>& creatures{m_roster.creatures()};
         for (std::uint32_t row{0u}; row < view.header.creature_count; ++row) {
             // SAFETY of the borrow: the rows are the library's own until the next poll, and this
             // read completes inside this call.
             const LnkCreatureState& state{view.states[row]};
-            for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
-                if (state.creature_id == wireIdentity(index)) {
-                    m_roster.tellPose(index, RosterLib::Pose{.position = MathLib::Vec3{state.position[0], state.position[1], state.position[2]}, .yaw = state.yaw},
-                        MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]}, state.yaw_rate);
+            const RosterLib::Pose pose{.position = MathLib::Vec3{state.position[0], state.position[1], state.position[2]}, .yaw = state.yaw};
+            if (isOwn(state.creature_id)) {
+                for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
+                    if (state.creature_id == wireIdentity(index)) {
+                        m_roster.tellPose(index, pose, MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]}, state.yaw_rate);
+                    }
                 }
+            } else {
+                // Everyone else: a guest the hosted senses will meet once this tick is whole.
+                m_guests_being_told.push_back(Stage::GuestTelling{.creature_id = state.creature_id, .pose = pose, .vocalisation = state.vocalisation});
             }
         }
     }
@@ -223,6 +262,7 @@ namespace WorldHostLib
 
         if (std::all_of(m_felt.begin(), m_felt.end(), [](const bool felt) { return felt; })) {
             m_told_tick = m_telling_tick;
+            m_guests = m_guests_being_told;
             m_ready = true;
         }
     }

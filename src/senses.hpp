@@ -129,6 +129,14 @@ public:
     void beginTick(const std::vector<RosterLib::Creature>& creatures) override;
 
     /*!
+        The guests this tick: the other bodies in the world, where they stand and whether they
+        call. Told before `beginTick`, which places them on the stage, counts their motion as
+        motion the caches must respect, and lets their calls reach the hosted ears - from the
+        guest's own position, seeing through its own hull. A world with no guests tells none.
+    */
+    void tellGuests(std::vector<Stage::GuestTelling> guests);
+
+    /*!
         Fills the traced senses for one creature.
 
         A stationary creature is answered from its previous solves rather than re-traced: the
@@ -233,4 +241,5 @@ private:
     std::vector<TglEarView> m_ear_views; //!< Wired into TglSenses; overwritten by the next fill.
     std::vector<TglEyeView> m_eye_views;
     std::vector<Call> m_calls; //!< The calls sounding this tick. Rebuilt by every beginTick.
+    std::vector<Stage::GuestTelling> m_guests; //!< The world's other bodies this tick.
 };
