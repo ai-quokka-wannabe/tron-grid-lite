@@ -187,6 +187,7 @@ All of them also run over SSH or on a machine with no monitor attached.
 | `--verify-senses` | Does a creature's eye agree with the host's first hit? At one bounce the walk collapses, so the agreement is exact. |
 | `--benchmark` | What does each GPU pass cost? |
 | `[host:port] --program <name> [--ticks N]` | Host that Program's creature in the world at host:port (default localhost at Tron's port). |
+| `--replay <disk>` | Clu: play a Disk back into the window at the speed the world ran. No Master Control needed. |
 | `--list-programs` | Which Programs are installed, and which of them would load? Also needs no device. |
 
 ```text

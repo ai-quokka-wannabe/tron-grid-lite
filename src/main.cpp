@@ -1473,6 +1473,8 @@ int main(int argc, char** argv)
             elsewhere.
         */
         std::string program_identifier;
+        //! Clu: a Disk to replay instead of a world to watch. Empty for a live view.
+        std::string replay_disk;
         //! World ticks to host for before leaving; zero hosts until the world ends.
         uint32_t host_ticks{0u};
 
@@ -1510,6 +1512,11 @@ int main(int argc, char** argv)
             };
 
             if (argument == "--window") {
+                wants_window = true;
+            } else if ((argument == "--replay") && ((index + 1) < argc)) {
+                // Clu: a Disk instead of a world. A replay viewer is a spectator whose socket
+                // is a file, so it implies the window and needs no Master Control.
+                replay_disk = argv[++index];
                 wants_window = true;
             } else if (argument == "--debug") {
                 wants_debug_view = true;
@@ -1565,7 +1572,7 @@ int main(int argc, char** argv)
         */
         if (!wants_window && !wants_debug_view && !recording && !benchmarking && !verify_acoustics && !verify_scene && !verify_senses && !list_gpus && !list_programs
             && program_identifier.empty()) {
-            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world, [host:port] --program <name> [--ticks N] to host a creature in it, --debug to inspect the stage, or one of --record, "
+            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world, --replay <disk> to play a Disk back, [host:port] --program <name> [--ticks N] to host a creature in it, --debug to inspect the stage, or one of --record, "
                            "--benchmark, --verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs.");
             return EXIT_SUCCESS;
         }
@@ -1623,7 +1630,11 @@ int main(int argc, char** argv)
         }
 
         std::unique_ptr<WorldClientLib::Client> world_client;
-        if (wants_window) {
+        if (!replay_disk.empty()) {
+            world_client = std::make_unique<WorldClientLib::Client>(std::filesystem::path{replay_disk});
+            logger.logInfo("Clu: replaying the Disk at " + replay_disk + " from tick " + std::to_string(world_client->welcome().current_tick) + ", dt "
+                + std::to_string(static_cast<double>(world_client->welcome().nominal_dt_seconds)) + " s.");
+        } else if (wants_window) {
             world_client = std::make_unique<WorldClientLib::Client>(master_control_address, std::chrono::milliseconds{5000});
             logger.logInfo("Connected: Master Control at " + master_control_address + ", tick " + std::to_string(world_client->welcome().current_tick) + ", dt "
                 + std::to_string(static_cast<double>(world_client->welcome().nominal_dt_seconds)) + " s, client id " + std::to_string(world_client->welcome().client_id)
@@ -1938,7 +1949,11 @@ int main(int argc, char** argv)
                     blocking on the User's hand.
                 */
                 window->pumpEvents();
+                const bool was_ended{world_client->ended()};
                 world_client->poll();
+                if (world_client->ended() && !was_ended) {
+                    logger.logInfo("Clu: the Disk is played out at tick " + std::to_string(world_client->tick()) + "; the last telling stands.");
+                }
 
                 if (world_client->creatureCount() != watched_creatures) {
                     watched_creatures = world_client->creatureCount();

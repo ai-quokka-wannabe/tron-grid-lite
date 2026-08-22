@@ -19,6 +19,8 @@
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -90,6 +92,16 @@ namespace WorldClientLib
         */
         Client(const std::string& address, std::chrono::milliseconds handshake_timeout);
 
+        /*!
+            Clu's half: opens a Disk instead of dialling a world. The same client, the same
+            poll, the same picture - a replay viewer is a spectator whose socket is a file. The
+            Disk's header is judged as a handshake is (another contract, another world: refused
+            in words), and its frames are paced by the recorded dt against the wall clock, so a
+            Disk plays back at the speed the world ran: a tick is applied only when its time has
+            come. At the end of the Disk the world stands still rather than ending - see `ended`.
+        */
+        explicit Client(const std::filesystem::path& disk);
+
         //! Says BYE and closes. A courtesy, not a contract: a power cut sends no BYE either.
         ~Client();
 
@@ -110,6 +122,18 @@ namespace WorldClientLib
         [[nodiscard]] const LnkWelcome& welcome() const noexcept
         {
             return m_welcome;
+        }
+
+        //! True once a replayed Disk has been played to its end: the last telling stands.
+        [[nodiscard]] bool ended() const noexcept
+        {
+            return m_ended;
+        }
+
+        //! True when this client replays a Disk rather than watching a live world.
+        [[nodiscard]] bool replaying() const noexcept
+        {
+            return m_replay.has_value();
         }
 
         //! The newest tick the world has told; the WELCOME's tick until the first TICK_STATE.
@@ -156,6 +180,24 @@ namespace WorldClientLib
         std::vector<LnkEvent> m_events;
         std::unordered_map<std::uint32_t, Body> m_bodies;
         std::uint64_t m_bodies_generation{0u};
+
+        //! A telling read ahead of its time, held whole until the clock reaches its tick.
+        struct PendingTelling {
+            LnkTickStateHeader header{};
+            std::vector<LnkCreatureState> rows;
+        };
+        //! The pacing of a replay: when playback began, and the Disk's first tick.
+        struct Replay {
+            std::chrono::steady_clock::time_point began{};
+            std::uint64_t first_tick{0u};
+            std::optional<PendingTelling> pending;
+        };
+        std::optional<Replay> m_replay;
+        bool m_ended{false};
+
+        //! One message applied to the picture; shared by the live and the replayed paths.
+        void apply(const LnkMessageView& view);
+        void applyTelling(const LnkTickStateHeader& header, const LnkCreatureState* rows);
     };
 
 }
