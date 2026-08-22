@@ -15,7 +15,7 @@
 #
 # No struct here contains padding, so a struct's members always account for all of it.
 
-abi-version 4
+abi-version 5
 pointer-size 8
 
 struct TglLibraryInfo 8 4
@@ -81,9 +81,12 @@ member TglEarView energy 0 8
 member TglEarView band_count 8 4
 member TglEarView bin_count 12 4
 
-struct TglContact 24 4
+struct TglContact 52 4
 member TglContact position 0 12
 member TglContact impulse 12 12
+member TglContact normal 24 12
+member TglContact depth 36 4
+member TglContact slip 40 12
 
 struct TglSenses 88 8
 member TglSenses tick 0 8

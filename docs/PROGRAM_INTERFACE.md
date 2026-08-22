@@ -323,6 +323,10 @@ for. A body lying along the floor contacts it in many places at once, and the su
 number that says "downwards" and nothing at all about lying down. Each contact carries where it
 happened in the body frame and the impulse delivered there, so direction and strength arrive
 together; the physics step computes both anyway, which makes the richer answer the cheaper one.
+Since ABI v5 each contact also names its face - the world normal, how deep the body stood past it
+before being stood back, and the slip, the body's velocity along the face - so a foot planted, a
+landing, a flank dragged along a wall and a brush past another creature all read differently; the
+slip is the sense of scraping, and the world sounds it as a scratch.
 
 That is also the only sense here that reports a point **on** the creature rather than a direction
 away from it, and it is how a Program may come to know the extent of its own body — by bumping into

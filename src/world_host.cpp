@@ -254,7 +254,11 @@ namespace WorldHostLib
             contacts.reserve(letter.contact_count);
             for (std::uint32_t contact{0u}; contact < letter.contact_count; ++contact) {
                 const LnkContact& felt{view.contacts[contact]};
-                contacts.push_back(TglContact{.position = {felt.position[0], felt.position[1], felt.position[2]}, .impulse = {felt.impulse[0], felt.impulse[1], felt.impulse[2]}});
+                contacts.push_back(TglContact{.position = {felt.position[0], felt.position[1], felt.position[2]},
+                    .impulse = {felt.impulse[0], felt.impulse[1], felt.impulse[2]},
+                    .normal = {felt.normal[0], felt.normal[1], felt.normal[2]},
+                    .depth = felt.depth,
+                    .slip = {felt.slip[0], felt.slip[1], felt.slip[2]}});
             }
             m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]}, std::move(contacts));
             m_felt[index] = true;

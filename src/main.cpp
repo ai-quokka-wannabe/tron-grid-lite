@@ -1966,8 +1966,12 @@ int main(int argc, char** argv)
                 }
                 for (const LnkEvent& event : world_client->drainEvents()) {
                     if (verbose) {
-                        logger.logDebug("Creature " + std::to_string(event.creature_id) + " vocalised at strength " + std::to_string(static_cast<double>(event.strength))
-                            + ", tick " + std::to_string(event.tick) + ".");
+                        // The spectator's ears arrive with its audio; until then the events are
+                        // named in the log, scratches included - footsteps are scratches, so a
+                        // walking world is a chatty one at --verbose.
+                        const char* const verb{(event.kind == LNK_EVENT_SCRATCH) ? " scratched at strength " : " vocalised at strength "};
+                        logger.logDebug("Creature " + std::to_string(event.creature_id) + verb + std::to_string(static_cast<double>(event.strength)) + ", tick "
+                            + std::to_string(event.tick) + ".");
                     }
                 }
 

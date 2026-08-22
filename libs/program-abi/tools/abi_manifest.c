@@ -116,7 +116,10 @@
 
 #define TGL_CONTACT_MEMBERS(X) \
     X(TglContact, position) \
-    X(TglContact, impulse)
+    X(TglContact, impulse) \
+    X(TglContact, normal) \
+    X(TglContact, depth) \
+    X(TglContact, slip)
 
 #define TGL_SENSES_MEMBERS(X) \
     X(TglSenses, tick) \

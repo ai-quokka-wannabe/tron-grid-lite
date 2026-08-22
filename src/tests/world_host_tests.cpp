@@ -145,7 +145,11 @@ namespace
             const LnkCreatureState row{.creature_id = creature_id, .position = {1.0f, 0.05f, z}, .yaw = yaw, .velocity = {0.0f, 0.0f, -0.5f}, .yaw_rate = 0.1f, .vocalisation = 0.0f};
             check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
             if (with_letter) {
-                const std::array<LnkContact, 1> contacts{LnkContact{.position = {0.0f, -0.05f, 0.0f}, .impulse = {0.0f, 0.3f, 0.0f}}};
+                const std::array<LnkContact, 1> contacts{LnkContact{.position = {0.0f, -0.05f, 0.0f},
+                    .impulse = {0.0f, 0.3f, 0.0f},
+                    .normal = {0.0f, 1.0f, 0.0f},
+                    .depth = 0.004f,
+                    .slip = {0.0f, 0.0f, -0.5f}}};
                 const LnkProprioception letter{.tick = tick,
                     .creature_id = creature_id,
                     .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u),
@@ -253,6 +257,10 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     TEST_CHECK(near(creature.pose.yaw, 0.25f));
     TEST_CHECK(creature.grounded);
     TEST_CHECK_EQUAL(creature.contacts.size(), static_cast<std::size_t>(1u));
+    // The contact arrives whole: the face, the depth and the slip the letter carried.
+    TEST_CHECK(near(creature.contacts.front().normal[1], 1.0f));
+    TEST_CHECK(near(creature.contacts.front().depth, 0.004f));
+    TEST_CHECK(near(creature.contacts.front().slip[2], -0.5f));
     TEST_CHECK(near(creature.specific_force.y, 9.81f));
     TEST_CHECK(near(creature.turn_rate, 0.1f));
     // Forward speed is the velocity along the facing: -0.5 m/s along -Z at yaw 0.25 projects to
