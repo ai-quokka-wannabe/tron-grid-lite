@@ -268,6 +268,7 @@ that the places protocols actually fail are the places this codebase already has
   previous tick's intent piggybacked — see the silence rules), `EVENT` (tick, kind, the source
   creature, position, strength — tick-stamped notifications, never load-bearing state: without
   the kind a spectator cannot choose a sound, without the source it cannot attribute one),
+  `PROPRIOCEPTION` (the owner's letter — the body's feel, to the one host that owns it),
   `DEREZ`, `PING`/`PONG`, `BYE`.
   Late join is not a special case: `WELCOME`, the `REZ` of every live creature, then the next
   `TICK_STATE` — Quake 3's gamestate-then-snapshots in one code path. A spectator is a client
@@ -276,17 +277,29 @@ that the places protocols actually fail are the places this codebase already has
   is that spectator privilege is enforced where the authority lives, and enforcing it inside the
   one shared wire implementation means the rule cannot drift between consumers. Observers fall
   out of the broadcast for free, which is the SourceTV insight.
-- **What the wire still owes, recorded before it is needed.** `TICK_STATE`'s rows carry pose,
-  velocity, yaw rate and the voice today — enough for a spectator, not enough for a creature
-  host: filling `TglSenses` also needs the specific force and the tick's contacts (the audit's
-  codebase brief read the exact list out of `GridSensesSource::fill`), so the rows grow those
-  fields with the creature-host etape, while this repository is pre-release and a message layout
-  still changes for free. `REZ`'s caps have three names — vertex count, triangle count,
-  *material count* — plus index-range checks, the material cap being the one that guards the
-  shared slot space below. And `WELCOME` grows a world-definition fingerprint beside the
-  protocol's: the Grid's geometry and material table are compiled into both ends from the shared
-  `grid` library, one index space with two homes, and a slot-count mismatch mis-shades and
-  mis-sounds *silently* — a handshake refusal is the only honest failure for build skew.
+- **Proprioception is a letter, not a broadcast (ruled 2026-08-22, protocol v5).** `TICK_STATE`'s
+  rows carry pose, velocity, yaw rate and the voice — enough for a spectator, not enough for a
+  creature host: filling `TglSenses` also needs the specific force, whether the feet are on the
+  ground, and the tick's contacts (the audit's codebase brief read the exact list out of
+  `GridSensesSource::fill`). The earlier plan grew the rows; the ruling instead adds a
+  **host-addressed `PROPRIOCEPTION` message** — tick, creature, specific force, grounded, and
+  up to `max_contact_count` contacts, each a point and an impulse today and, when Etape 5
+  lands, a point on the body, a world normal, a depth and a slip velocity — sent by Master
+  Control **only to the connection that owns the creature**, every tick, after that tick's
+  `TICK_STATE`. Three reasons. A body's feel is private: nobody else can use it, and two hundred
+  and fifty rows times sixteen contacts would multiply the snapshot for no one. It is the first
+  message that is *composed per subscriber*, and the per-subscriber send loop was built as
+  exactly that seam — interest management arrives as a second filter beside this one, not as
+  a redesign. And it keeps the spectator honest: a spectator never receives it, so it can never
+  be tempted to simulate from it. The direction is strict — server to host only; Link's own
+  server half treats a `PROPRIOCEPTION` frame arriving *at* the server as the same protocol
+  violation as `ACTIONS` from a spectator. `REZ`'s caps have three names — vertex count,
+  triangle count, *material count* — plus index-range checks, the material cap being the one
+  that guards the shared slot space below; and `WELCOME` carries a world-definition fingerprint
+  beside the protocol's (both landed in protocol v4): the Grid's geometry and material table
+  are compiled into both ends, one index space with two homes, and a slot-count mismatch
+  mis-shades and mis-sounds *silently* — a handshake refusal is the only honest failure for
+  build skew.
 - **One structural rule bought from the Screeps lineage**: the broadcast is per-subscriber
   filterable from day one. Not filtered — v1 sends everyone everything — but the code path is
   "compose this subscriber's view", not "write the one global buffer to all sockets", so the day
