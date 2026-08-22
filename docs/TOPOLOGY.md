@@ -673,3 +673,22 @@ creature to a world it does not run. The invitation is the milestone that makes 
 rather than argued; the trust tier's triggers (the first connection that is not `127.0.0.1`, the
 first stranger's host) are the work the invitation will pull in. OpenWorm is credited in
 `docs/RELATED_WORK.md`; they are the first to ask, because the worm is the first creature.
+
+## The operations console, ruled ahead of time
+
+The owner's direction (2026-08-22): Master Control will eventually be **a service — the Rust
+heartbeat as the backend, and a single-page management interface in front of it, in Svelte.**
+This is the shape every shipped world converges on: the game protocol is one thing, and beside
+it sits an operations plane — who is connected, what the world holds, tick pacing and overruns,
+the logs and the hash, kick and derez, pause and snapshot — on ordinary web technology, for the
+humans who *run* the world rather than the creatures who live in it. Three rulings so it is
+built right when it is built. **It is a separate process.** The console observes through Link
+as a privileged spectator and, when it needs to act, through an admin channel of its own; a
+browser tab can never be on the tick thread, and a console that dies takes nothing with it.
+**It lives in its own repository**, because `master-control` is `std`-only by doctrine and an
+HTTP and WebSocket service wants crates; the console is a third consumer of the wire, which is
+also the trigger the world-definition contract has been waiting for. **It is the first thing
+that genuinely needs authentication** — an operations plane reachable without it is the whole
+trust tier's deferral collapsing at once — so starting it pulls the trust triggers in (the first
+connection that is not `127.0.0.1`, tokens, rate limits) rather than being built around them.
+Trigger to build it: the first time a human needs to operate the world without reading its logs.
