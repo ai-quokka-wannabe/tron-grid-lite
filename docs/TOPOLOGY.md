@@ -576,7 +576,7 @@ The claims survive networking and come out sharper, provided they are stated pre
 | TLS, accounts, tokens, rate limiting | The first connection that is not 127.0.0.1 |
 | Persistence (the world survives the server) | The first world anyone regrets losing; until then, snapshot + action log is stronger than a database |
 | Spectator delay | Participants able to consume the spectator feed as a side channel |
-| Audio beyond parametric pings and Doppler (HRTF, spectator-side occlusion) | The spectator's ears caring, which is a taste decision, not a measurement. Doppler itself left this row on 2026-08-21 — the owner ruled it realism owed now |
+| Audio beyond parametric pings, scratches and Doppler (HRTF, spectator-side occlusion) | The spectator's ears caring, which is a taste decision, not a measurement. Doppler itself left this row on 2026-08-21 — the owner ruled it realism owed now — and the parametric ears landed on 2026-08-22 |
 | Rigid-body dynamics (constraint solver, stacking, friction cones, restitution) | A creature whose body is articulated or whose task needs objects to rest on one another; until then, exact detection with kinematic response, and a mesh proxy that is the convex hull of the `REZ` mesh |
 | WebAssembly brain tier, out-of-process DLL runner | The first community brain from outside the circle of trust |
 

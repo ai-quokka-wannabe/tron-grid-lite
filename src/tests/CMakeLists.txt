@@ -90,3 +90,9 @@ lnk_copy_beside(world_host_tests)
 add_executable(world_stage_tests world_stage_tests.cpp)
 target_link_libraries(world_stage_tests PRIVATE grid testing)
 add_test(NAME world_stage_tests COMMAND world_stage_tests)
+
+# The spectator's ears without speakers: the mixer rendered into a buffer and measured - pan,
+# distance, Doppler counted in zero crossings, silence, retirement. Deviceless.
+add_executable(audio_tests audio_tests.cpp)
+target_link_libraries(audio_tests PRIVATE grid testing)
+add_test(NAME audio_tests COMMAND audio_tests)

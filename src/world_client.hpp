@@ -158,6 +158,13 @@ namespace WorldClientLib
         //! Everything EVENT delivered since the last drain, oldest first.
         [[nodiscard]] std::vector<LnkEvent> drainEvents();
 
+        //! The newest row for a creature, or null for one the world does not hold.
+        [[nodiscard]] const LnkCreatureState* newest(std::uint32_t creature_id) const noexcept
+        {
+            const auto known{m_creatures.find(creature_id)};
+            return (known != m_creatures.end()) ? &known->second.newest : nullptr;
+        }
+
         //! Every body REZ has told and DEREZ has not yet taken, by creature.
         [[nodiscard]] const std::unordered_map<std::uint32_t, Body>& bodies() const noexcept
         {

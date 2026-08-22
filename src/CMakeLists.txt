@@ -16,6 +16,7 @@ add_library(grid STATIC
     world_host.cpp
     world_stage.cpp
     link_library.cpp
+    audio.cpp
 )
 
 target_compile_features(grid PUBLIC cxx_std_20)
@@ -38,6 +39,8 @@ add_executable(${PROJECT_NAME}
     spectator.cpp
     senses_tracer.cpp
     cinematic.cpp
+    $<$<PLATFORM_ID:Windows>:audio_output_win32.cpp>
+    $<$<NOT:$<PLATFORM_ID:Windows>>:audio_output_null.cpp>
 )
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
@@ -65,6 +68,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     window
     signals
     logging
+    $<$<PLATFORM_ID:Windows>:ole32>
 )
 
 # Slang shader compilation — slangc and spirv-val come from the Vulkan SDK.
