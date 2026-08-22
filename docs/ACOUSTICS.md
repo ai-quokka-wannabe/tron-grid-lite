@@ -777,19 +777,25 @@ first cut. And the *Grid* should stop at two buffers: how a Program extracts dir
 the Program's problem, and *Ormia* is a standing warning that the mechanism may live in the body's
 mechanics rather than in computation at all.
 
-**That extension is now committed** (the owner's ruling, 2026-08-21: creatures must be able to
-sense the direction a voice comes from, and Doppler belongs in the world's realism). The shape this
-section anticipated becomes the plan: each discrete arrival grows a record beyond band energies —
-its **sub-bin onset per ear** (the interaural time structure a 1 ms histogram destroys; whether it
-travels as a fractional-bin delay pair or as an explicit arrival direction is the etape's first
-design question, and this section's own physics is the brief for it), and its **radial velocity**,
-from which a Program senses Doppler. The honest number is written beside the promise: at the
-Grid's creature speeds of a few metres per second against 343 m/s, the frequency shift is under
-one per cent — real information for a sense built to read it, imperceptible colour for anything
-else — so the field is cheap truth, not drama. The ambient hum stays energy-only: a sustained
-sourceless bed has no onset to time and no bearing worth naming, which is the same arithmetic
-that already denies it a range. The staged work is in `TODO.md`; nothing in this section's
-current normative model changes until that etape lands.
+**That extension has landed** (the owner's ruling, 2026-08-21: creatures must be able to sense the
+direction a voice comes from, and Doppler belongs in the world's realism; built 2026-08-22). The
+shape this section anticipated is what the ABI carries: each discrete arrival of a *call* is also a
+record beyond its band energies — `Acoustics::Arrival`, and `TglArrival` across the ABI — holding
+its **exact onset per ear** (the path over the speed of sound, in seconds, with the sub-bin
+structure a 1 ms histogram destroys: two ears 10 cm apart hear a caller due east 0.29 ms apart,
+and that difference is where the caller is), its **radial velocity** (how fast the ear-to-source
+path lengthens, positive receding and negative approaching, from the settled velocities the
+gather already reads; mirrored paths take the direct path's value, an approximation written down
+because at creature speeds the image's own differs by less than hearing resolves), and the energy
+it deposited per band. The design question this section posed — a delay pair or an explicit
+direction — was answered by its own physics: onsets, because they are the physical basis and
+leave the extraction to the Program, where *Ormia* says it may be mechanical. The honest number is
+written beside the promise: at the Grid's creature speeds of a few metres per second against
+343 m/s, the frequency shift is under one per cent — real information for a sense built to read
+it, imperceptible colour for anything else — so the field is cheap truth, not drama. An ear keeps
+at most sixteen arrivals a tick, the loudest displacing the faintest. The ambient hum stays
+energy-only: a sustained sourceless bed has no onset to time and no bearing worth naming, which
+is the same arithmetic that already denies it a range — and the gather's test holds it to that.
 
 An earlier TODO item read "Fill `hearing_samples` in the Program interface", naming a flat array.
 **A flat sample list is precisely the shape that makes localisation impossible**, because it has

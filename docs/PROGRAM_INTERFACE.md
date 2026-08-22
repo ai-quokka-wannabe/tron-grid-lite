@@ -471,8 +471,20 @@ by the delay, and hears every other creature's calls and echoes besides.
 [ACOUSTICS.md](ACOUSTICS.md) § The Terraced Floor carries the wall geometry and its measured
 numbers.
 
+**And since ABI v6 an ear also reports its discrete arrivals.** Beside the histogram, each
+`TglEarView` carries up to `TGL_EAR_ARRIVALS_MAX` records of `TglArrival` — one per call arrival
+that tick, direct paths and validated images alike, the loudest kept when the ear is full: the
+exact onset in seconds (the path over the speed of sound, with the sub-millisecond structure the
+bins destroy, so two ears a few centimetres apart time one caller tens of microseconds apart and
+the difference is its bearing), the radial velocity along that path (positive receding, negative
+approaching; Doppler as a number, because at creature speeds the shift is under one per cent of
+pitch), and the energy the arrival deposited per band. The hum records none — a sourceless bed
+has no onset and no bearing. `arrivals` is NULL when `arrival_count` is 0; both are borrowed for
+the tick like everything else here. [ACOUSTICS.md](ACOUSTICS.md) § What a Creature Ear Needs
+carries the physics.
+
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
-time bin per ear, and stops.** Anything that names a source, separates streams, reports "a wall is
+time bin per ear, plus the arrivals' onsets, radial velocities and energies, and stops.** Anything that names a source, separates streams, reports "a wall is
 three metres to your left", or performs auditory scene analysis of any kind belongs in a Program
 repository. The Grid makes localisation *possible* by delivering two ears with their own signals; it
 does not perform it.

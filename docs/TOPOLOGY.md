@@ -361,7 +361,7 @@ interpolate buffered truth, hold the last pose on starvation, never invent.
   second simulation. HRTF and spectator-side occlusion remain the deferred luxuries. The same
   ruling reaches the creature's ears through the acoustic model itself: discrete arrivals grow
   sub-bin interaural onsets (direction) and radial velocity (Doppler) — ACOUSTICS.md § What a
-  Creature Ear Needs carries the committed extension, and TODO.md stages the etape. One rule above all of it: **spectator audio
+  Creature Ear Needs carries the extension, landed as ABI v6. One rule above all of it: **spectator audio
   derives from replicated events and parameters, never from a second acoustic simulation** — the
   tempting move of running the acoustic gather spectator-side with the camera as listener is a
   second implementation of world physics that can drift, and drift between what a creature heard

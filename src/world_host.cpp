@@ -232,7 +232,10 @@ namespace WorldHostLib
                 }
             } else {
                 // Everyone else: a guest the hosted senses will meet once this tick is whole.
-                m_guests_being_told.push_back(Stage::GuestTelling{.creature_id = state.creature_id, .pose = pose, .vocalisation = state.vocalisation});
+                m_guests_being_told.push_back(Stage::GuestTelling{.creature_id = state.creature_id,
+                    .pose = pose,
+                    .velocity = MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]},
+                    .vocalisation = state.vocalisation});
             }
         }
     }

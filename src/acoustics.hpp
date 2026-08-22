@@ -222,9 +222,31 @@ namespace Acoustics
         right asymmetry for nothing: a scraping worm is easy to detect and hard to range, because a
         sustained noisy source has no sharp onset to range from.
     */
+    //! The most discrete arrivals one delivery keeps: the direct path and the loudest images.
+    inline constexpr uint32_t ARRIVALS_MAX{16u};
+
+    /*!
+        One discrete arrival of a call at one ear, beyond its place in the histogram: the exact
+        onset (the path over the speed of sound - sub-bin, which is the interaural time structure
+        a millisecond histogram destroys), the radial velocity of the source along the path
+        (positive receding, negative approaching; what a Program reads Doppler from), and the
+        energy it deposited per band. The ambient hum records none: a sustained, sourceless bed
+        has no onset to time and no bearing worth naming.
+    */
+    struct Arrival {
+        float onset_seconds{0.0f};
+        float radial_velocity{0.0f};
+        std::array<float, BAND_COUNT> energy{};
+    };
+
     struct ImpulseResponse {
         //! Band-major: `bins[(band * BIN_COUNT) + bin]`.
         std::array<float, BAND_COUNT * BIN_COUNT> bins{};
+
+        //! The discrete arrivals, in delivery order, at most ARRIVALS_MAX - a louder latecomer
+        //! displaces the faintest. Only calls make them; the hum never does.
+        std::array<Arrival, ARRIVALS_MAX> arrivals{};
+        uint32_t arrival_count{0u};
 
         //! Returns the energy in one bin of one band.
         [[nodiscard]] float at(uint32_t band, uint32_t bin) const
@@ -452,6 +474,15 @@ namespace Acoustics
         //! Atmospheric absorption in each of the listener's bands, in decibels per kilometre.
         //! Authored per listener, exactly as `GatherConfig` documents.
         std::array<float, BAND_COUNT> air_absorption_db_per_km{{0.0f, 0.0f, 0.0f, 0.0f}};
+
+        /*!
+            How the source and the listener move, world frame, metres per second - what the radial
+            velocity of every arrival is computed from. Mirrored paths take the direct path's
+            radial velocity: at creature speeds the image's own differs by less than the hearing
+            can resolve, and the approximation is written down rather than hidden.
+        */
+        MathLib::Vec3 source_velocity{};
+        MathLib::Vec3 listener_velocity{};
 
         //! Total accumulated path cap, in metres. The same physical horizon the gather has.
         float range_metres{RANGE_METRES};

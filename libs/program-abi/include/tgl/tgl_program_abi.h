@@ -52,7 +52,7 @@ extern "C"
     produces exactly the silent memory corruption the number exists to prevent, and produces it
     without failing anywhere.
 */
-#define TGL_ABI_VERSION 5u
+#define TGL_ABI_VERSION 6u
 
 /* ================================================================================================
    Toolchain glue
@@ -450,6 +450,29 @@ typedef struct TglEyeView {
     uint32_t channels;
 } TglEyeView;
 
+/*! The most discrete arrivals one ear reports per tick: the direct path and the loudest images. */
+#define TGL_EAR_ARRIVALS_MAX 16u
+
+/*!
+    One discrete arrival of a call at this ear, beyond its place in the histogram - the physical
+    basis of direction and of Doppler, delivered as data so the Program may extract what its body
+    is built to extract (Ormia's ears do it mechanically; a nematode's cannot at all).
+
+    The onset is exact: the path from the caller to this ear over the speed of sound, in seconds,
+    with the sub-millisecond structure the histogram's bins destroy - two ears a few centimetres
+    apart hear one call tens of microseconds apart, and that difference is where the caller is.
+    The radial velocity is how fast that path lengthens, positive receding and negative
+    approaching; a Program senses Doppler from it (under one per cent of pitch at creature speeds,
+    which is why it travels as a number rather than as pre-shifted energies). The energies are what
+    the arrival deposited in each of this ear's bands. The ambient hum records none of this: a
+    sustained, sourceless bed has no onset to time and no bearing worth naming.
+*/
+typedef struct TglArrival {
+    float onset_seconds;
+    float radial_velocity;
+    float energy[4]; /*!< Per band, band_count of them meaningful, the rest zero. */
+} TglArrival;
+
 /*! One ear's impulse response for this tick. */
 typedef struct TglEarView {
     /*! Energy per (band, bin), band-major: element [(band * bin_count) + bin], and therefore
@@ -464,11 +487,21 @@ typedef struct TglEarView {
         reached reads zero, which is the physical answer rather than a sentinel. */
     const float* energy;
 
+    /*! The discrete arrivals this tick, arrival_count of them, at most TGL_EAR_ARRIVALS_MAX, in the
+        order the world delivered them. NULL when arrival_count is 0 - a silent tick, or an ear
+        hearing the hum alone. Borrowed for the program_tick call, like everything here. */
+    const TglArrival* arrivals;
+    uint32_t arrival_count;
+
     /*! Equals the matching TglEarDesc::band_count. Named first because the index is band-major. */
     uint32_t band_count;
 
     /*! Equals the matching TglEarDesc::bin_count. */
     uint32_t bin_count;
+
+    /*! Always zero. Named so the asserts can count it: the pointer above needs the struct eight-
+        byte aligned, and an invisible tail of padding is exactly what this header refuses. */
+    uint32_t reserved0;
 } TglEarView;
 
 /*!
@@ -750,7 +783,10 @@ TGL_STATIC_ASSERT(TGL_SUM2(TglRenderTriangle, vertices, material) == sizeof(TglR
 TGL_STATIC_ASSERT(TGL_SUM7(TglRenderModel, vertex_positions, triangles, materials, vertex_count, triangle_count, material_count, padding0) == sizeof(TglRenderModel),
     "TglRenderModel has padding beyond its named padding member: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM3(TglEyeView, samples, sample_count, channels) == sizeof(TglEyeView), "TglEyeView has padding: a member changed width.");
-TGL_STATIC_ASSERT(TGL_SUM3(TglEarView, energy, band_count, bin_count) == sizeof(TglEarView), "TglEarView has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM6(TglEarView, energy, arrivals, arrival_count, band_count, bin_count, reserved0) == sizeof(TglEarView),
+    "TglEarView has padding: a member changed width.");
+TGL_STATIC_ASSERT(TGL_SUM3(TglArrival, onset_seconds, radial_velocity, energy) == sizeof(TglArrival), "TglArrival has padding: a member changed width.");
+TGL_STATIC_ASSERT(sizeof(TglArrival) == 24u, "TglArrival is an array element, so its size is a stride. It must be 24 bytes.");
 TGL_STATIC_ASSERT(TGL_SUM5(TglContact, position, impulse, normal, depth, slip) == sizeof(TglContact), "TglContact has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM14(TglSenses, tick, eyes, ears, contacts, eye_count, ear_count, contact_count, dt_seconds, body_forward_speed, body_vertical_speed,
                       body_turn_rate, specific_force, angular_velocity, irradiance)
@@ -819,10 +855,13 @@ TGL_STATIC_ASSERT(offsetof(TglEyeView, samples) == 0u, "TglEyeView::samples must
 TGL_STATIC_ASSERT(offsetof(TglEyeView, sample_count) == 8u, "TglEyeView::sample_count must sit at offset 8.");
 TGL_STATIC_ASSERT(offsetof(TglEyeView, channels) == 12u, "TglEyeView::channels must sit at offset 12.");
 
-TGL_STATIC_ASSERT(sizeof(TglEarView) == 16u, "TglEarView is an array element, so its size is a stride. It must be 16 bytes.");
+TGL_STATIC_ASSERT(sizeof(TglEarView) == 32u, "TglEarView is an array element, so its size is a stride. It must be 32 bytes.");
 TGL_STATIC_ASSERT(offsetof(TglEarView, energy) == 0u, "TglEarView::energy must sit at offset 0.");
-TGL_STATIC_ASSERT(offsetof(TglEarView, band_count) == 8u, "TglEarView::band_count must sit at offset 8.");
-TGL_STATIC_ASSERT(offsetof(TglEarView, bin_count) == 12u, "TglEarView::bin_count must sit at offset 12.");
+TGL_STATIC_ASSERT(offsetof(TglEarView, arrivals) == 8u, "TglEarView::arrivals must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglEarView, arrival_count) == 16u, "TglEarView::arrival_count must sit at offset 16.");
+TGL_STATIC_ASSERT(offsetof(TglEarView, band_count) == 20u, "TglEarView::band_count must sit at offset 20.");
+TGL_STATIC_ASSERT(offsetof(TglEarView, bin_count) == 24u, "TglEarView::bin_count must sit at offset 24.");
+TGL_STATIC_ASSERT(offsetof(TglEarView, reserved0) == 28u, "TglEarView::reserved0 must sit at offset 28.");
 
 TGL_STATIC_ASSERT(sizeof(TglContact) == 52u, "TglContact is an array element, so its size is a stride. It must be 52 bytes with no padding.");
 TGL_STATIC_ASSERT(offsetof(TglContact, normal) == 24u, "TglContact::normal must follow the impulse.");

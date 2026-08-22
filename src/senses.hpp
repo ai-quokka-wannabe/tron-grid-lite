@@ -187,11 +187,15 @@ private:
         std::vector<EarKey> keys;
         std::vector<AlignedResponse> responses;
         std::vector<AlignedResponse> delivered;
+        //! Per ear, the tick's discrete arrivals in the ABI's shape; storage the view borrows.
+        std::vector<std::array<TglArrival, TGL_EAR_ARRIVALS_MAX>> arrivals;
+        std::vector<uint32_t> arrival_counts;
     };
 
     //! One call sounding this tick: where it left from, how loudly, and whose body to see through.
     struct Call {
         MathLib::Vec3 position{};
+        MathLib::Vec3 velocity{};
         float strength{0.0f};
         uint32_t caller_instance{BvhLib::NO_INSTANCE};
     };

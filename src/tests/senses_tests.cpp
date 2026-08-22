@@ -522,6 +522,76 @@ TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
     TEST_CHECK_EQUAL(stage.scene().geometries.size(), static_cast<size_t>(1u));
 }
 
+TEST_CASE(a_caller_due_east_arrives_at_the_east_ear_first_by_the_interaural_distance_and_its_recession_is_heard)
+{
+    /*
+        Etape 17's own acceptance: two ears ten centimetres apart, a caller due east. The east
+        ear hears the onset first, by exactly the interaural distance over the speed of sound -
+        sign and all - which is the sub-millisecond structure the histogram destroys and the
+        arrival record keeps. A caller walking away carries a positive radial velocity; one
+        walking in, negative; a silent tick carries no arrivals at all.
+    */
+    const BvhLib::Scene scene{singingFloorScene()};
+    GridSensesSource source{scene, unitStrengths()};
+
+    constexpr float HALF_INTERAURAL{0.05f};
+    const std::array<TglEarDesc, 2u> ears{earAt(-HALF_INTERAURAL, 0.0f, 0.0f), earAt(HALF_INTERAURAL, 0.0f, 0.0f)};
+    RosterLib::Creature listener{hearingCreature(ears.data(), 2u)};
+    listener.body.creature_id = 8u;
+
+    // The hum alone: no discrete arrival, the pointer null.
+    TglSenses quiet{};
+    source.fill(listener, quiet);
+    TEST_CHECK_EQUAL(quiet.ears[0].arrival_count, 0u);
+    TEST_CHECK(quiet.ears[0].arrivals == nullptr);
+
+    RosterLib::Creature caller{hearingCreature(ears.data(), 2u)};
+    caller.body.creature_id = 7u;
+    caller.pose.position = MathLib::Vec3{3.6f, 1.0f, 0.0f}; // due east, 3.6 m
+    caller.vocalisation = 1.0f;
+    caller.velocity = MathLib::Vec3{1.0f, 0.0f, 0.0f}; // walking away, east
+
+    std::vector<RosterLib::Creature> roster;
+    roster.push_back(caller);
+    roster.push_back(listener);
+    source.beginTick(roster);
+    TglSenses heard{};
+    source.fill(listener, heard);
+
+    TEST_CHECK(heard.ears[0].arrival_count >= 1u);
+    TEST_CHECK(heard.ears[1].arrival_count >= 1u);
+    // The direct path is delivered first: arrival zero at each ear.
+    const TglArrival& west{heard.ears[0].arrivals[0]};
+    const TglArrival& east{heard.ears[1].arrivals[0]};
+    const float interaural_seconds{(2.0f * HALF_INTERAURAL) / Acoustics::SPEED_OF_SOUND};
+    TEST_CHECK_CLOSE(west.onset_seconds - east.onset_seconds, interaural_seconds, 1e-6f);
+    TEST_CHECK(east.onset_seconds < west.onset_seconds);
+    TEST_CHECK_CLOSE(east.onset_seconds, (3.6f - HALF_INTERAURAL) / Acoustics::SPEED_OF_SOUND, 1e-6f);
+    TEST_CHECK_CLOSE(east.radial_velocity, 1.0f, 1e-5f); // receding: positive
+    TEST_CHECK(east.energy[0] > 0.0f);
+    TEST_CHECK_CLOSE(east.energy[0], 1.0f / ((3.6f - HALF_INTERAURAL) * (3.6f - HALF_INTERAURAL)), 1e-6f);
+
+    // Walking in: negative. And a caller crossing sideways: no radial motion at all.
+    roster[0].velocity = MathLib::Vec3{-2.0f, 0.0f, 0.0f};
+    source.beginTick(roster);
+    TglSenses approaching{};
+    source.fill(listener, approaching);
+    TEST_CHECK_CLOSE(approaching.ears[1].arrivals[0].radial_velocity, -2.0f, 1e-5f);
+    roster[0].velocity = MathLib::Vec3{0.0f, 0.0f, 3.0f};
+    source.beginTick(roster);
+    TglSenses crossing{};
+    source.fill(listener, crossing);
+    TEST_CHECK(std::fabs(crossing.ears[1].arrivals[0].radial_velocity) < 1e-5f);
+
+    // The listener's own motion counts: both walking east together, nothing recedes.
+    roster[0].velocity = MathLib::Vec3{1.0f, 0.0f, 0.0f};
+    roster[1].velocity = MathLib::Vec3{1.0f, 0.0f, 0.0f};
+    source.beginTick(roster);
+    TglSenses together{};
+    source.fill(roster[1], together);
+    TEST_CHECK(std::fabs(together.ears[1].arrivals[0].radial_velocity) < 1e-5f);
+}
+
 TEST_CASE(a_creatures_own_body_is_blanked_for_its_own_eyes)
 {
     // The device-side spelling of the self skip: the records handed to the solver carry the whole

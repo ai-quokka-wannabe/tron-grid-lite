@@ -1,4 +1,4 @@
 # Fingerprint of tgl_program_abi.h with the TGL_ABI_VERSION line removed.
 # Regenerate with: python tools/check_abi_version.py update
-version=5
-sha256=7c968b318dd61eb44bc99d8d84e5d8b0d5ce47e88f35e14b9e6416cd31eea65f
+version=6
+sha256=3954eff50a1f064d7c6264f7ddbca0f44489bdd80d2f3e2838e77e0d2a3082be

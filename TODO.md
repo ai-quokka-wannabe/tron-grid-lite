@@ -422,32 +422,6 @@ once already, from a debug assertion. A constructor that throws is the cleanest 
 the object never existed, and every member already built is destroyed in reverse order by the language
 itself.
 
-## Etape 17 — Direction on the ear: interaural onsets and Doppler
-
-The owner's ruling (2026-08-21): a creature must be able to sense *where* a voice came from, and
-Doppler is realism the world owes now. ACOUSTICS.md § What a Creature Ear Needs anticipated the
-exact mechanism and now carries the committed extension: each discrete arrival grows a record
-beyond band energies — sub-bin onset per ear (interaural time structure that 1 ms bins destroy)
-and radial velocity (from which Doppler is read). The etape's work:
-
-- **The first design question, from the doc's own physics**: fractional-bin onset delay per ear,
-  or an explicit direction per arrival? The interaural distance is centimetres, so onsets differ
-  by tens of microseconds — representable as a float delay pair, unrepresentable in the
-  histogram. The Grid delivers the physical basis; extracting direction stays the Program's
-  problem (*Ormia* is the standing warning that the mechanism may be mechanical).
-- **Doppler enters as radial velocity per arrival**, computed from the settled poses the gather
-  already reads — honest magnitude at creature speeds is under one per cent of pitch, which is
-  exactly why it travels as data rather than as pre-shifted energies.
-- The ambient hum stays energy-only: no onset to time, no bearing worth naming.
-- ABI consequence: `TglEarView` grows the arrival records — an ABI version bump, validated
-  whole-or-refused like every shape before it, with the fingerprint tool refusing the change
-  until the version moves.
-- The spectator's half of the same ruling — parametric Doppler from replicated velocities — is
-  recorded in TOPOLOGY.md § The spectator and lands with the spectator-audio etape.
-- Tests first, as always: a caller due east of a listener must produce onsets whose difference
-  equals the interaural distance over the speed of sound, sign and all; a receding caller must
-  carry negative radial velocity; both broken deliberately once.
-
 ## Where the research went
 
 Nine studies ran across 2026-08-03 and 04 — determinism, threading and SignalsLib, engine structure,
