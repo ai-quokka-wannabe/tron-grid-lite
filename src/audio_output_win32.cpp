@@ -43,6 +43,16 @@ namespace AudioLib
 
         constexpr REFERENCE_TIME BUFFER_HUNDRED_NANOSECONDS{20 * 10'000}; // 20 ms of cushion.
 
+        // The two sub-formats this plays, by their published GUIDs: MSVC links them from a
+        // library MinGW does not carry, and a value in the source is the same on both.
+        constexpr GUID SUBTYPE_PCM{0x00000001, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}};
+        constexpr GUID SUBTYPE_IEEE_FLOAT{0x00000003, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}};
+
+        [[nodiscard]] bool sameGuid(const GUID& a, const GUID& b)
+        {
+            return std::memcmp(&a, &b, sizeof(GUID)) == 0;
+        }
+
         [[nodiscard]] std::string hresultWords(const char* what, const HRESULT result)
         {
             return std::string{what} + " failed (HRESULT 0x" + std::to_string(static_cast<unsigned long>(result)) + ")";
@@ -76,10 +86,10 @@ namespace AudioLib
             }
             if (format.wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
                 const auto& extensible{reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(format)};
-                if (extensible.SubFormat == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT && format.wBitsPerSample == 32) {
+                if (sameGuid(extensible.SubFormat, SUBTYPE_IEEE_FLOAT) && format.wBitsPerSample == 32) {
                     return SampleShape::Float32;
                 }
-                if (extensible.SubFormat == KSDATAFORMAT_SUBTYPE_PCM && format.wBitsPerSample == 16) {
+                if (sameGuid(extensible.SubFormat, SUBTYPE_PCM) && format.wBitsPerSample == 16) {
                     return SampleShape::Pcm16;
                 }
             }
