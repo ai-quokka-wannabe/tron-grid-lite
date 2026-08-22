@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Every internal link and anchor is checked per pull request, the external ones weekly.**
+  Adopted from the owner's `altium-designer-mcp`: `lychee --offline --include-fragments` in
+  quick-checks, installed from its pinned release with a checksum rather than through a
+  third-party action, so a dead anchor is a red pull request; and `links.yml`, a scheduled
+  workflow that follows the external links too, never blocking a merge on a site elsewhere.
 - **Direction on the ear: every call arrival carries its exact onset and its radial velocity
   (ABI v6).** Etape 17, the owner's ruling that a creature must be able to sense where a voice
   comes from and that Doppler is realism owed now. `Acoustics::Arrival` records each call
