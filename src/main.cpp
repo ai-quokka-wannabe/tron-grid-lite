@@ -986,9 +986,9 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
 
     const RosterLib::Creature& creature{roster.creatures().front()};
     logger.logInfo("Hosted for " + std::to_string(minds_ticked) + " world ticks (" + std::to_string(first_tick + 1u) + " to " + std::to_string(host.toldTick())
-        + "). Creature at (" + std::to_string(creature.pose.position.x) + ", " + std::to_string(creature.pose.position.y) + ", " + std::to_string(creature.pose.position.z)
-        + "), facing " + std::to_string(creature.pose.yaw) + " rad, moving at " + std::to_string(creature.forward_speed) + " m/s, " + (creature.grounded ? "grounded" : "airborne")
-        + ", " + std::to_string(creature.contacts.size()) + " contact(s). Leaving.");
+        + "). Creature at (" + std::to_string(creature.pose.position.x) + ", " + std::to_string(creature.pose.position.y) + ", "
+        + std::to_string(creature.pose.position.z) + "), facing " + std::to_string(creature.pose.yaw) + " rad, moving at " + std::to_string(creature.forward_speed)
+        + " m/s, " + (creature.grounded ? "grounded" : "airborne") + ", " + std::to_string(creature.contacts.size()) + " contact(s). Leaving.");
     return EXIT_SUCCESS;
 }
 
@@ -1011,8 +1011,8 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     \param logger Thread-safe logger.
     \param channel The only state shared with the event thread.
 */
-void runRenderLoop(const Device& device, Swapchain& swapchain, std::unique_ptr<const World>& world, std::unique_ptr<Tracer>& tracer,
-    const std::string& trace_shader, PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel)
+void runRenderLoop(const Device& device, Swapchain& swapchain, std::unique_ptr<const World>& world, std::unique_ptr<Tracer>& tracer, const std::string& trace_shader,
+    PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel)
 {
     std::uint64_t scene_seen{channel.scene_generation.load()};
     const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
@@ -1598,7 +1598,8 @@ int main(int argc, char** argv)
         */
         if (!wants_window && !wants_debug_view && !recording && !benchmarking && !verify_acoustics && !verify_scene && !verify_senses && !list_gpus && !list_programs
             && program_identifier.empty()) {
-            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world (--mute for no sound), --replay <disk> to play a Disk back, [host:port] --program <name> [--ticks N] to host a creature in it, --debug to inspect the stage, or one of --record, "
+            logger.logInfo("Nothing to do. Pass [host:port] --window to watch the world (--mute for no sound), --replay <disk> to play a Disk back, [host:port] "
+                           "--program <name> [--ticks N] to host a creature in it, --debug to inspect the stage, or one of --record, "
                            "--benchmark, --verify-acoustics, --verify-scene, --verify-senses, --list-gpus, --list-programs.");
             return EXIT_SUCCESS;
         }
@@ -2046,7 +2047,8 @@ int main(int argc, char** argv)
                 if (world_client->bodiesGeneration() != bodies_generation) {
                     bodies_generation = world_client->bodiesGeneration();
                     world_stage->setBodies(world_client->bodies());
-                    channel.publishScene(RenderChannel::SceneUpload{.flat = world_stage->flatScene(), .materials = world_stage->materials(),
+                    channel.publishScene(RenderChannel::SceneUpload{.flat = world_stage->flatScene(),
+                                             .materials = world_stage->materials(),
                                              .instance_capacity = world_stage->instanceCapacity()},
                         world_stage->records(world_client->interpolated(1.0f)));
                     published_alpha = -1.0f;

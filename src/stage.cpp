@@ -173,8 +173,8 @@ void Stage::setGuests(const std::unordered_map<uint32_t, WorldClientLib::Body>& 
             const MathLib::Vec3 v0{a.position[0], a.position[1], a.position[2]};
             const MathLib::Vec3 v1{b.position[0], b.position[1], b.position[2]};
             const MathLib::Vec3 v2{c.position[0], c.position[1], c.position[2]};
-            triangles.push_back(
-                BvhLib::Triangle{.v0 = v0, .material = material_base + triangle.material, .edge1 = v1 - v0, .padding0 = 0u, .edge2 = v2 - v0, .padding1 = 0u});
+            triangles.push_back(BvhLib::Triangle{
+                .v0 = v0, .material = material_base + triangle.material, .edge1 = v1 - v0, .padding0 = 0u, .edge2 = v2 - v0, .padding1 = 0u});
         }
 
         Body guest{};

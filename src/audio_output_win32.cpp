@@ -61,8 +61,7 @@ namespace AudioLib
             return std::string{what} + " failed (HRESULT 0x" + hex + ")";
         }
 
-        template<typename T>
-        struct Com {
+        template <typename T> struct Com {
             T* pointer{nullptr};
             ~Com()
             {
@@ -77,7 +76,10 @@ namespace AudioLib
             Com& operator=(Com&&) = delete;
         };
 
-        enum class SampleShape : std::uint8_t { Float32, Pcm16 };
+        enum class SampleShape : std::uint8_t {
+            Float32,
+            Pcm16
+        };
 
         [[nodiscard]] SampleShape shapeOf(const WAVEFORMATEX& format)
         {
@@ -137,7 +139,8 @@ namespace AudioLib
         void serve()
         {
             Com<IMMDeviceEnumerator> enumerator;
-            HRESULT result{CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void**>(&enumerator.pointer))};
+            HRESULT result{
+                CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void**>(&enumerator.pointer))};
             if (FAILED(result)) {
                 throw std::runtime_error{hresultWords("MMDeviceEnumerator", result)};
             }
@@ -245,7 +248,9 @@ namespace AudioLib
     Output::Output(Mixer& mixer) :
         m_impl(new Impl{mixer})
     {
-        m_impl->thread = std::thread{[impl = m_impl]() { impl->run(); }};
+        m_impl->thread = std::thread{[impl = m_impl]() {
+            impl->run();
+        }};
         while (!m_impl->ready.load()) {
             std::this_thread::yield();
         }
@@ -275,7 +280,8 @@ namespace AudioLib
         std::uint32_t rate{48'000u};
         {
             Com<IMMDeviceEnumerator> enumerator;
-            if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), reinterpret_cast<void**>(&enumerator.pointer)))) {
+            if (SUCCEEDED(CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                    reinterpret_cast<void**>(&enumerator.pointer)))) {
                 Com<IMMDevice> device;
                 if (SUCCEEDED(enumerator.pointer->GetDefaultAudioEndpoint(eRender, eConsole, &device.pointer))) {
                     Com<IAudioClient> client;

@@ -155,7 +155,9 @@ namespace AudioLib
             }
             voice.remaining -= count;
         }
-        std::erase_if(m_voices, [](const Voice& voice) { return voice.remaining == 0u; });
+        std::erase_if(m_voices, [](const Voice& voice) {
+            return voice.remaining == 0u;
+        });
 
         // A soft ceiling: many voices at once must never clip into the speakers.
         for (std::uint32_t sample{0u}; sample < frames * 2u; ++sample) {

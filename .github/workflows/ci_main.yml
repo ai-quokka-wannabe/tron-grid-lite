@@ -89,6 +89,18 @@ jobs:
             - name: Check internal links and anchors
               run: lychee --offline --include-fragments --no-progress --root-dir "$(pwd)" --exclude-path build --exclude-path external --exclude-path node_modules --exclude-path tools/.venv "./**/*.md"
 
+            # The formatter, pinned to a major so the desk and the runner agree on the bytes, and
+            # run as a gate rather than a suggestion: STYLE.md claims the tree is clang-format
+            # clean, and this is what makes the claim true. The vendored and submodule code is
+            # somebody else's tree and is not judged here.
+            - name: Install clang-format
+              run: python3 -m pip install --quiet "clang-format~=22.1"
+
+            - name: Formatting must be canonical
+              shell: bash
+              run: |
+                git ls-files -z -- '*.cpp' '*.hpp' '*.c' '*.h' ':!external/**'                     | xargs -0 clang-format --dry-run --Werror
+
             # TGL_ABI_VERSION stops the Grid loading a Program built against a different layout, and
             # nothing enforces it by itself. A forgotten bump leaves both sides agreeing on the number
             # while disagreeing about the bytes - which is the silent memory corruption the number is
