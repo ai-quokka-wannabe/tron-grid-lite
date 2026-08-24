@@ -27,10 +27,20 @@ Avoid duplicating information across files. Each piece of information should hav
 | Information | Canonical Source |
 |-------------|-----------------|
 | Build commands | `README.md` § Building |
-| Formatting rules | `.clang-format`, `.editorconfig` |
+| Formatting rules | `.clang-format`, `.editorconfig` (enforced in CI under clang-format 22.x) |
 | Security policy | `SECURITY.md` |
 | Roadmap & phases | `TODO.md` § Roadmap |
 | Creature sensor resolutions | `docs/PERCEPTION.md` |
+| Who owns what across the four repositories, and the wire's design | `docs/TOPOLOGY.md` § The four repositories, § One tick across the wire |
+| The determinism and replay claims, precisely scoped | `docs/TOPOLOGY.md` § Determinism and replay, scoped |
+| The Program ABI, every layout | `libs/program-abi/include/tgl/tgl_program_abi.h` (the flagship's to move; rc-worm vendors it) |
+| What a Program senses and does | `docs/PROGRAM_INTERFACE.md` |
+| The acoustic model | `docs/ACOUSTICS.md` |
+| Materials | `docs/MATERIALS.md` |
+| The threads and the shutdown order | `docs/ARCHITECTURE.md` § The threads, and the order they stop |
+| Tron vocabulary | this file § Tron Naming; `README.md` § A note on the vocabulary |
+| CI shape and the actions policy | `.github/workflows/`, `.claude/CLAUDE.md` § Process |
+| Hard-won rules for anyone editing on this machine | `.claude/CLAUDE.md` § Hard-won rules |
 
 **Guidelines:**
 
@@ -45,7 +55,10 @@ Avoid duplicating information across files. Each piece of information should hav
 
 ### Formatting
 
-Use `.clang-format` (LLVM-based). CI does not currently enforce this, but all code should be formatted before committing.
+Use `.clang-format` (LLVM-based). CI enforces it: quick-checks installs clang-format 22.x
+(`pip install "clang-format~=22.1"`) and refuses a tree that is not canonical under it, so run the
+same major on the desk - an older or newer clang-format formats a few constructs differently, and
+the gate will say so.
 
 **IMPORTANT — clang-format scope:** run `clang-format -i` only on `.cpp` and `.hpp` files.
 **NEVER** pass `.slang` files to clang-format. Slang uses HLSL semantics
