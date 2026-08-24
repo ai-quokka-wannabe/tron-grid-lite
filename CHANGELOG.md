@@ -1051,6 +1051,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The documents say what the code does about threads, shutdown and replay.** Adopted from
+  the owner's StringWiggler and project_nimrod. ARCHITECTURE gains "The threads, and the order
+  they stop": every thread the process starts - event, render, audio output, logger, and a
+  Program's own - with what it owns, what it talks through and how it ends, the three rules the
+  table enforces, and the shutdown order (reverse construction, join before destroy, every
+  destructor noexcept in fact). TOPOLOGY's determinism section states the distinction the
+  replayer rests on: rollback needs snapshots, replay needs deterministic operations, and a
+  world that restores from snapshots can look replayable for months. STYLE's Single Source of
+  Truth table grows from five rows to fifteen - the wire, the ABI, the senses, the acoustics,
+  the threads, the vocabulary, the CI policy - and its formatting section no longer claims CI
+  does not enforce the formatter, because since #111 it does.
 - **A release can be rehearsed, is gated three ways, is smoke-tested as shipped, and lands as a
   draft.** Adopted from the owner's `altium-designer-mcp` and `claude-chats-browser`. A manual
   dispatch of the release workflow builds, packages and checks every artefact exactly as a tag

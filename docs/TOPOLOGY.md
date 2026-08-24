@@ -557,6 +557,16 @@ The claims survive networking and come out sharper, provided they are stated pre
   one process that never touches a GPU. Cross-machine floating-point divergence, the ruin of
   lockstep RTS replays, is architecturally irrelevant here because only one machine ever
   simulates.
+- **Replay-correctness and rollback-correctness are two different properties, and this design
+  needs the first.** Rollback needs only snapshots: save the state, restore the state, no
+  demands on the operations in between. Replay needs deterministic operations: the same log
+  through the same code must produce the same state, every bit, with no snapshot to fall back
+  on. Conflating them is how a replayer quietly stops proving anything - a world that restores
+  from snapshots can look replayable for months. The Disk is a recording, Clu re-simulates from
+  the input log alone and compares hashes, and the state hash covers hidden state; that is the
+  replay property, held by construction (`clippy.toml` bans the hidden-state sources, the random
+  walk hashes twice) rather than by hope. (The distinction is the owner's, from
+  `project_nimrod`'s architecture decisions.)
 - **The minds do not replay.** Actions were produced by brains fed GPU-rendered senses on
   whatever hardware the host had; the same seed run live again yields a different history. The
   log reproduces the world *given* the actions; it does not reproduce the creatures' decisions.

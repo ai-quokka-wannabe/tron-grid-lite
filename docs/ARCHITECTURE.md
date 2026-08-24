@@ -236,6 +236,46 @@ for parent-child ownership such as device to swapchain.
 
 ---
 
+## The threads, and the order they stop
+
+Every thread this process ever starts, who owns it, what it may touch, and how it ends - written
+down because a thread nobody named is a race nobody looked for. Adopted from the owner's
+StringWiggler, whose ARCHITECTURE carries the same two sections for the same reason.
+
+| Thread | Started by | Owns | Talks through | Stops when |
+|---|---|---|---|---|
+| **Event** (the process's main thread) | the OS | the window, the cursor, the message pump; in `--program` mode the whole host loop | `RenderChannel` (a `Signal`) to the render thread; the mixer's lock to the audio thread | the window closes, `--ticks` runs out, or a fatal error |
+| **Render** | `main` in `--window`/`--debug`/`--replay`, one `std::thread` | everything Vulkan: device, swapchain, world, tracers, post-process; the world rebuild under `world_mutex` | reads the `RenderChannel`; publishes the camera to the mixer | `RenderThreadGuard` sends `Stop` and joins - on every exit path, error paths included |
+| **Audio output** | `AudioLib::Output` (WASAPI on Windows, a silent drain elsewhere), one `std::thread` | the endpoint; nothing else | pulls from the mixer under its lock, event-driven | `~Output` sets `stopping` and joins |
+| **Logger** | `LoggingLib::Logger`, one `std::jthread` | the sink | the log `Signal` | the stop token, joined in `~Logger` |
+| **The Program's own** | the Program library, if it chooses (rc-worm's panel will) | its own affairs | nothing of the Grid's: `program_tick` runs on the event thread and must never block | the Program's business, before `library_shutdown` returns |
+
+Three rules the table enforces:
+
+- **A queue is for crossing a thread, and nothing crosses a thread without one** -
+  § Signal-Based Communication. Values cross by value or by an owned buffer, never by index into
+  something the other thread may resize.
+- **The world rebuild is the one place two threads meet on Vulkan objects**, and it happens
+  under `world_mutex` with the device idle: a REZ or DEREZ replaces the `World` and its tracers
+  whole, never edits them in place.
+- **The tick never waits for a window.** In `--program` mode there is no render thread at all;
+  the host loop polls the wire, ticks the mind, and sends - a mind that thinks slowly delays
+  its own intent (`Host::act` tags for the tick the world will step next), never the world.
+
+**Shutdown, in order**, which is reverse construction and always join-before-destroy:
+
+1. The loop ends (close, `--ticks`, or an exception unwinding through `main`).
+2. `RenderThreadGuard`: detach the window callback (so a close arriving now calls nothing),
+   send `Stop`, join the render thread. Inside a catch-all, because it runs on every path.
+3. The device waits idle; the Vulkan objects are destroyed in reverse order by `vk::raii`.
+4. `Host`/`Client` close the wire: BYE first, then the farewell drain, so a leave is a leave.
+5. `~Output` stops and joins the audio thread; `~Mixer` follows.
+6. `~Logger` last - everything above may still log while it stops - via the stop token.
+
+Each step is idempotent and each destructor is `noexcept` in fact, not only in signature: the
+one place a failure to stop cleanly could be reported is the handler at the bottom of `main`,
+and a throw from a destructor would abort past it.
+
 ## Vulkan Backend
 
 ### Ownership: `vk::raii` Everywhere
