@@ -193,5 +193,10 @@ lnk_copy_beside(${PROJECT_NAME})
 # assembled from a directory that Ninja Multi-Config never writes.
 install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION .)
 install(FILES ${SHADER_SPV_FILES} DESTINATION .)
+# And the wire, which the executable loads from beside itself at startup: a shipped Grid without
+# it starts and stops. The release workflow's unpack-and-run check is what found it missing.
+install(FILES ${LNK_LIBRARY_FILE} DESTINATION .)
+# An empty programs/ directory too, so the shipped tree shows where a Program goes.
+install(DIRECTORY DESTINATION programs)
 
 add_subdirectory(tests)

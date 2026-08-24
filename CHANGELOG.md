@@ -1039,6 +1039,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A release can be rehearsed, is gated three ways, is smoke-tested as shipped, and lands as a
+  draft.** Adopted from the owner's `altium-designer-mcp` and `claude-chats-browser`. A manual
+  dispatch of the release workflow builds, packages and checks every artefact exactly as a tag
+  would, as `<version>-dryrun`, and publishes nothing. On a tag, `validate` refuses in seconds
+  what the matrix would have found in half an hour: a tagged commit not on main, a CHANGELOG
+  without a section for the version, a release that already exists. Each packaged archive is
+  unpacked into a clean directory and the binary *in the archive* is run - and that found the
+  shipped Grid missing `link.dll`, the wire it loads at startup: `cmake --install` now carries
+  it, and an empty `programs/` beside it. The release job refuses to publish unless every
+  platform's artefact arrived and the checksum file reads back clean, and creates the release
+  as a draft with the one command to publish it in the step summary - the irreversible step
+  stays a person's.
 - **Formatting is a gate, under a pinned formatter.** Adopted from the owner's
   `claude-chats-browser`: quick-checks installs `clang-format~=22.1` and runs it `--dry-run
   --Werror` over every tracked C and C++ file, so STYLE.md's claim that the tree is

@@ -11,6 +11,11 @@ on:
             - "v[0-9]+.[0-9]+.[0-9]+"
             - "v[0-9]+.[0-9]+.[0-9]+-*"
 
+    # The dry run: a manual dispatch builds, packages and smoke-tests every artefact exactly as
+    # a tag would, then stops before the one irreversible step. A packaging change is proven
+    # end to end before a tag exists, and no throwaway tag is ever cut to find out.
+    workflow_dispatch:
+
 env:
     VULKAN_SDK_VERSION: "1.4.357.0"
 
@@ -18,10 +23,12 @@ jobs:
     validate:
         name: Validate Release
         runs-on: ubuntu-latest
+        timeout-minutes: 5
 
         outputs:
             version: ${{ steps.version.outputs.version }}
             tag: ${{ steps.version.outputs.tag }}
+            is-release: ${{ steps.version.outputs.is-release }}
 
         steps:
             - name: Checkout repository
@@ -31,6 +38,17 @@ jobs:
               id: version
               shell: bash
               run: |
+                if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+                    # A rehearsal: the version file's own number, marked so no artefact of a dry
+                    # run can be mistaken for a release, and nothing is published.
+                    VERSION="$(grep 'VERSION ' CMakeLists.txt | head -1 | sed 's/.*VERSION \([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')-dryrun"
+                    echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+                    echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+                    echo "is-release=false" >> "$GITHUB_OUTPUT"
+                    echo "Dry run: building as ${VERSION}, publishing nothing."
+                    exit 0
+                fi
+
                 TAG="${GITHUB_REF#refs/tags/}"
 
                 # Validate tag format
@@ -43,7 +61,50 @@ jobs:
                 VERSION="${TAG#v}"
                 echo "tag=$TAG" >> "$GITHUB_OUTPUT"
                 echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+                echo "is-release=true" >> "$GITHUB_OUTPUT"
                 echo "Release version: $VERSION (tag: $TAG)"
+
+            # Three gates that fail in seconds rather than after a thirty-minute matrix. A tag can be
+            # pushed from any commit: one that never reached main, one that sat between a red CI run
+            # and its fix. Only a commit on main - one every gate has passed - may be released.
+            - name: The tagged commit is on main
+              if: steps.version.outputs.is-release == 'true'
+              shell: bash
+              run: |
+                git fetch --no-tags --depth=200 origin main
+                if ! git merge-base --is-ancestor "${GITHUB_SHA}" origin/main; then
+                    echo "::error::The tagged commit ${GITHUB_SHA} is not on main. Release from main, or merge first."
+                    exit 1
+                fi
+                echo "The tagged commit is on main."
+
+            # The release notes are the CHANGELOG entry, so a version without one is a release
+            # with no words: refused on a tag, a warning on a rehearsal.
+            - name: CHANGELOG.md has an entry for this version
+              shell: bash
+              run: |
+                VERSION="${{ steps.version.outputs.version }}"
+                BASE="${VERSION%-dryrun}"
+                if grep -q "^## \[${BASE}\]" CHANGELOG.md; then
+                    echo "CHANGELOG.md carries ## [${BASE}]."
+                elif [[ "${{ steps.version.outputs.is-release }}" == "true" ]]; then
+                    echo "::error::CHANGELOG.md has no ## [${BASE}] section. Move the Unreleased entries under the version before tagging."
+                    exit 1
+                else
+                    echo "::warning::CHANGELOG.md has no ## [${BASE}] section yet; a real release would refuse here."
+                fi
+
+            - name: No release exists for this tag yet
+              if: steps.version.outputs.is-release == 'true'
+              shell: bash
+              env:
+                GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+                    echo "::error::A release for ${{ steps.version.outputs.tag }} already exists. Delete it deliberately, or tag the next version."
+                    exit 1
+                fi
+                echo "No release for ${{ steps.version.outputs.tag }} yet."
 
             - name: Verify CMakeLists.txt version matches tag
               shell: bash
@@ -173,6 +234,36 @@ jobs:
                 cd dist
                 7z a -tzip ../${{ matrix.artifact }}.zip *
 
+            # The artefact as a downloader will meet it: unpacked into a clean directory, every
+            # file it must carry present by name, and the packaged binary itself run - not the one
+            # in the build tree. A green matrix hides a renamed file or a library left behind; this
+            # does not.
+            - name: Unpack and run the packaged artefact (Unix)
+              if: runner.os != 'Windows'
+              shell: bash
+              run: |
+                rm -rf smoke && mkdir smoke && tar -xzf ${{ matrix.artifact }}.tar.gz -C smoke
+                cd smoke
+                for required in TronGridLite liblink.so README.md LICENCE CHANGELOG.md; do
+                    [[ -e "$required" ]] || { echo "::error::The artefact is missing $required"; ls -la; exit 1; }
+                done
+                ls *.spv >/dev/null || { echo "::error::The artefact carries no shaders"; exit 1; }
+                ./TronGridLite --version | tee version.txt
+                grep -q "TronGrid Lite" version.txt || { echo "::error::The packaged binary did not name itself"; exit 1; }
+
+            - name: Unpack and run the packaged artefact (Windows)
+              if: runner.os == 'Windows'
+              shell: bash
+              run: |
+                rm -rf smoke && mkdir smoke && 7z x -osmoke ${{ matrix.artifact }}.zip >/dev/null
+                cd smoke
+                for required in TronGridLite.exe link.dll README.md LICENCE CHANGELOG.md; do
+                    [[ -e "$required" ]] || { echo "::error::The artefact is missing $required"; ls -la; exit 1; }
+                done
+                ls *.spv >/dev/null || { echo "::error::The artefact carries no shaders"; exit 1; }
+                ./TronGridLite.exe --version | tee version.txt
+                grep -q "TronGrid Lite" version.txt || { echo "::error::The packaged binary did not name itself"; exit 1; }
+
             - name: Upload artifact (Unix)
               if: runner.os != 'Windows'
               uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -192,7 +283,11 @@ jobs:
     release:
         name: Create Release
         needs: [validate, build]
+        # A dry run stops here: everything above ran as it would for a tag, and nothing below
+        # is done - the one step that cannot be taken back is the one a rehearsal skips.
+        if: needs.validate.outputs.is-release == 'true'
         runs-on: ubuntu-latest
+        timeout-minutes: 10
 
         steps:
             - name: Checkout repository
@@ -206,6 +301,17 @@ jobs:
             - name: List artifacts
               run: find artifacts -type f
 
+            # Every platform delivered, or nothing is published: a matrix leg that quietly failed
+            # to upload would otherwise become a release with a platform missing.
+            - name: Every artefact arrived
+              shell: bash
+              run: |
+                expected="tron-grid-lite-windows-x86_64 tron-grid-lite-linux-x86_64"
+                for name in $expected; do
+                    ls artifacts/*/"$name".* >/dev/null 2>&1 || { echo "::error::No artefact named $name arrived"; find artifacts -type f; exit 1; }
+                done
+                echo "All artefacts present: $expected"
+
             - name: Generate checksums
               shell: bash
               run: |
@@ -213,6 +319,8 @@ jobs:
                 find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec mv {} . \;
                 sha256sum *.tar.gz *.zip > SHA256SUMS.txt
                 cat SHA256SUMS.txt
+                # Read back what was just written: the file a downloader will check against.
+                sha256sum --check --strict SHA256SUMS.txt
 
             - name: Attest build provenance
               uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
@@ -265,8 +373,11 @@ jobs:
                     LATEST_FLAG=""
                 fi
 
-                # Create the release with gh CLI (more reliable than third-party actions)
+                # Create the release with gh CLI (more reliable than third-party actions) - as a
+                # draft. Publishing is the one irreversible step, and it stays a person's: the
+                # artefacts, the checksums and the attestation can all be looked at first.
                 gh release create "$TAG" \
+                    --draft \
                     --title "$TAG" \
                     --notes-file release_notes.md \
                     $LATEST_FLAG \
@@ -275,4 +386,13 @@ jobs:
                     artifacts/*.zip \
                     artifacts/SHA256SUMS.txt
 
-                echo "Release created: $TAG"
+                echo "Draft release created: $TAG"
+                {
+                    echo "## Draft release $TAG is ready"
+                    echo
+                    echo "Look it over, then publish it with:"
+                    echo
+                    echo '```'
+                    echo "gh release edit $TAG --draft=false"
+                    echo '```'
+                } >> "$GITHUB_STEP_SUMMARY"
