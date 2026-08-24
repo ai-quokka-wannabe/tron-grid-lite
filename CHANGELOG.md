@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The markdown linter is pinned and every job has a timeout.** Adopted from the owner's
+  `arm-cmake-toolchains` and `claude-chats-browser`: `package.json` + `package-lock.json` pin
+  markdownlint-cli2 to the byte, `npm ci` installs exactly that, the cache is keyed on the lock
+  file, and Dependabot proposes the bumps - a lint run is reproducible and a new linter release
+  can no longer redden an unrelated pull request. Every job carries a `timeout-minutes`, so
+  nothing can hang for the six-hour default.
 - **Every internal link and anchor is checked per pull request, the external ones weekly.**
   Adopted from the owner's `altium-designer-mcp`: `lychee --offline --include-fragments` in
   quick-checks, installed from its pinned release with a checksum rather than through a
