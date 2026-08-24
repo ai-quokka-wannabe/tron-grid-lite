@@ -12,3 +12,6 @@
 # Bytecode, which appears as soon as anything imports a tool rather than running it.
 __pycache__/
 *.pyc
+
+# The pinned markdown linter, installed by `npm ci`; the lock file is tracked, the modules are not.
+/node_modules/
