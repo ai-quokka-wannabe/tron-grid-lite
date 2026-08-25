@@ -113,7 +113,10 @@ because that call carries the tick length and a check that invented one would ha
 number the run would later contradict. `--program <name>` performs the same checks and then goes
 on: it loads the Program for real and hosts its creature in Master Control's world.
 
-The Grid loads the resolved file with `LoadLibrary` (Windows) or `dlopen` (Linux) and resolves
+The Grid loads the resolved file with `LoadLibraryEx` (Windows; the library's own directory is
+on the search path, so a Program may deploy the runtime it needs beside itself in `programs/` -
+rc-worm's panel deploys its Qt there - and the PATH is not) or `dlopen` (Linux; `$ORIGIN` in the
+library's RPATH does the same) and resolves
 exactly one exported symbol:
 
 ```c
