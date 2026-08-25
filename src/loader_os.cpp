@@ -79,7 +79,18 @@ namespace LoaderOs
         DWORD previous_mode{0u};
         const BOOL mode_changed{SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previous_mode)};
 
-        HMODULE module{LoadLibraryW(path.c_str())};
+        /*
+            LoadLibraryEx with the library's own directory on the search path, because a Program
+            is allowed to bring a runtime with it: rc-worm's panel deploys the Qt it needs beside
+            rc_worm.dll in programs/, and plain LoadLibrary would look in the Grid's directory,
+            the system's and the PATH - everywhere but there. LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
+            searches the loaded library's directory, and the whole of its dependency graph is
+            resolved the same way; LOAD_LIBRARY_SEARCH_DEFAULT_DIRS keeps the application's
+            directory and the system's. The current directory and the PATH are deliberately
+            left out: what a Program needs is beside it or the system's, never wherever the
+            operator happened to stand.
+        */
+        HMODULE module{LoadLibraryExW(path.c_str(), nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR | LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)};
         const DWORD load_error{GetLastError()};
 
         if (mode_changed != FALSE) {

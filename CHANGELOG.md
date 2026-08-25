@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **A Program may bring its runtime.** The loader opens a Program (and Link) with `LoadLibraryEx`
+  and the library's own directory on the search path - `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` with
+  the default directories - so what a Program deploys beside itself in `programs/` is found for
+  it and for everything it depends on, and the PATH and the current directory are not consulted
+  at all. rc-worm's panel is the first customer: its Qt lands beside `rc_worm.dll` by
+  `windeployqt`, and the Grid's process finds it there. Linux already did this through `$ORIGIN`.
 - **`/check-coherence`.** A documentation audit for contradictions between clauses that were
   each right when written, orphaned claims about the tree, facts stated twice against the
   single-source-of-truth table, scope drift and stale "today" sections - and one that is willing
