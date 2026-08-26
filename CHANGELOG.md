@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The chain (ABI v7, Link v7).** The owner's ruling (2026-08-26): a worm is a chain of
+  icosahedra joined spike to spike, and it undulates. The Grid's part: `TglRenderModel` declares
+  the chain - `segment_count` (the head counted, at most `TGL_SEGMENTS_MAX` = 8) and
+  `segment_spacing` - validated whole with the rest of the model and sent in the `REZ`; every
+  `TICK_STATE` row carries the trailing segments' poses, which the host hands the roster beside
+  the head's and the spectator blends segment by segment. A body stands in one instance per
+  segment, consecutive and sharing one hierarchy; `BvhLib::InstanceRange` replaces the single
+  skip everywhere a creature sees or hears through its own body, so a chain never deafens itself
+  on its own tail; the spectator's stage holds a whole chain per possible creature. The senses
+  stay on the head - a Program is told nothing of where its tail is; joint angle and joint rate
+  wait for a solver. A `tgl_driver_chained` fixture (the pyramid four times over, driving in a
+  turn) proves it through the DLL, the stage, the spectator's records and Master Control: a chain
+  of four lived 500 ticks in the world and Clu agreed. The fingerprint moved with the version.
 - **A Program may bring its runtime.** The loader opens a Program (and Link) with `LoadLibraryEx`
   and the library's own directory on the search path - `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` with
   the default directories - so what a Program deploys beside itself in `programs/` is found for

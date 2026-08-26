@@ -101,10 +101,15 @@ Stage::Stage(BvhLib::Bvh grid, std::vector<Material> grid_materials, const std::
         Body body{};
         body.creature_id = creature.body.creature_id;
         body.instance = static_cast<uint32_t>(m_scene.instances.size());
+        body.segment_count = creature.model.segment_count;
         body.geometry = geometry_index;
         m_bodies.push_back(body);
 
-        m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries.back(), geometry_index, poseTransform(creature.pose)));
+        // One instance per segment, the head first, all at the head's pose until the world's
+        // first telling places the trail: the geometry is one, the placements are many.
+        for (uint32_t segment{0u}; segment < body.segment_count; ++segment) {
+            m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries.back(), geometry_index, poseTransform(creature.pose)));
+        }
     }
 
     m_own_geometry_count = m_scene.geometries.size();
@@ -181,12 +186,28 @@ void Stage::setGuests(const std::unordered_map<uint32_t, WorldClientLib::Body>& 
         guest.creature_id = creature_id;
         guest.geometry = static_cast<uint32_t>(m_scene.geometries.size());
         guest.instance = static_cast<uint32_t>(m_scene.instances.size());
+        // The wire judged the count before this REZ was ever relayed; a zero here would be a
+        // relay of a refused body, which cannot happen, so it is read as one.
+        guest.segment_count = std::max(1u, offered.rez.segment_count);
         m_scene.geometries.push_back(BvhLib::build(std::move(triangles)));
-        m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries.back(), guest.geometry, MathLib::Mat4::identity()));
+        for (uint32_t segment{0u}; segment < guest.segment_count; ++segment) {
+            m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries.back(), guest.geometry, MathLib::Mat4::identity()));
+        }
         m_guests.push_back(guest);
     }
 
     cacheOffsets();
+}
+
+void Stage::placeChain(const Body& body, const RosterLib::Pose& head, const std::vector<RosterLib::Pose>& trail)
+{
+    // The head at its pose, each trailing segment at its own; a trail shorter than the chain
+    // (a telling from before the world placed it) leaves the rest where the head stands.
+    m_scene.instances[body.instance] = BvhLib::makeInstance(m_scene.geometries[body.geometry], body.geometry, poseTransform(head));
+    for (uint32_t segment{1u}; segment < body.segment_count; ++segment) {
+        const RosterLib::Pose& pose{(segment - 1u < trail.size()) ? trail[segment - 1u] : head};
+        m_scene.instances[body.instance + segment] = BvhLib::makeInstance(m_scene.geometries[body.geometry], body.geometry, poseTransform(pose));
+    }
 }
 
 void Stage::placeGuests(const std::vector<GuestTelling>& guests)
@@ -194,21 +215,21 @@ void Stage::placeGuests(const std::vector<GuestTelling>& guests)
     for (const Body& guest : m_guests) {
         for (const GuestTelling& telling : guests) {
             if (telling.creature_id == guest.creature_id) {
-                m_scene.instances[guest.instance] = BvhLib::makeInstance(m_scene.geometries[guest.geometry], guest.geometry, poseTransform(telling.pose));
+                placeChain(guest, telling.pose, telling.trail);
                 break;
             }
         }
     }
 }
 
-uint32_t Stage::guestInstanceOf(const uint32_t creature_id) const noexcept
+BvhLib::InstanceRange Stage::guestInstanceOf(const uint32_t creature_id) const noexcept
 {
     for (const Body& guest : m_guests) {
         if (guest.creature_id == creature_id) {
-            return guest.instance;
+            return BvhLib::InstanceRange{.first = guest.instance, .count = guest.segment_count};
         }
     }
-    return BvhLib::NO_INSTANCE;
+    return BvhLib::InstanceRange{};
 }
 
 void Stage::update(const std::vector<RosterLib::Creature>& creatures)
@@ -221,21 +242,21 @@ void Stage::update(const std::vector<RosterLib::Creature>& creatures)
     for (const Body& body : m_bodies) {
         for (const RosterLib::Creature& creature : creatures) {
             if (creature.body.creature_id == body.creature_id) {
-                m_scene.instances[body.instance] = BvhLib::makeInstance(m_scene.geometries[body.geometry], body.geometry, poseTransform(creature.pose));
+                placeChain(body, creature.pose, creature.trail);
                 break;
             }
         }
     }
 }
 
-uint32_t Stage::instanceOf(uint64_t creature_id) const noexcept
+BvhLib::InstanceRange Stage::instanceOf(uint64_t creature_id) const noexcept
 {
     for (const Body& body : m_bodies) {
         if (body.creature_id == creature_id) {
-            return body.instance;
+            return BvhLib::InstanceRange{.first = body.instance, .count = body.segment_count};
         }
     }
-    return BvhLib::NO_INSTANCE;
+    return BvhLib::InstanceRange{};
 }
 
 std::vector<BvhLib::InstanceRecord> Stage::flatInstances() const

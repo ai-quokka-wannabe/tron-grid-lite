@@ -123,7 +123,8 @@ namespace Acoustics
 
         //! True when nothing stands between two points held apart in open air. The epsilon keeps a
         //! probe from striking the very surface one of its endpoints was nudged off.
-        [[nodiscard]] bool segmentClear(const BvhLib::Scene& scene, const MathLib::Vec3& from, const MathLib::Vec3& to, uint32_t skip_a, uint32_t skip_b)
+        [[nodiscard]] bool segmentClear(const BvhLib::Scene& scene, const MathLib::Vec3& from, const MathLib::Vec3& to, const BvhLib::InstanceRange skip_a,
+            const BvhLib::InstanceRange skip_b)
         {
             const MathLib::Vec3 offset{to - from};
             const float length{std::sqrt(offset.dot(offset))};
@@ -146,7 +147,7 @@ namespace Acoustics
             answer for the terrace with a vertical mirror's arithmetic applied to a horizontal one.
         */
         [[nodiscard]] bool mirrorPointStands(const BvhLib::Scene& scene, const MathLib::Vec3& from, const MathLib::Vec3& point, const MathLib::Vec3& plane_normal,
-            uint32_t skip_a, uint32_t skip_b)
+            const BvhLib::InstanceRange skip_a, const BvhLib::InstanceRange skip_b)
         {
             const MathLib::Vec3 offset{point - from};
             const float length{std::sqrt(offset.dot(offset))};
@@ -322,7 +323,7 @@ namespace Acoustics
                     break;
                 }
 
-                const BvhLib::Hit hit{BvhLib::intersectScene(scene, origin, direction, remaining, config.skip_instance)};
+                const BvhLib::Hit hit{BvhLib::intersectScene(scene, origin, direction, remaining, config.skip_instance, BvhLib::InstanceRange{})};
                 if (!hit.valid) {
                     break; // Escaped. The Grid is an open plane, so most rays end here.
                 }

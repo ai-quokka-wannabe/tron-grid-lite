@@ -722,7 +722,7 @@ TEST_CASE(an_ear_sealed_in_anothers_hull_is_deaf_until_the_hull_is_its_own)
     const Acoustics::ImpulseResponse deaf{Acoustics::gather(scene, strengths, ear, sealed)};
 
     Acoustics::GatherConfig own_hull{plainConfig()};
-    own_hull.skip_instance = 1u;
+    own_hull.skip_instance = BvhLib::InstanceRange{.first = 1u, .count = 1u};
     const Acoustics::ImpulseResponse hearing{Acoustics::gather(scene, strengths, ear, own_hull)};
     TEST_CHECK(hearing.total() > 0.0f);
 
@@ -761,7 +761,7 @@ TEST_CASE(a_call_from_inside_a_hull_is_gagged_unless_the_hull_is_the_callers)
     TEST_CHECK(gagged.total() == 0.0f);
 
     Acoustics::CallConfig own_body{plainCallConfig()};
-    own_body.caller_instance = 0u;
+    own_body.caller_instance = BvhLib::InstanceRange{.first = 0u, .count = 1u};
     const Acoustics::ImpulseResponse carried{Acoustics::deliverCall(scene, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, CALL_EAR, own_body)};
     for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
         TEST_CHECK_CLOSE(carried.at(band, binOf(3.6f)), DIRECT_ENERGY, 1e-7f);

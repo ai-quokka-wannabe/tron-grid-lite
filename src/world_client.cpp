@@ -40,6 +40,19 @@ namespace
         const float turn{std::remainder(track.newest.yaw - track.previous.yaw, TWO_PI)};
         result.yaw = track.previous.yaw + turn * alpha;
         result.vocalisation = track.previous.vocalisation + (track.newest.vocalisation - track.previous.vocalisation) * alpha;
+        // The chain blends segment by segment the way the head does. A chain that just changed
+        // length (a re-rez) blends against itself: the newest telling's own poses stand.
+        result.segment_count = std::max(1u, track.newest.segment_count);
+        const bool same_chain{track.previous.segment_count == track.newest.segment_count};
+        for (std::uint32_t segment{0u}; segment + 1u < result.segment_count; ++segment) {
+            const LnkSegmentPose& now{track.newest.segments[segment]};
+            const LnkSegmentPose& before{same_chain ? track.previous.segments[segment] : now};
+            for (std::size_t axis = 0u; axis < 3u; ++axis) {
+                result.segments[segment].position[axis] = before.position[axis] + (now.position[axis] - before.position[axis]) * alpha;
+            }
+            const float segment_turn{std::remainder(now.yaw - before.yaw, TWO_PI)};
+            result.segments[segment].yaw = before.yaw + segment_turn * alpha;
+        }
         return result;
     }
 

@@ -116,6 +116,11 @@ namespace RosterLib
         std::vector<TglRenderTriangle> triangles;
         std::vector<TglRenderMaterial> materials;
 
+        //! The chain this mesh dresses: segments, the head counted, and their spacing along the
+        //! head's path. One and zero for a single rigid body, which is what a bodiless model is too.
+        uint32_t segment_count{1u};
+        float segment_spacing{0.0f};
+
         //! True when the body has no visible shape, which is a legitimate body and today's default.
         [[nodiscard]] bool empty() const noexcept
         {
@@ -191,6 +196,10 @@ namespace RosterLib
         CreatureModel model{};
 
         Pose pose{};
+
+        //! The trailing segments' poses, world frame, as the world placed them this tick: one per
+        //! segment after the head, `model.segment_count - 1` of them. Empty for a single body.
+        std::vector<Pose> trail;
 
         //! World-frame velocity, owned by the world's physics — Master Control's, since the
         //! simulation followed its owner out; a hosted body carries what the telling said.
@@ -282,6 +291,10 @@ namespace RosterLib
             rate - because that is what the body actually did, which is what a Program reads back.
         */
         void tellPose(uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, float yaw_rate, float vocalisation);
+
+        //! Where the world placed this creature's trailing segments this tick, world frame, in
+        //! chain order. Told beside the pose, every tick, by the host.
+        void tellTrail(uint32_t index, std::vector<Pose> trail);
 
         //! The owner's letter for one creature: what the body felt this tick, in body frame.
         void tellFeel(uint32_t index, bool grounded, const MathLib::Vec3& specific_force, std::vector<TglContact> contacts);

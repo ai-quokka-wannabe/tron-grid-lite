@@ -220,10 +220,11 @@ that the places protocols actually fail are the places this codebase already has
 
 - **Transport, v1: TCP, one connection per client, `TCP_NODELAY` on both ends, one coalesced
   write per tick.** WoW, EVE, FFXIV and Minecraft all shipped worlds on plain TCP; Minecraft is
-  the exact scale-point precedent (tiny payloads, 20 Hz, authoritative server). At roughly 500
-  bytes of world state per tick — a dozen creatures at ~40 bytes each — the entire server
-  broadcast is ~16 KB/s, three orders of magnitude below where the delta-compression and
-  reliability machinery of Quake 3 and Source earns its keep. The famous WoW/Nagle/delayed-ACK
+  the exact scale-point precedent (tiny payloads, 20 Hz, authoritative server). At roughly 2 KB
+  of world state per tick — a dozen creatures at 156 bytes each since protocol v7 carried the
+  chain in every row — the entire server broadcast is ~60 KB/s, still two orders of magnitude
+  below where the delta-compression and reliability machinery of Quake 3 and Source earns its
+  keep. The famous WoW/Nagle/delayed-ACK
   pathology is avoided by construction: NODELAY plus one write per tick.
 - **But UDP semantics at the message layer, from day one.** Every message self-contained and
   tick-stamped; nothing means anything by its position in the stream; the server executes the
@@ -325,6 +326,29 @@ that the places protocols actually fail are the places this codebase already has
   throws away. When the periodic hash ever disagrees, the report is a server-versus-replay
   state diff with floats serialised as hex — a hash says *that* two worlds diverged; only the
   diff says *where*, and only hex makes the diff readable.
+
+### The chain
+
+The owner's ruling (2026-08-26): a worm is a chain of icosahedra joined spike to spike, and it
+undulates. Protocol v7 carries it, and the division of labour follows the doctrine above:
+
+- **The Program authors the chain** in its render model — how many segments wear the mesh
+  (`segment_count`, the head counted, at most eight) and how far apart their origins sit along
+  the head's path (`segment_spacing`). The joint between two segments is the mesh's own: a stub
+  on each of the two spikes that meet, so no joint geometry travels.
+- **Master Control places it.** The head is the one rigid body physics steps, exactly as before.
+  Every trailing segment is *kinematic trail*: a ring of the head's past poses per creature,
+  sampled by distance, fixed at rez and hashed whole, and each segment stands one spacing
+  further back along that path, facing the way the path runs there. Segments touch nothing; the
+  contacts are the head's. Nothing is articulated and nothing is solved, which is why the
+  rigid-body solver in the deferred table below stays deferred: a trail is not the trigger, and
+  saying so here keeps anyone from reading it as one.
+- **`TICK_STATE` carries a pose per segment** in every row — a fixed array of seven after the
+  head, so rows stay a copy-by-count and the Disk's reader never learned a variable stride; the
+  slots beyond a chain are zero and a nonzero one is refused, because a tick's bytes are hashed.
+- **The Grid draws the mesh once per segment**, consecutive instances sharing one hierarchy, and
+  a creature's own senses see through the whole chain of its body, tail included. The senses stay
+  on the head; a Program is told nothing of where its tail is.
 
 ## The spectator
 

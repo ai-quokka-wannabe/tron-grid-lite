@@ -370,9 +370,12 @@ Points worth stating plainly, because they are the whole design:
   whether that amounts to pain is the Program's business, and pain is cognition wearing a sensory
   costume.
 - **A Program is never handed a diagram of its own body** — no segment lengths, no rest pose, no
-  kinematic tree, and no joint angles while the body is a single rigid piece. Nowhere in an animal is
-  there such a model either. What a creature gets is where it was touched, how it is moving and what
-  it can sense, and the shape of itself is something it may learn rather than something it is told.
+  kinematic tree, and no joint angles. A chain's trailing segments are placed by the world and are
+  not reported back as a sense: a chain feels, sees and hears with its head, and what its tail is
+  doing it may infer from how it moved. Nowhere in an animal is there such a model either. What a
+  creature gets is where it was touched, how it is moving and what it can sense, and the shape of
+  itself is something it may learn rather than something it is told. Joint angle and joint rate
+  arrive as senses with a solver that bends a joint, not before.
 - Every field is populated. A modality that does not exist yet has no field waiting for it — the
   struct describes what the Grid can currently sense, and gains members when that changes.
 - **An ear delivers an impulse response, not a sound.** It says how much energy arrived in each
@@ -587,11 +590,22 @@ for.
 **The Grid keeps what it must.** The material model is the Grid's — a body is built of the same
 mirror, glow and glass every surface of the Grid is, and nothing in the model can express a
 texture because nothing on the Grid can. The frame is the body frame, in metres, one rigid piece
-like the body it dresses. And the Grid validates the whole model before accepting any of it: an
-index out of range, a value that is not a number, a triangle with no area or a material Snell's
-law cannot bend refuses the rez outright — accepted entire or refused entire, because a silent
-repair would ship a body its author never saw, and a poisoned hierarchy fails somewhere else
-entirely on behalf of every creature at once.
+per segment. And the Grid validates the whole model before accepting any of it: an index out of
+range, a value that is not a number, a triangle with no area, a material Snell's law cannot bend,
+or a chain that lies about itself refuses the rez outright — accepted entire or refused entire,
+because a silent repair would ship a body its author never saw, and a poisoned hierarchy fails
+somewhere else entirely on behalf of every creature at once.
+
+**A body may be a chain (ABI v7, the owner's ruling of 2026-08-26).** The model declares
+`segment_count` — the head counted, one to `TGL_SEGMENTS_MAX` — and `segment_spacing`, the
+metres between consecutive segments' origins along the head's path; every segment wears this one
+mesh. The head is the rigid body the world's physics steps. Every trailing segment is *kinematic
+trail*: Master Control places it one spacing further back along the path the head actually
+walked, so the chain bends where the head turned and undulates as the User weaves — nothing is
+articulated, nothing is solved, and TOPOLOGY.md's deferred rigid-body solver stays deferred. The
+joint between two segments is the model's own business: a stub on each of the two spikes that
+meet, authored into the mesh, so the wire carries poses and nothing else. A single body declares
+one segment and no spacing; a chain declares a positive one; anything else refuses the rez.
 
 **Offering no model is a legitimate body, and it is today's default.** A zeroed model is a creature
 with no visible shape, exactly what every body has been until now.
@@ -603,11 +617,13 @@ genome is in — and what its body actually does in the world it still learns th
 does, by bumping into things.
 
 **And the staging is built.** An accepted model becomes a hierarchy of its own at rez — built once,
-because a rigid body's hierarchy never needs rebuilding — and stands in the world as an instance
-whose transform follows the pose each tick. Other creatures see it, their calls shadow behind it,
-and the hum bends around it. A creature's own senses see *through* its own hull, deliberately: its
-ears sit on its body and its voice leaves from inside it, so a hull that blocked its own sensors
-would deafen and gag the body it belongs to. What is lost with that first cut is the creature's
+because a rigid body's hierarchy never needs rebuilding — and stands in the world as one instance
+per segment, consecutive, all sharing that hierarchy, each transform following its segment's pose
+each tick. Other creatures see it, their calls shadow behind it, and the hum bends around it. A
+creature's own senses see *through* its own hull — the whole chain of it, head and trail —
+deliberately: its ears sit on its body and its voice leaves from inside it, so a hull that blocked
+its own sensors would deafen and gag the body it belongs to, and a tail that blocked them would
+deafen it the moment it turned. What is lost with that first cut is the creature's
 own head shadow, which needs sensors modelled proud of the hull — the body author's business, not
 the Grid's.
 

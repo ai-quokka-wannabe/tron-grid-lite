@@ -225,6 +225,32 @@ TEST_CASE(a_model_offered_at_rez_arrives_whole)
     TEST_CHECK_EQUAL(model.materials[0].transmission, 0.0f); // The hull is an opaque mirror.
 }
 
+TEST_CASE(a_chain_declared_at_rez_arrives_whole_and_a_single_body_declares_none)
+{
+    // One library per run: each roster lives in its own scope so the next may load.
+    {
+        // The chained fixture: the modelled pyramid four times over, three tenths of a metre apart.
+        RosterLib::Roster chained{fixtureDirectory(), "tgl_driver_chained", 1u, flatGround()};
+        const RosterLib::CreatureModel& chain{chained.creatures().front().model};
+        TEST_CHECK_EQUAL(chain.segment_count, 4u);
+        TEST_CHECK_CLOSE(chain.segment_spacing, 0.3f, 1e-6f);
+        TEST_CHECK_EQUAL(chain.vertex_positions.size(), 4u);
+        TEST_CHECK(chained.creatures().front().trail.empty()); // Nothing placed until the world tells.
+    }
+    {
+        // The single-bodied fixture: a chain of one with no spacing.
+        RosterLib::Roster modelled{fixtureDirectory(), "tgl_driver_modelled", 1u, flatGround()};
+        TEST_CHECK_EQUAL(modelled.creatures().front().model.segment_count, 1u);
+        TEST_CHECK_EQUAL(modelled.creatures().front().model.segment_spacing, 0.0f);
+    }
+    {
+        // And the bodiless one, the same.
+        RosterLib::Roster bodiless{fixtureDirectory(), "tgl_driver_steady", 1u, flatGround()};
+        TEST_CHECK_EQUAL(bodiless.creatures().front().model.segment_count, 1u);
+        TEST_CHECK_EQUAL(bodiless.creatures().front().model.segment_spacing, 0.0f);
+    }
+}
+
 TEST_CASE(a_model_naming_a_vertex_that_does_not_exist_refuses_the_whole_rez)
 {
     // The misshapen fixture's port flank names vertex nine of a model with four. Accepting the

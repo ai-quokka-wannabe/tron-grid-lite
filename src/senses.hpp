@@ -197,7 +197,7 @@ private:
         MathLib::Vec3 position{};
         MathLib::Vec3 velocity{};
         float strength{0.0f};
-        uint32_t caller_instance{BvhLib::NO_INSTANCE};
+        BvhLib::InstanceRange caller_instance{};
     };
 
     //! Four floats at the alignment `TglEyeView::samples` promises; eye storage is a vector of these.

@@ -40,17 +40,21 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
     */
     m_bodies_moved = false;
     if (m_stage != nullptr) {
+        // Every placement a body has - the head's and its trail's - because a tail that swung
+        // into view is a body moving as much as a head is.
         std::vector<RosterLib::Pose> poses;
         for (const RosterLib::Creature& creature : creatures) {
             if (!creature.model.empty()) {
                 poses.push_back(creature.pose);
+                poses.insert(poses.end(), creature.trail.begin(), creature.trail.end());
             }
         }
         // The guests' poses count as bodies moving too: a neighbour that walked into view is
         // as much a reason to re-trace as the listener turning its head.
         for (const Stage::GuestTelling& guest : m_guests) {
-            if (m_stage->guestInstanceOf(guest.creature_id) != BvhLib::NO_INSTANCE) {
+            if (!m_stage->guestInstanceOf(guest.creature_id).empty()) {
                 poses.push_back(guest.pose);
+                poses.insert(poses.end(), guest.trail.begin(), guest.trail.end());
             }
         }
 
@@ -79,7 +83,7 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
             m_calls.push_back(Call{.position = creature.pose.position,
                 .velocity = creature.velocity,
                 .strength = creature.vocalisation,
-                .caller_instance = (m_stage != nullptr) ? m_stage->instanceOf(creature.body.creature_id) : BvhLib::NO_INSTANCE});
+                .caller_instance = (m_stage != nullptr) ? m_stage->instanceOf(creature.body.creature_id) : BvhLib::InstanceRange{}});
         }
     }
     // The guests' calls, exactly as the hosted ones: from where the world says they stand,
@@ -89,7 +93,7 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
             m_calls.push_back(Call{.position = guest.pose.position,
                 .velocity = guest.velocity,
                 .strength = guest.vocalisation,
-                .caller_instance = (m_stage != nullptr) ? m_stage->guestInstanceOf(guest.creature_id) : BvhLib::NO_INSTANCE});
+                .caller_instance = (m_stage != nullptr) ? m_stage->guestInstanceOf(guest.creature_id) : BvhLib::InstanceRange{}});
         }
     }
 }
@@ -163,7 +167,7 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
     m_ear_views.resize(body.ear_count);
 
     // The listener's own body, which its ears hear through rather than into.
-    const uint32_t own_instance{(m_stage != nullptr) ? m_stage->instanceOf(body.creature_id) : BvhLib::NO_INSTANCE};
+    const BvhLib::InstanceRange own_instance{(m_stage != nullptr) ? m_stage->instanceOf(body.creature_id) : BvhLib::InstanceRange{}};
 
     for (uint32_t index{0u}; index < body.ear_count; ++index) {
         const TglEarDesc& ear{body.ears[index]};
@@ -351,9 +355,11 @@ void GridSensesSource::fillVision(const RosterLib::Creature& creature, TglSenses
                 case.
             */
             std::vector<BvhLib::InstanceRecord> records{m_stage->flatInstances()};
-            const uint32_t own_instance{m_stage->instanceOf(body.creature_id)};
-            if (own_instance < records.size()) {
-                records[own_instance].node_count = 0u;
+            const BvhLib::InstanceRange own{m_stage->instanceOf(body.creature_id)};
+            for (uint32_t index{0u}; index < records.size(); ++index) {
+                if (own.contains(index)) {
+                    records[index].node_count = 0u; // The whole chain: head and every segment.
+                }
             }
             m_radiance_solver->stage(records);
         }

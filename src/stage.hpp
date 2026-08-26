@@ -87,6 +87,8 @@ public:
         RosterLib::Pose pose{};
         MathLib::Vec3 velocity{};
         float vocalisation{0.0f};
+        //! The trailing segments' poses, world frame, chain order; empty for a single body.
+        std::vector<RosterLib::Pose> trail;
     };
 
     /*!
@@ -101,8 +103,9 @@ public:
     //! Moves every shaped guest's instance to the pose the world told. Called each tick.
     void placeGuests(const std::vector<GuestTelling>& guests);
 
-    //! The instance a shaped guest stands in, or `BvhLib::NO_INSTANCE` for one with no shape.
-    [[nodiscard]] uint32_t guestInstanceOf(uint32_t creature_id) const noexcept;
+    //! The instances a shaped guest stands in - its head and every trailing segment, consecutive -
+    //! or an empty range for one with no shape.
+    [[nodiscard]] BvhLib::InstanceRange guestInstanceOf(uint32_t creature_id) const noexcept;
 
     //! The scene, for the host tracers. Instances move under `update`; geometries change only under `setGuests`.
     [[nodiscard]] const BvhLib::Scene& scene() const noexcept
@@ -123,9 +126,10 @@ public:
         return m_acoustic_strengths;
     }
 
-    //! The instance a creature's body stands in, or `BvhLib::NO_INSTANCE` for a bodiless one.
-    //! This is what a creature's own senses pass as their skip.
-    [[nodiscard]] uint32_t instanceOf(uint64_t creature_id) const noexcept;
+    //! The instances a creature's body stands in - its head and every trailing segment, consecutive
+    //! and sharing one geometry - or an empty range for a bodiless one. This is what a creature's
+    //! own senses pass as their skip: the whole chain is transparent to its own eyes and ears.
+    [[nodiscard]] BvhLib::InstanceRange instanceOf(uint64_t creature_id) const noexcept;
 
     //! The whole scene in upload form. Construction-time work: a consumer keeps the nodes and
     //! triangles, and refreshes only what `flatInstances` returns.
@@ -147,9 +151,13 @@ private:
     //! One modelled creature's standing in the scene.
     struct Body {
         uint64_t creature_id{0u};
-        uint32_t instance{BvhLib::NO_INSTANCE}; //!< Index into the scene's instances.
-        uint32_t geometry{0u}; //!< Index into the scene's geometries.
+        uint32_t instance{BvhLib::NO_INSTANCE}; //!< Index of the head's instance; the trail follows it.
+        uint32_t segment_count{1u}; //!< Instances this body occupies, the head counted.
+        uint32_t geometry{0u}; //!< Index into the scene's geometries, shared by every segment.
     };
+
+    //! One transform per segment of a body: the head at its pose, each trailing segment at its.
+    void placeChain(const Body& body, const RosterLib::Pose& head, const std::vector<RosterLib::Pose>& trail);
 
     BvhLib::Scene m_scene;
     std::vector<Material> m_materials;
