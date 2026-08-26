@@ -66,6 +66,10 @@ namespace WorldClientLib
         float position[3]{};
         float yaw{0.0f};
         float vocalisation{0.0f};
+        //! The chain: segments, the head counted, and the trailing segments' poses blended the
+        //! same way, `segment_count - 1` of them meaningful.
+        std::uint32_t segment_count{1u};
+        LnkSegmentPose segments[LNK_SEGMENTS_MAX - 1u]{};
     };
 
     /*!

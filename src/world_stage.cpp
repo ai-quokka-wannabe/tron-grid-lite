@@ -175,13 +175,25 @@ namespace WorldStageLib
             static_cast<std::uint32_t>(m_scene.geometries[0].nodes.size())));
 
         for (const WorldClientLib::InterpolatedCreature& creature : creatures) {
-            const RosterLib::Pose pose{.position = MathLib::Vec3{creature.position[0], creature.position[1], creature.position[2]}, .yaw = creature.yaw};
             // Its own shape when REZ gave it one; the placeholder otherwise.
             const auto shaped{m_geometry_of.find(creature.creature_id)};
             const std::uint32_t geometry{(shaped != m_geometry_of.end()) ? shaped->second : 1u};
-            const BvhLib::Instance instance{BvhLib::makeInstance(m_scene.geometries[geometry], geometry, poseTransform(pose))};
-            result.push_back(BvhLib::flattenInstance(instance, m_node_offsets[geometry], m_triangle_offsets[geometry],
-                static_cast<std::uint32_t>(m_scene.geometries[geometry].nodes.size())));
+            const auto place = [&](const RosterLib::Pose& pose) {
+                const BvhLib::Instance instance{BvhLib::makeInstance(m_scene.geometries[geometry], geometry, poseTransform(pose))};
+                result.push_back(BvhLib::flattenInstance(instance, m_node_offsets[geometry], m_triangle_offsets[geometry],
+                    static_cast<std::uint32_t>(m_scene.geometries[geometry].nodes.size())));
+            };
+            // The head, then every trailing segment, each at its own pose, all one geometry.
+            place(RosterLib::Pose{.position = MathLib::Vec3{creature.position[0], creature.position[1], creature.position[2]}, .yaw = creature.yaw});
+            const std::uint32_t segments{std::min(creature.segment_count, LNK_SEGMENTS_MAX)};
+            for (std::uint32_t segment{0u}; segment + 1u < segments; ++segment) {
+                const LnkSegmentPose& placed{creature.segments[segment]};
+                place(RosterLib::Pose{.position = MathLib::Vec3{placed.position[0], placed.position[1], placed.position[2]}, .yaw = placed.yaw});
+            }
+        }
+        if (result.size() > instanceCapacity()) {
+            throw std::runtime_error{
+                "More placements than this stage was built for: " + std::to_string(result.size()) + " of " + std::to_string(instanceCapacity()) + "."};
         }
         return result;
     }

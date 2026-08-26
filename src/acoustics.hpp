@@ -314,7 +314,8 @@ namespace Acoustics
         float range_metres{RANGE_METRES};
 
         /*!
-            Scene instance this gather's rays pass through, `BvhLib::NO_INSTANCE` for none.
+            Scene instances this gather's rays pass through - a creature's whole body, head and
+            chain - empty for none.
 
             The listener's own body: an ear sits on or in its creature's hull, and a hull that
             blocked its own ears would deafen the body it belongs to. Excluding one instance is the
@@ -322,7 +323,7 @@ namespace Acoustics
             shadow, which needs the sensors modelled proud of the hull, and that is the body
             author's business.
         */
-        uint32_t skip_instance{BvhLib::NO_INSTANCE};
+        BvhLib::InstanceRange skip_instance{};
     };
 
     /*!
@@ -506,15 +507,16 @@ namespace Acoustics
         uint32_t occlusion_sample_count{6u};
 
         /*!
-            Scene instances this delivery's rays pass through, `BvhLib::NO_INSTANCE` for none.
+            Scene instances this delivery's rays pass through - each a creature's whole body, head
+            and chain - empty for none.
 
             The caller's body and the listener's body — the call leaves from inside the caller's
             hull and arrives at an ear on or in the listener's, so a delivery that let either hull
             block its own rays would gag every voice and deafen every ear the moment bodies became
             real. Everyone else's body occludes honestly, which is most of what a body is for.
         */
-        uint32_t caller_instance{BvhLib::NO_INSTANCE};
-        uint32_t listener_instance{BvhLib::NO_INSTANCE};
+        BvhLib::InstanceRange caller_instance{};
+        BvhLib::InstanceRange listener_instance{};
     };
 
     /*!

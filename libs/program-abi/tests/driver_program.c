@@ -42,7 +42,7 @@ static int g_creature_state = 0;
 static int g_rezzed = 0;
 #endif
 
-#if defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN)
+#if defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN) || defined(TGL_DRIVER_CHAINED)
 /* A little pyramid of a body: four vertices, four faces, a near-black mirror hull and one glowing
    tail face. Small enough that a test can check every number by hand, and real enough to exercise
    every array a model carries. The nose sits at the head sensors' station. */
@@ -67,7 +67,7 @@ static const TglRenderMaterial g_model_materials[] = {
 };
 #endif
 
-#if defined(TGL_DRIVER_MODELLED)
+#if defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_CHAINED)
 static const TglRenderTriangle g_model_triangles[] = {
     {{0u, 2u, 1u}, 0u}, /* belly */
     {{0u, 1u, 3u}, 0u}, /* port flank */
@@ -111,7 +111,7 @@ static TglProgram* programRez(const TglCreatureDesc* desc, TglRenderModel* model
     (void)&g_creature_state;
     return NULL;
 #else
-#if defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN)
+#if defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN) || defined(TGL_DRIVER_CHAINED)
     /* The Program's own storage, borrowed for this call exactly as the descriptor's arrays are
        borrowed in the other direction. The Grid copies what it accepts before the call returns. */
     model->vertex_positions = g_model_vertices;
@@ -120,6 +120,13 @@ static TglProgram* programRez(const TglCreatureDesc* desc, TglRenderModel* model
     model->vertex_count = 4u;
     model->triangle_count = 4u;
     model->material_count = 2u;
+    model->segment_count = 1u;
+    model->segment_spacing = 0.0f;
+#endif
+#if defined(TGL_DRIVER_CHAINED)
+    /* The same pyramid four times over: a chain of four, three tenths of a metre apart. */
+    model->segment_count = 4u;
+    model->segment_spacing = 0.3f;
 #endif
     return (TglProgram*)&g_creature_state;
 #endif
@@ -153,6 +160,11 @@ static void programTick(TglProgram* program, const TglSenses* senses, TglActions
     /* Writes nothing at all, which is legitimate: the Grid zeroes the actions before every call, so
        a Program with nothing to say coasts to a stop rather than repeating itself. */
     (void)actions;
+#elif defined(TGL_DRIVER_CHAINED)
+    /* Walks and turns, so the chain the world places behind it bends where it turned: a little
+       over half the body's limit, a quarter turn a second. */
+    actions->desired_forward_speed = 0.6f;
+    actions->desired_turn_rate = 0.5f;
 #elif defined(TGL_DRIVER_MODELLED) || defined(TGL_DRIVER_MISSHAPEN)
     /* The body is the point; the Program stands. The misshapen variant never reaches this line,
        because its rez is refused, but the branch keeps the two variants one line apart. */

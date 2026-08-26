@@ -21,6 +21,9 @@
 #include <array>
 #include <stdexcept>
 
+// The ABI's cap and the wire's are one number, held together here, where the Grid speaks both.
+static_assert(TGL_SEGMENTS_MAX == LNK_SEGMENTS_MAX, "TGL_SEGMENTS_MAX and LNK_SEGMENTS_MAX drifted apart");
+
 namespace WorldHostLib
 {
 
@@ -139,7 +142,9 @@ namespace WorldHostLib
                 .max_contact_count = creature.body.max_contact_count,
                 .vertex_count = static_cast<std::uint32_t>(vertices.size()),
                 .triangle_count = static_cast<std::uint32_t>(triangles.size()),
-                .material_count = static_cast<std::uint32_t>(materials.size())};
+                .material_count = static_cast<std::uint32_t>(materials.size()),
+                .segment_count = creature.model.segment_count,
+                .segment_spacing = creature.model.segment_spacing};
 
             const LnkStatus status{m_library.vtable().send_rez(m_connection, &rez, vertices.empty() ? nullptr : vertices.data(),
                 triangles.empty() ? nullptr : triangles.data(), materials.empty() ? nullptr : materials.data())};
@@ -250,12 +255,22 @@ namespace WorldHostLib
             // read completes inside this call.
             const LnkCreatureState& state{view.states[row]};
             const RosterLib::Pose pose{.position = MathLib::Vec3{state.position[0], state.position[1], state.position[2]}, .yaw = state.yaw};
+            // The chain, as the world placed it: the trailing segments' poses, in chain order.
+            // The wire refused any row whose count was out of range before this read.
+            std::vector<RosterLib::Pose> trail;
+            const std::uint32_t trailing{(state.segment_count > 1u) ? (state.segment_count - 1u) : 0u};
+            trail.reserve(trailing);
+            for (std::uint32_t segment{0u}; segment < trailing; ++segment) {
+                const LnkSegmentPose& placed{state.segments[segment]};
+                trail.push_back(RosterLib::Pose{.position = MathLib::Vec3{placed.position[0], placed.position[1], placed.position[2]}, .yaw = placed.yaw});
+            }
             if (isOwn(state.creature_id)) {
                 for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
                     if (state.creature_id == wireIdentity(index)) {
                         // The voice too: what the world sounded, clamped by its law, so the
                         // own ears hear the same call every other ear hears.
                         m_roster.tellPose(index, pose, MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]}, state.yaw_rate, state.vocalisation);
+                        m_roster.tellTrail(index, trail);
                     }
                 }
             } else {
@@ -263,7 +278,8 @@ namespace WorldHostLib
                 m_guests_being_told.push_back(Stage::GuestTelling{.creature_id = state.creature_id,
                     .pose = pose,
                     .velocity = MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]},
-                    .vocalisation = state.vocalisation});
+                    .vocalisation = state.vocalisation,
+                    .trail = std::move(trail)});
             }
         }
     }

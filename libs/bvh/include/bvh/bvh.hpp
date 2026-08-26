@@ -272,6 +272,31 @@ namespace BvhLib
         uint32_t skip_instance_a = NO_INSTANCE, uint32_t skip_instance_b = NO_INSTANCE);
 
     /*!
+        A run of consecutive instances, which is what one creature stands in since bodies became
+        chains: its head and every trailing segment, placed one after another. `NO_INSTANCE` with a
+        count of zero names nothing, which is every caller that predates creatures having bodies.
+    */
+    struct InstanceRange {
+        uint32_t first{NO_INSTANCE};
+        uint32_t count{0u};
+
+        [[nodiscard]] bool contains(const uint32_t index) const noexcept
+        {
+            return (first != NO_INSTANCE) && (index >= first) && (index - first < count);
+        }
+
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return (first == NO_INSTANCE) || (count == 0u);
+        }
+    };
+
+    //! `intersectScene` with the two skips as runs rather than single instances: a chain's whole
+    //! body is transparent to its own senses, exactly as one rigid body was.
+    [[nodiscard]] Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance, InstanceRange skip_a,
+        InstanceRange skip_b);
+
+    /*!
         One instance in the form the shader reads: 144 bytes, std430, ready to upload.
 
         `Scene` is the shape the host wants — a vector of hierarchies and a vector of placements that

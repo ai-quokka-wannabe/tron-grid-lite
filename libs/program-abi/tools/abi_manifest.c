@@ -102,6 +102,8 @@
     X(TglRenderModel, vertex_count) \
     X(TglRenderModel, triangle_count) \
     X(TglRenderModel, material_count) \
+    X(TglRenderModel, segment_count) \
+    X(TglRenderModel, segment_spacing) \
     X(TglRenderModel, padding0)
 
 #define TGL_EYE_VIEW_MEMBERS(X) \

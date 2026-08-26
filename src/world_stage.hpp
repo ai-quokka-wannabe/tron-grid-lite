@@ -70,10 +70,11 @@ namespace WorldStageLib
             return m_materials;
         }
 
-        //! Placements the instance buffer must hold: the Grid, plus a body per possible creature.
+        //! Placements the instance buffer must hold: the Grid, plus a whole chain per possible
+        //! creature - every creature may be the longest chain the wire admits.
         [[nodiscard]] std::uint32_t instanceCapacity() const noexcept
         {
-            return 1u + m_creature_capacity;
+            return 1u + (m_creature_capacity * LNK_SEGMENTS_MAX);
         }
 
         /*!
@@ -84,7 +85,8 @@ namespace WorldStageLib
         [[nodiscard]] BvhLib::FlatScene flatScene() const;
 
         /*!
-            The Grid's placement followed by one placeholder body per creature, poses applied.
+            The Grid's placement followed by one placement per segment of every creature - the
+            head's pose, then each trailing segment's - sharing the creature's geometry.
 
             The per-frame shape: 144-byte records ready for the tracer's dynamic instance path, in
             the order given so a creature keeps its row while it lives. More creatures than the

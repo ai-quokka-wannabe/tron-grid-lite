@@ -224,6 +224,23 @@ namespace
             out.materials.push_back(material);
         }
 
+        // The chain: a count in range, a spacing that fits it - a single body has none, a chain
+        // has a positive finite one. Refused by name, like every other lie a model can tell.
+        if ((model.segment_count == 0u) || (model.segment_count > TGL_SEGMENTS_MAX)) {
+            throw std::runtime_error{"the model declares " + std::to_string(model.segment_count) + " segments; a chain has one to " + std::to_string(TGL_SEGMENTS_MAX)};
+        }
+        if (!std::isfinite(model.segment_spacing)) {
+            throw std::runtime_error{"the model's segment spacing is not finite"};
+        }
+        if ((model.segment_count == 1u) && (model.segment_spacing != 0.0f)) {
+            throw std::runtime_error{"a single body declares a segment spacing, which nothing could be spaced by"};
+        }
+        if ((model.segment_count > 1u) && !(model.segment_spacing > 0.0f)) {
+            throw std::runtime_error{"a chain of " + std::to_string(model.segment_count) + " declares no spacing between its segments"};
+        }
+        out.segment_count = model.segment_count;
+        out.segment_spacing = model.segment_spacing;
+
         return out;
     }
 
@@ -410,6 +427,11 @@ namespace RosterLib
         creature.vocalisation = vocalisation;
         const MathLib::Vec3 forward{forwardFor(pose.yaw)};
         creature.forward_speed = (velocity.x * forward.x) + (velocity.z * forward.z);
+    }
+
+    void Roster::tellTrail(const uint32_t index, std::vector<Pose> trail)
+    {
+        m_creatures.at(index).trail = std::move(trail);
     }
 
     void Roster::tellFeel(const uint32_t index, const bool grounded, const MathLib::Vec3& specific_force, std::vector<TglContact> contacts)

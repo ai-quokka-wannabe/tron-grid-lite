@@ -73,7 +73,7 @@ TEST_CASE(the_empty_world_is_the_grid_alone)
 {
     const WorldStageLib::WorldStage stage{makeLittleGrid(), makeLittleMaterials(), 4u};
 
-    TEST_CHECK_EQUAL(stage.instanceCapacity(), 5u);
+    TEST_CHECK_EQUAL(stage.instanceCapacity(), 1u + (4u * LNK_SEGMENTS_MAX)); // A whole chain per creature.
     TEST_CHECK_EQUAL(stage.materials().size(), 3u);
 
     const std::vector<BvhLib::InstanceRecord> records{stage.records({})};
@@ -120,6 +120,51 @@ TEST_CASE(a_creature_stands_in_the_placeholder_body_at_its_pose)
     TEST_CHECK_CLOSE(returned.x, nose_body.x, 1e-5f);
     TEST_CHECK_CLOSE(returned.y, nose_body.y, 1e-5f);
     TEST_CHECK_CLOSE(returned.z, nose_body.z, 1e-5f);
+}
+
+TEST_CASE(a_chain_is_a_record_per_segment_each_at_its_own_pose)
+{
+    const WorldStageLib::WorldStage stage{makeLittleGrid(), makeLittleMaterials(), 4u};
+
+    WorldClientLib::InterpolatedCreature creature{};
+    creature.creature_id = 7u;
+    creature.position[0] = 2.0f;
+    creature.position[1] = 0.05f;
+    creature.position[2] = -3.0f;
+    creature.yaw = 0.0f;
+    creature.segment_count = 3u;
+    creature.segments[0] = LnkSegmentPose{.position = {2.0f, 0.05f, -2.5f}, .yaw = 0.3f};
+    creature.segments[1] = LnkSegmentPose{.position = {2.2f, 0.05f, -2.0f}, .yaw = 0.6f};
+
+    const std::vector<BvhLib::InstanceRecord> records{stage.records({creature})};
+    TEST_CHECK_EQUAL(records.size(), 4u); // The Grid, the head, two trailing segments.
+
+    const MathLib::Vec3 nose_body{0.0f, 0.0f, -RosterLib::BODY_HALF_LENGTH};
+    for (std::uint32_t segment{1u}; segment < 3u; ++segment) {
+        const LnkSegmentPose& placed{creature.segments[segment - 1u]};
+        const RosterLib::Pose pose{.position = MathLib::Vec3{placed.position[0], placed.position[1], placed.position[2]}, .yaw = placed.yaw};
+        const MathLib::Vec3 expected{RosterLib::worldFromBody(pose, nose_body)};
+        const BvhLib::InstanceRecord& record{records[1u + segment]};
+        const MathLib::Vec3 got{applyRows(record.to_world_row0, record.to_world_row1, record.to_world_row2, nose_body)};
+        TEST_CHECK_CLOSE(got.x, expected.x, 1e-5f);
+        TEST_CHECK_CLOSE(got.z, expected.z, 1e-5f);
+        // Every segment shares the head's geometry.
+        TEST_CHECK_EQUAL(record.node_offset, records[1].node_offset);
+    }
+
+    // Four creatures of eight segments is the capacity; a fifth chain is refused, not truncated.
+    std::vector<WorldClientLib::InterpolatedCreature> crowd(5u, creature);
+    for (std::uint32_t index{0u}; index < crowd.size(); ++index) {
+        crowd[index].creature_id = 10u + index;
+        crowd[index].segment_count = LNK_SEGMENTS_MAX;
+    }
+    bool refused{false};
+    try {
+        static_cast<void>(stage.records(crowd));
+    } catch (const std::runtime_error&) {
+        refused = true;
+    }
+    TEST_CHECK(refused);
 }
 
 TEST_CASE(a_creature_whose_rez_carried_a_shape_wears_it_and_the_rest_keep_the_placeholder)

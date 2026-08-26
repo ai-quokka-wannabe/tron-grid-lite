@@ -476,8 +476,8 @@ TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
     std::unordered_map<uint32_t, WorldClientLib::Body> bodies;
     bodies[777u] = shade;
     stage.setGuests(bodies);
-    TEST_CHECK(stage.guestInstanceOf(777u) != BvhLib::NO_INSTANCE);
-    TEST_CHECK(stage.guestInstanceOf(778u) == BvhLib::NO_INSTANCE);
+    TEST_CHECK(!stage.guestInstanceOf(777u).empty());
+    TEST_CHECK(stage.guestInstanceOf(778u).empty());
 
     GridSensesSource source{stage.scene(), unitStrengths(), {}, nullptr, &stage};
 
@@ -518,7 +518,7 @@ TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
 
     // Taking the guests away restores the hosted scene exactly: the stage forgets their shapes.
     stage.setGuests({});
-    TEST_CHECK(stage.guestInstanceOf(777u) == BvhLib::NO_INSTANCE);
+    TEST_CHECK(stage.guestInstanceOf(777u).empty());
     TEST_CHECK_EQUAL(stage.scene().geometries.size(), static_cast<size_t>(1u));
 }
 

@@ -491,8 +491,10 @@ Two properties make that affordable:
   which is why the per-tick cost collapses to the top level alone. This is the same reason
   ray-tracing hardware separates a top-level structure from bottom-level ones, and building it by
   hand is the same exercise this repository already performs for the single-level case.
-- **The Grid is one instance among a handful.** The top level holds the Grid's box plus one per body,
-  so it is a structure over twenty-odd objects, not over fifty thousand triangles.
+- **The Grid is one instance among a handful.** The top level holds the Grid's box plus one per
+  segment of every body — a chain of eight is eight boxes sharing one hierarchy — so it is a
+  structure over tens of objects, not over fifty thousand triangles. `TODO.md`'s seventh question
+  names the count at which the linear sweep stops being free.
 
 **Measured with `--benchmark`, which reports the GPU's own timestamps per pass.** Sixty frames at
 1280×720 on the GTX 1650 Ti after ten warm-up frames, best of three runs, the two paths differing only

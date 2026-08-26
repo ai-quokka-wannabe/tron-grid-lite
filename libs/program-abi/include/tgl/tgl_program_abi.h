@@ -52,7 +52,7 @@ extern "C"
     produces exactly the silent memory corruption the number exists to prevent, and produces it
     without failing anywhere.
 */
-#define TGL_ABI_VERSION 6u
+#define TGL_ABI_VERSION 7u
 
 /* ================================================================================================
    Toolchain glue
@@ -155,12 +155,14 @@ TGL_STATIC_ASSERT(sizeof(float) == 4u, "The Program ABI requires a 4-byte float.
    positive angular_velocity[1] and a positive desired_turn_rate both mean a turn to the creature's
    left seen from above.
 
-   One rigid frame, so a body-frame coordinate names one place and needs no further addressing.
-   Nothing here identifies a segment or reports a joint angle, and that is not an omission: a body
-   that bends needs a solver able to bend it, and until that solver exists a segment index would be a
-   number the Grid writes and nothing can act on. When it arrives it brings joint angle and joint
-   rate with it — separate signals, because they are separate receptors in every animal that has
-   them — and the version bumps.
+   One rigid frame - the head's - so a body-frame coordinate names one place and needs no further
+   addressing. Since version 7 a body may be a CHAIN: the model declares how many segments wear it
+   and how far apart they sit (TglRenderModel::segment_count, segment_spacing), and the world places
+   every trailing segment along the path the head walked - kinematic trail, not articulation. The
+   senses still speak of the head alone: nothing here reports a segment's pose or a joint angle,
+   because nothing on the Grid bends a joint yet. When a solver that can arrives, joint angle and
+   joint rate arrive with it - separate signals, because they are separate receptors in every animal
+   that has them - and the version bumps again.
 
    A Program is never handed a diagram of its own body: no segment lengths, no rest pose, no
    kinematic tree. Nowhere in an animal is there such a model, and the ABI reflects that. What a
@@ -343,9 +345,14 @@ typedef struct TglCreatureDesc {
    outright, because a NaN vertex in the world's hierarchy would take the Grid down on behalf of
    one Program.
 
-   One rigid piece, like the body it dresses. A model that bends needs a solver able to bend it,
-   and when that solver arrives the model grows its segments in the same version bump that gives
-   the body joints.
+   One rigid piece per segment. Since version 7 the model may declare a chain: `segment_count`
+   segments, the head counted, `segment_spacing` metres apart along the head's path, every one
+   wearing this same mesh. The world places the trailing segments (a kinematic trail behind the
+   head) and the Grid draws the mesh once per segment; the joint between two segments is the
+   model's own business - a stub on each of the two spikes that meet, authored into the mesh -
+   so nothing here describes a joint. The Grid validates the chain with the rest: a count of
+   none or of more than TGL_SEGMENTS_MAX, a single body with a spacing, or a chain without one
+   refuses the rez.
 
    "A Program is never handed a diagram of its own body" survives this section unchanged: the
    Grid still tells a Program nothing about its shape, and the senses still report only what the
@@ -419,10 +426,26 @@ typedef struct TglRenderModel {
     /*! Number of materials. */
     uint32_t material_count;
 
+    /*! Segments in the chain this model dresses, the head counted: 1 for a single rigid body, at
+        most TGL_SEGMENTS_MAX. Ignored, like every other field, when triangle_count is zero: a
+        chain of nothing is nothing. */
+    uint32_t segment_count;
+
+    /*! Metres between consecutive segments' origins along the head's path. Zero for a chain of
+        one - a spacing on a single body refuses the rez - and strictly positive and finite
+        otherwise. A worm of icosahedra joined spike to spike sets this to the spike-to-spike
+        distance plus the joint's length. */
+    float segment_spacing;
+
     /*! Unused; present so the struct's members account for all of its bytes. Alignment padding,
         not a reserved capability. */
     uint32_t padding0;
 } TglRenderModel;
+
+/*! The most segments a chain may have, the head counted. The same number as the wire's
+    LNK_SEGMENTS_MAX, and the Grid holds the two together with a static assertion where it
+    speaks the wire. */
+#define TGL_SEGMENTS_MAX 8u
 
 /* ================================================================================================
    Views, handed every tick and valid only for the duration of one program_tick call
@@ -765,6 +788,7 @@ typedef const TglProgramVTable* (*TglGetProgramVTableFn)(uint32_t abi_version)TG
 #define TGL_SUM5(t, a, b, c, d, e) (TGL_SUM4(t, a, b, c, d) + TGL_SIZEOF_MEMBER(t, e))
 #define TGL_SUM6(t, a, b, c, d, e, f) (TGL_SUM4(t, a, b, c, d) + TGL_SUM2(t, e, f))
 #define TGL_SUM7(t, a, b, c, d, e, f, g) (TGL_SUM4(t, a, b, c, d) + TGL_SUM3(t, e, f, g))
+#define TGL_SUM9(t, a, b, c, d, e, f, g, h, i) (TGL_SUM4(t, a, b, c, d) + TGL_SUM5(t, e, f, g, h, i))
 #define TGL_SUM12(t, a, b, c, d, e, f, g, h, i, j, k, l) (TGL_SUM6(t, a, b, c, d, e, f) + TGL_SUM6(t, g, h, i, j, k, l))
 #define TGL_SUM14(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n) (TGL_SUM7(t, a, b, c, d, e, f, g) + TGL_SUM7(t, h, i, j, k, l, m, n))
 
@@ -780,7 +804,8 @@ TGL_STATIC_ASSERT(TGL_SUM12(TglCreatureDesc, creature_id, random_seed, eyes, ear
 TGL_STATIC_ASSERT(TGL_SUM4(TglRenderMaterial, colour, index_of_refraction, emission, transmission) == sizeof(TglRenderMaterial),
     "TglRenderMaterial has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM2(TglRenderTriangle, vertices, material) == sizeof(TglRenderTriangle), "TglRenderTriangle has padding: a member changed width.");
-TGL_STATIC_ASSERT(TGL_SUM7(TglRenderModel, vertex_positions, triangles, materials, vertex_count, triangle_count, material_count, padding0) == sizeof(TglRenderModel),
+TGL_STATIC_ASSERT(TGL_SUM9(TglRenderModel, vertex_positions, triangles, materials, vertex_count, triangle_count, material_count, segment_count, segment_spacing, padding0)
+        == sizeof(TglRenderModel),
     "TglRenderModel has padding beyond its named padding member: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM3(TglEyeView, samples, sample_count, channels) == sizeof(TglEyeView), "TglEyeView has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM6(TglEarView, energy, arrivals, arrival_count, band_count, bin_count, reserved0) == sizeof(TglEarView),
@@ -841,14 +866,16 @@ TGL_STATIC_ASSERT(sizeof(TglRenderTriangle) == 16u, "TglRenderTriangle is an arr
 TGL_STATIC_ASSERT(offsetof(TglRenderTriangle, vertices) == 0u, "TglRenderTriangle::vertices must sit at offset 0.");
 TGL_STATIC_ASSERT(offsetof(TglRenderTriangle, material) == 12u, "TglRenderTriangle::material must sit at offset 12.");
 
-TGL_STATIC_ASSERT(sizeof(TglRenderModel) == 40u, "TglRenderModel must be 40 bytes with no padding beyond its named padding member.");
+TGL_STATIC_ASSERT(sizeof(TglRenderModel) == 48u, "TglRenderModel must be 48 bytes with no padding beyond its named padding member.");
 TGL_STATIC_ASSERT(offsetof(TglRenderModel, vertex_positions) == 0u, "TglRenderModel::vertex_positions must sit at offset 0.");
 TGL_STATIC_ASSERT(offsetof(TglRenderModel, triangles) == 8u, "TglRenderModel::triangles must sit at offset 8.");
 TGL_STATIC_ASSERT(offsetof(TglRenderModel, materials) == 16u, "TglRenderModel::materials must sit at offset 16.");
 TGL_STATIC_ASSERT(offsetof(TglRenderModel, vertex_count) == 24u, "TglRenderModel::vertex_count must sit at offset 24.");
 TGL_STATIC_ASSERT(offsetof(TglRenderModel, triangle_count) == 28u, "TglRenderModel::triangle_count must sit at offset 28.");
 TGL_STATIC_ASSERT(offsetof(TglRenderModel, material_count) == 32u, "TglRenderModel::material_count must sit at offset 32.");
-TGL_STATIC_ASSERT(offsetof(TglRenderModel, padding0) == 36u, "TglRenderModel::padding0 must sit at offset 36.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, segment_count) == 36u, "TglRenderModel::segment_count must sit at offset 36.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, segment_spacing) == 40u, "TglRenderModel::segment_spacing must sit at offset 40.");
+TGL_STATIC_ASSERT(offsetof(TglRenderModel, padding0) == 44u, "TglRenderModel::padding0 must sit at offset 44.");
 
 TGL_STATIC_ASSERT(sizeof(TglEyeView) == 16u, "TglEyeView is an array element, so its size is a stride. It must be 16 bytes.");
 TGL_STATIC_ASSERT(offsetof(TglEyeView, samples) == 0u, "TglEyeView::samples must sit at offset 0.");

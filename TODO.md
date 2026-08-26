@@ -242,7 +242,11 @@ are decisions waiting on the owner, not conclusions.
    instance answers acoustic rays; and since the floor is a perfect mirror, a glowing creature has
    a reflection in its own visual field. The mirror self-recognition test materialises out of the
    material model without anyone building it.
-6. ~~How many segments, and does the first worm get its two eyes?~~ **Decided: one rigid segment.**
+6. ~~How many segments, and does the first worm get its two eyes?~~ **Decided: one rigid segment**
+   — and then, on 2026-08-26, **a chain of up to eight** (ABI v7, protocol v7): the head is the
+   rigid segment this answer describes, and the trailing segments are kinematic trail placed by
+   Master Control along the head's path, drawn once per segment here. No solver, no joints, no
+   segment sense; the original reasoning below stands for what the physics is.
    A body that bends needs a solver able to bend it, and the world's physics (in Master Control
    now) is rigid and kinematic; an articulated multi-body solver with joint limits is a substantially larger first step than a
    rigid body with contacts. So no segment addressing and no joint angles reach ABI v1 — a `segment`
@@ -255,7 +259,8 @@ are decisions waiting on the owner, not conclusions.
    eight segments is 161 instances, and with two eyes each that is tens of millions of instance-box
    tests per tick — which forces a top-level hierarchy now rather than later.
 8. ~~Is the per-segment-drive ABI break made now on principle, or later on evidence?~~
-   **Decided: later, with the solver.** It follows from question 6 — there is nothing to drive
+   **Decided: later, with the solver.** (The chain of 2026-08-26 is not that break: nothing is
+   driven per segment, and nothing is sensed per segment.) It follows from question 6 — there is nothing to drive
    per-segment until a body has segments. When it lands it brings **joint angle and joint rate as
    separate signals**, because they are separate receptors in every animal that has them: muscle
    spindles split position and velocity across two afferent classes, and the Drosophila femoral

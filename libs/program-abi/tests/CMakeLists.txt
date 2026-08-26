@@ -73,6 +73,7 @@ set(TGL_DRIVER_PROGRAM_VARIANTS
     refuses_second_rez
     modelled
     misshapen
+    chained
 )
 
 foreach(variant IN LISTS TGL_DRIVER_PROGRAM_VARIANTS)

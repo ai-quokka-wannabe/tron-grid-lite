@@ -565,6 +565,16 @@ namespace BvhLib
     Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance, uint32_t skip_instance_a,
         uint32_t skip_instance_b)
     {
+        // One instance is a run of one; NO_INSTANCE is a run of none.
+        const auto run = [](const uint32_t instance) {
+            return InstanceRange{.first = instance, .count = (instance == NO_INSTANCE) ? 0u : 1u};
+        };
+        return intersectScene(scene, origin, direction, max_distance, run(skip_instance_a), run(skip_instance_b));
+    }
+
+    Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance, const InstanceRange skip_a,
+        const InstanceRange skip_b)
+    {
         Hit nearest{};
 
         constexpr float TINY{1e-30f};
@@ -576,7 +586,7 @@ namespace BvhLib
         for (uint32_t index{0u}; index < static_cast<uint32_t>(scene.instances.size()); ++index) {
             const Instance& instance{scene.instances[index]};
 
-            if ((index == skip_instance_a) || (index == skip_instance_b)) {
+            if (skip_a.contains(index) || skip_b.contains(index)) {
                 continue; // Transparent to this ray: a body the caller asked to see through.
             }
 

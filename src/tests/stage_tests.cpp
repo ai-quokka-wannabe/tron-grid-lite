@@ -77,8 +77,8 @@ TEST_CASE(a_bodiless_roster_stages_only_the_grid)
     TEST_CHECK_EQUAL(stage.scene().geometries.size(), 1u);
     TEST_CHECK_EQUAL(stage.scene().instances.size(), 1u);
     TEST_CHECK_EQUAL(stage.materials().size(), 1u);
-    TEST_CHECK_EQUAL(stage.instanceOf(7u), BvhLib::NO_INSTANCE);
-    TEST_CHECK_EQUAL(stage.instanceOf(8u), BvhLib::NO_INSTANCE);
+    TEST_CHECK(stage.instanceOf(7u).empty());
+    TEST_CHECK(stage.instanceOf(8u).empty());
 }
 
 TEST_CASE(a_modelled_creature_stands_exactly_where_its_pose_says)
@@ -90,7 +90,8 @@ TEST_CASE(a_modelled_creature_stands_exactly_where_its_pose_says)
 
     TEST_CHECK_EQUAL(stage.scene().geometries.size(), 2u);
     TEST_CHECK_EQUAL(stage.scene().instances.size(), 2u);
-    TEST_CHECK_EQUAL(stage.instanceOf(7u), 1u);
+    TEST_CHECK_EQUAL(stage.instanceOf(7u).first, 1u);
+    TEST_CHECK_EQUAL(stage.instanceOf(7u).count, 1u);
 
     /*
         The transform twin: a body point carried by the instance's matrix must land exactly where
@@ -105,6 +106,44 @@ TEST_CASE(a_modelled_creature_stands_exactly_where_its_pose_says)
     TEST_CHECK_CLOSE(carried.x, expected.x, 1e-5f);
     TEST_CHECK_CLOSE(carried.y, expected.y, 1e-5f);
     TEST_CHECK_CLOSE(carried.z, expected.z, 1e-5f);
+}
+
+TEST_CASE(a_chain_stands_in_consecutive_instances_of_one_geometry_and_its_trail_is_placed)
+{
+    std::vector<RosterLib::Creature> creatures;
+    creatures.push_back(modelledCreature(7u, MathLib::Vec3{2.0f, 1.0f, -3.0f}, 0.0f));
+    creatures[0].model.segment_count = 3u;
+    creatures[0].model.segment_spacing = 0.5f;
+
+    Stage stage{littleGrid(), littleMaterials(), creatures};
+
+    // One geometry for the whole chain; three placements after the Grid's, one per segment.
+    TEST_CHECK_EQUAL(stage.scene().geometries.size(), 2u);
+    TEST_CHECK_EQUAL(stage.scene().instances.size(), 4u);
+    const BvhLib::InstanceRange own{stage.instanceOf(7u)};
+    TEST_CHECK_EQUAL(own.first, 1u);
+    TEST_CHECK_EQUAL(own.count, 3u);
+    TEST_CHECK(own.contains(1u) && own.contains(3u) && !own.contains(0u) && !own.contains(4u));
+    for (uint32_t instance{1u}; instance <= 3u; ++instance) {
+        TEST_CHECK_EQUAL(stage.scene().instances[instance].geometry, 1u);
+    }
+
+    // The world tells the trail: each trailing segment stands exactly at its own pose.
+    creatures[0].trail = {
+        RosterLib::Pose{.position = MathLib::Vec3{2.0f, 1.0f, -2.5f}, .yaw = 0.2f}, RosterLib::Pose{.position = MathLib::Vec3{2.1f, 1.0f, -2.0f}, .yaw = 0.4f}};
+    stage.update(creatures);
+    const MathLib::Vec3 body_point{0.1f, 0.05f, -0.2f};
+    for (uint32_t segment{1u}; segment < 3u; ++segment) {
+        const MathLib::Vec3 expected{RosterLib::worldFromBody(creatures[0].trail[segment - 1u], body_point)};
+        const MathLib::Vec4 carried{stage.scene().instances[1u + segment].to_world * MathLib::Vec4::fromVec3(body_point, 1.0f)};
+        TEST_CHECK_CLOSE(carried.x, expected.x, 1e-5f);
+        TEST_CHECK_CLOSE(carried.y, expected.y, 1e-5f);
+        TEST_CHECK_CLOSE(carried.z, expected.z, 1e-5f);
+    }
+    // And the head stayed where its pose says.
+    const MathLib::Vec3 head{RosterLib::worldFromBody(creatures[0].pose, body_point)};
+    const MathLib::Vec4 carried_head{stage.scene().instances[1].to_world * MathLib::Vec4::fromVec3(body_point, 1.0f)};
+    TEST_CHECK_CLOSE(carried_head.z, head.z, 1e-5f);
 }
 
 TEST_CASE(materials_join_one_table_with_global_indices)

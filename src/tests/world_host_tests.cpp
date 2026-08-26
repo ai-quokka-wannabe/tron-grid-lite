@@ -144,8 +144,15 @@ namespace
         void tellTick(const std::uint64_t tick, const std::uint32_t creature_id, const float z, const float yaw, const bool grounded, const bool with_letter = true)
         {
             const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
-            const LnkCreatureState row{
-                .creature_id = creature_id, .position = {1.0f, 0.05f, z}, .yaw = yaw, .velocity = {0.0f, 0.0f, -0.5f}, .yaw_rate = 0.1f, .vocalisation = 0.0f};
+            LnkCreatureState row{};
+            row.creature_id = creature_id;
+            row.position[0] = 1.0f;
+            row.position[1] = 0.05f;
+            row.position[2] = z;
+            row.yaw = yaw;
+            row.velocity[2] = -0.5f;
+            row.yaw_rate = 0.1f;
+            row.segment_count = 1u; // A single body: the wire refuses a chain of none.
             check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
             if (with_letter) {
                 const std::array<LnkContact, 1> contacts{LnkContact{
@@ -158,6 +165,28 @@ namespace
                     .contact_count = grounded ? 1u : 0u};
                 check(m_library.vtable().send_proprioception(m_connection, &letter, grounded ? contacts.data() : nullptr), "send_proprioception");
             }
+            flush();
+        }
+
+        //! A telling whose one row is a chain of `segment_count`, its trail strung along +Z.
+        void tellChain(const std::uint64_t tick, const std::uint32_t creature_id, const std::uint32_t segment_count)
+        {
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
+            LnkCreatureState row{};
+            row.creature_id = creature_id;
+            row.position[0] = 1.0f;
+            row.position[1] = 0.05f;
+            row.segment_count = segment_count;
+            for (std::uint32_t segment{0u}; segment + 1u < segment_count; ++segment) {
+                row.segments[segment].position[0] = 1.0f;
+                row.segments[segment].position[1] = 0.05f;
+                row.segments[segment].position[2] = 0.3f * static_cast<float>(segment + 1u);
+                row.segments[segment].yaw = 0.1f * static_cast<float>(segment + 1u);
+            }
+            check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
+            const LnkProprioception letter{
+                .tick = tick, .creature_id = creature_id, .grounded = 1u, .reserved0 = {}, .specific_force = {0.0f, 9.81f, 0.0f}, .contact_count = 0u};
+            check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
 
@@ -236,6 +265,8 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     TEST_CHECK(near(rez.as.rez.rez.max_forward_speed, roster.creatures().front().body.max_forward_speed));
     TEST_CHECK_EQUAL(rez.as.rez.rez.max_contact_count, roster.creatures().front().body.max_contact_count);
     TEST_CHECK_EQUAL(rez.as.rez.rez.vertex_count, 0u);
+    TEST_CHECK_EQUAL(rez.as.rez.rez.segment_count, 1u); // A bodiless creature is a chain of one.
+    TEST_CHECK_EQUAL(rez.as.rez.rez.segment_spacing, 0.0f);
 
     // A tick without its letter is not whole: the minds must not tick on half a telling.
     rehearsal.tellTick(101u, host.wireIdentity(0u), 5.0f, 0.0f, true, false);
@@ -408,6 +439,38 @@ TEST_CASE(a_master_control_from_a_different_world_refuses_the_host)
         TEST_CHECK(message.find("different world") != std::string::npos);
     }
     server.join();
+}
+
+TEST_CASE(a_chain_told_by_the_world_reaches_the_roster_as_its_trail)
+{
+    RehearsalMasterControl rehearsal{};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_chained", 1u, flatGround()};
+
+    std::thread server{[&rehearsal]() {
+        rehearsal.acceptAndWelcome(100u, 9u);
+    }};
+    WorldHostLib::Host host{rehearsal.address(), PATIENCE, roster};
+    server.join();
+
+    // The REZ carries the chain the Program declared.
+    const LnkMessageView rez{rehearsal.awaitMessage(LNK_MSG_REZ)};
+    TEST_CHECK_EQUAL(rez.as.rez.rez.segment_count, 4u);
+    TEST_CHECK(near(rez.as.rez.rez.segment_spacing, 0.3f));
+
+    // The world places the trail; the host hands it to the roster beside the pose.
+    rehearsal.tellChain(101u, host.wireIdentity(0u), 4u);
+    const std::chrono::steady_clock::time_point settle{std::chrono::steady_clock::now() + std::chrono::milliseconds{500}};
+    bool ready{false};
+    while (!ready && (std::chrono::steady_clock::now() < settle)) {
+        ready = host.poll();
+    }
+    TEST_CHECK(ready);
+    const RosterLib::Creature& creature{roster.creatures().front()};
+    TEST_CHECK_EQUAL(creature.trail.size(), 3u);
+    for (std::size_t segment{0u}; segment < creature.trail.size(); ++segment) {
+        TEST_CHECK(near(creature.trail[segment].position.z, 0.3f * static_cast<float>(segment + 1u)));
+        TEST_CHECK(near(creature.trail[segment].yaw, 0.1f * static_cast<float>(segment + 1u)));
+    }
 }
 
 int main()
