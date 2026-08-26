@@ -482,7 +482,8 @@ TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
     GridSensesSource source{stage.scene(), unitStrengths(), {}, nullptr, &stage};
 
     // Far away first: the baseline is an unshaded hum.
-    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f}});
+    source.tellGuests({Stage::GuestTelling{
+        .creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f, .trail = {}}});
     source.beginTick(creatures);
     TglSenses clear_sky{};
     source.fill(creatures[0], clear_sky);
@@ -491,7 +492,7 @@ TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
     TEST_CHECK(totalEnergy(clear_sky.ears[0]) > 0.0f);
 
     // The guest slides under the listener: every path from ear to floor crosses its body.
-    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{0.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f}});
+    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{0.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f, .trail = {}}});
     source.beginTick(creatures);
     TglSenses shaded{};
     source.fill(creatures[0], shaded);
@@ -499,14 +500,15 @@ TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
 
     // Away again, and calling from 3.6 m: the baseline back bit for bit, plus one arrival in the
     // bin the distance dictates - the guest's voice, heard from where the world placed it.
-    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f}});
+    source.tellGuests({Stage::GuestTelling{
+        .creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f, .trail = {}}});
     source.beginTick(creatures);
     TglSenses cleared{};
     source.fill(creatures[0], cleared);
     TEST_CHECK(std::memcmp(baseline.data(), cleared.ears[0].energy, sizeof(baseline)) == 0);
 
-    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f},
-        Stage::GuestTelling{.creature_id = 778u, .pose = {.position = MathLib::Vec3{3.6f, 1.0f, 0.0f}, .yaw = 0.0f}, .vocalisation = 1.0f}});
+    source.tellGuests({Stage::GuestTelling{.creature_id = 777u, .pose = {.position = MathLib::Vec3{100.0f, 0.5f, 0.0f}, .yaw = 0.0f}, .vocalisation = 0.0f, .trail = {}},
+        Stage::GuestTelling{.creature_id = 778u, .pose = {.position = MathLib::Vec3{3.6f, 1.0f, 0.0f}, .yaw = 0.0f}, .vocalisation = 1.0f, .trail = {}}});
     source.beginTick(creatures);
     TglSenses heard{};
     source.fill(creatures[0], heard);
