@@ -288,7 +288,8 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
                 .velocity = {1.0f, 0.0f, 0.0f},
                 .yaw_rate = 0.0f,
                 .vocalisation = 0.0f,
-                .segment_count = 1u}; // A single body: the wire refuses a chain of none.
+                .segment_count = 1u, // A single body: the wire refuses a chain of none.
+                .segments = {}};
             TEST_CHECK_EQUAL(library.vtable().send_tick_state(recorder, &header, &row), LNK_OK);
         }
         std::uint8_t everything_left{0u};
