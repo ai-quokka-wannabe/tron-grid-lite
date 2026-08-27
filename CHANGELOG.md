@@ -608,6 +608,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A refused body is said out loud (Link v8).** The wire's new `REFUSED` letter - the world's
+  word to the one host whose `REZ` it did not honour, with the reason by name - reaches the
+  creature host: a refusal of its own body is fatal, in words ("Master Control refused the
+  body of creature N at tick T: another host wears that identity. There is nothing to host."),
+  where until now the host ticked a mind whose body would never stand, learning nothing. A
+  refusal naming someone else's creature is ignored by name, as it is in the spectator and
+  the replay. `external/link` moves to protocol 8 / client ABI 8.
 - TOPOLOGY § Determinism and replay: the world's replay promise is now **per build, any
   machine** — master-control owns its transcendentals, so the only floating-point between one
   state and the next is IEEE basic arithmetic, and the chain golden life recorded on a Windows

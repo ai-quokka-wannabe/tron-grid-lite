@@ -160,6 +160,26 @@ namespace WorldHostLib
         }
     }
 
+    namespace
+    {
+        //! The reason a REFUSED names, in words - the wire's own names, the operator's language.
+        [[nodiscard]] const char* refusalName(const std::uint8_t reason) noexcept
+        {
+            switch (reason) {
+            case LNK_REFUSED_OWNED:
+                return "another host wears that identity";
+            case LNK_REFUSED_FULL:
+                return "the world is full";
+            case LNK_REFUSED_CROWDED:
+                return "the spawn pad is crowded, no free spot";
+            case LNK_REFUSED_BOUNDS:
+                return "a declared bound or the mesh is outside what the world allows";
+            default:
+                return "a reason the wire should have refused";
+            }
+        }
+    }
+
     bool Host::poll()
     {
         drain();
@@ -230,6 +250,23 @@ namespace WorldHostLib
                 break;
             case LNK_MSG_BYE:
                 throw std::runtime_error{"Master Control ended the world (BYE)."};
+            case LNK_MSG_REFUSED: {
+                /*
+                    The world's word on a REZ it did not honour (Link v8). Until now a host
+                    learned of a refusal only by never hearing its body relayed, and ticked
+                    a Program whose body would never stand. A refused own body is fatal to
+                    the host - there is nothing to host - and the reason is said by name,
+                    which is the whole point of the letter. A refusal naming a creature
+                    this host does not own is the wire's business to have prevented; it is
+                    well-formed, and ignored.
+                */
+                const LnkRefused& refused{view.as.refused};
+                if (isOwn(refused.creature_id)) {
+                    throw std::runtime_error{"Master Control refused the body of creature " + std::to_string(refused.creature_id) + " at tick "
+                        + std::to_string(refused.tick) + ": " + refusalName(refused.reason) + ". There is nothing to host."};
+                }
+                break;
+            }
             case LNK_MSG_EVENT: {
                 /*
                     A scratch is a sound the hosted ears must meet - anyone's, the own bodies'

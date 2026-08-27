@@ -214,6 +214,14 @@ namespace
             flush();
         }
 
+        //! The world's refusal of a body: the letter Link v8 carries to the one host it refused.
+        void refuse(const std::uint64_t tick, const std::uint32_t creature_id, const std::uint8_t reason)
+        {
+            const LnkRefused refused{.tick = tick, .creature_id = creature_id, .reason = reason, .reserved0 = {}};
+            check(m_library.vtable().send_refused(m_connection, &refused), "send_refused");
+            flush();
+        }
+
         //! A letter on its own, for whatever tick it claims - the stray a host must not obey.
         void tellLetter(const std::uint64_t tick, const std::uint32_t creature_id, const bool grounded)
         {
@@ -501,6 +509,43 @@ TEST_CASE(a_scratch_told_by_the_world_reaches_the_host_with_its_teller_named)
     TEST_CHECK(!scratches[1].own);
     TEST_CHECK_EQUAL(scratches[1].creature, static_cast<std::uint64_t>(777u));
     TEST_CHECK(near(scratches[1].strength, 0.75f));
+}
+
+TEST_CASE(a_refused_body_is_said_out_loud_by_name_and_the_host_stops_waiting)
+{
+    RehearsalMasterControl rehearsal{};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_chained", 1u, flatGround()};
+
+    std::thread server{[&rehearsal]() {
+        rehearsal.acceptAndWelcome(100u, 9u);
+    }};
+    WorldHostLib::Host host{rehearsal.address(), PATIENCE, roster};
+    server.join();
+    (void)rehearsal.awaitMessage(LNK_MSG_REZ);
+
+    // A refusal naming somebody else's creature is not this host's business.
+    rehearsal.refuse(100u, 777u, LNK_REFUSED_FULL);
+    const std::chrono::steady_clock::time_point settle{std::chrono::steady_clock::now() + std::chrono::milliseconds{300}};
+    while (std::chrono::steady_clock::now() < settle) {
+        (void)host.poll();
+    }
+
+    // The world refuses this host's own body: the host says why, by name, and stops - there
+    // is nothing to host, and until Link v8 it would have ticked a mind without a body for
+    // ever, learning nothing.
+    rehearsal.refuse(100u, host.wireIdentity(0u), LNK_REFUSED_OWNED);
+    std::string said;
+    const std::chrono::steady_clock::time_point deadline{std::chrono::steady_clock::now() + std::chrono::milliseconds{2000}};
+    while (said.empty() && (std::chrono::steady_clock::now() < deadline)) {
+        try {
+            (void)host.poll();
+        } catch (const std::runtime_error& refusal) {
+            said = refusal.what();
+        }
+    }
+    TEST_CHECK(said.find("refused the body of creature " + std::to_string(host.wireIdentity(0u))) != std::string::npos);
+    TEST_CHECK(said.find("another host wears that identity") != std::string::npos);
+    TEST_CHECK(said.find("tick 100") != std::string::npos);
 }
 
 TEST_CASE(a_chain_told_by_the_world_reaches_the_roster_as_its_trail)
