@@ -608,6 +608,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The guides.** The owner's ask (2026-08-27): every repository of the organisation gets a
+  development-environment guide a contributor can follow without struggling, and the
+  ecosystem gets one guide to running it whole. Here: `docs/DEV_ENV_SETUP.md` brought up to
+  date and made complete (every version CI pins - Vulkan SDK 1.4.357.0, Rust 1.95.0 via the
+  submodule's pin, clang-format 22.1, markdownlint via `npm ci` - each compiler's source, what
+  CI runs and how to run it at home, the `programs/` directory, three more troubleshooting
+  entries) and the new `docs/RUNNING_THE_GRID.md`: what runs where, the build order, the
+  constellation on one machine step by step, ending a life properly, Clu and `--replay`, the
+  checks that need no world, addresses and trust, and a troubleshooting table. Both linked
+  from the README and CONTRIBUTING.
 - **A refused body is said out loud (Link v8).** The wire's new `REFUSED` letter - the world's
   word to the one host whose `REZ` it did not honour, with the reason by name - reaches the
   creature host: a refusal of its own body is fatal, in words ("Master Control refused the

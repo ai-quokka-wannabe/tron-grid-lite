@@ -110,6 +110,10 @@ measured rather than assumed; see [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTER
 
 ## Running it
 
+> **New here?** [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) sets up a build from nothing on
+> Windows or Linux, and [docs/RUNNING_THE_GRID.md](docs/RUNNING_THE_GRID.md) stands the whole
+> ecosystem up - the world, this window, a host with the first Program - on one machine.
+
 **TronGrid Lite is a command-line program that can open a window, not a window that can be scripted.**
 Creatures perceive the Grid through a senses buffer; they have no window and no swapchain, so a run
 that hosts them needs no display, no surface and no present queue — and is not refused on a machine
