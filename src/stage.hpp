@@ -92,6 +92,19 @@ public:
     };
 
     /*!
+        One scratch the world sounded this tick: whose slide it was, where on the Grid it
+        sounded from, and how loudly. A hosted body is named by its ABI identity - what the
+        stage keys its instances by - and a guest by its wire identity; the host translates,
+        because only it knows both names.
+    */
+    struct ScratchTelling {
+        bool own{false};
+        uint64_t creature{0u};
+        MathLib::Vec3 position{};
+        float strength{0.0f};
+    };
+
+    /*!
         The guests' shapes, replacing whatever guests were set before: one geometry per shaped
         body in creature order, appended after the hosted bodies' own, its materials appended to
         the table. Rare - a REZ or a DEREZ with rows - and the caller rebuilds the device's world

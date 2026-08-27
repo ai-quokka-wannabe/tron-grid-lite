@@ -96,11 +96,29 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
                 .caller_instance = (m_stage != nullptr) ? m_stage->guestInstanceOf(guest.creature_id) : BvhLib::InstanceRange{}});
         }
     }
+
+    // The scratches the world sounded, as sources: the scraping body's own instance is the
+    // caller's, so a body never gags its own scrape - hearing its own spikes drag along the
+    // floor is the point. The velocity stays zero: only an arrival could carry Doppler, and
+    // a scratch makes none.
+    m_scratches.clear();
+    for (const Stage::ScratchTelling& scratch : m_scratch_tellings) {
+        BvhLib::InstanceRange scraper{};
+        if (m_stage != nullptr) {
+            scraper = scratch.own ? m_stage->instanceOf(scratch.creature) : m_stage->guestInstanceOf(static_cast<uint32_t>(scratch.creature));
+        }
+        m_scratches.push_back(Call{.position = scratch.position, .velocity = MathLib::Vec3{}, .strength = scratch.strength, .caller_instance = scraper});
+    }
 }
 
 void GridSensesSource::tellGuests(std::vector<Stage::GuestTelling> guests)
 {
     m_guests = std::move(guests);
+}
+
+void GridSensesSource::tellScratches(std::vector<Stage::ScratchTelling> scratches)
+{
+    m_scratch_tellings = std::move(scratches);
 }
 
 GridSensesSource::CreatureEars& GridSensesSource::earStateFor(uint64_t creature_id, uint32_t ear_count)
@@ -206,16 +224,17 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
         }
 
         const float* delivery{stored.energy.data()};
-        if (!m_calls.empty()) {
+        const bool sounding{(!m_calls.empty()) || (!m_scratches.empty())};
+        if (sounding) {
             /*
-                A tick with calls is delivered from scratch storage: the cached hum, and then every
-                call's own arrivals added bin for bin — the caller's included, which is both how a
-                creature hears itself speak and the outward leg of its echoes. The cache itself is
-                never written, so a stationary ear on the next silent tick reads exactly the
-                gather again.
+                A tick with calls or scratches is delivered from mix storage: the cached hum, and
+                then every sound's own response added bin for bin — the emitter's included, which
+                is both how a creature hears itself speak and how it hears its own spikes drag
+                along the floor. The cache itself is never written, so a stationary ear on the
+                next silent tick reads exactly the gather again.
             */
-            AlignedResponse& scratch{state.delivered[index]};
-            scratch.energy = stored.energy;
+            AlignedResponse& mixed{state.delivered[index]};
+            mixed.energy = stored.energy;
             state.arrival_counts[index] = 0u;
 
             Acoustics::CallConfig call_config{};
@@ -236,7 +255,7 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
                 call_config.source_velocity = call.velocity;
                 const Acoustics::ImpulseResponse arrivals{Acoustics::deliverCall(m_scene, m_reflectors, call.position, call.strength, world, call_config)};
                 for (size_t bin{0u}; bin < arrivals.bins.size(); ++bin) {
-                    scratch.energy[bin] += arrivals.bins[bin];
+                    mixed.energy[bin] += arrivals.bins[bin];
                 }
                 // The discrete arrivals, in delivery order, the loudest kept when the ear is full.
                 for (uint32_t arrived{0u}; arrived < arrivals.arrival_count; ++arrived) {
@@ -275,10 +294,25 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
                 }
             }
 
-            delivery = scratch.energy.data();
+            /*
+                The scratches, bins only — never an arrival. A scratch is the Grid's one
+                sustained source: noisy, modulated by its own gait, with no sharp onset to
+                time, so it deposits energy a listener can detect but hands over nothing to
+                range from — the asymmetry the acoustics documents as the rule's own yield.
+            */
+            for (const Call& scratch : m_scratches) {
+                call_config.caller_instance = scratch.caller_instance;
+                call_config.source_velocity = scratch.velocity;
+                const Acoustics::ImpulseResponse rasp{Acoustics::deliverCall(m_scene, m_reflectors, scratch.position, scratch.strength, world, call_config)};
+                for (size_t bin{0u}; bin < rasp.bins.size(); ++bin) {
+                    mixed.energy[bin] += rasp.bins[bin];
+                }
+            }
+
+            delivery = mixed.energy.data();
         }
 
-        const uint32_t arrival_count{m_calls.empty() ? 0u : state.arrival_counts[index]};
+        const uint32_t arrival_count{sounding ? state.arrival_counts[index] : 0u};
         m_ear_views[index] = TglEarView{.energy = delivery,
             .arrivals = (arrival_count > 0u) ? state.arrivals[index].data() : nullptr,
             .arrival_count = arrival_count,

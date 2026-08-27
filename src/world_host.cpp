@@ -230,9 +230,40 @@ namespace WorldHostLib
                 break;
             case LNK_MSG_BYE:
                 throw std::runtime_error{"Master Control ended the world (BYE)."};
+            case LNK_MSG_EVENT: {
+                /*
+                    A scratch is a sound the hosted ears must meet - anyone's, the own bodies'
+                    included: that a creature hears its own spikes drag along the Grid is the
+                    owner's ruling. A vocalisation EVENT stays uninteresting here - calls are
+                    carried by the rows, and the one-shot news is the spectator's cue. The cap
+                    only bounds a hostile server's flood: the world sounds at most a chain's
+                    worth per creature per tick.
+                */
+                constexpr std::size_t SCRATCHES_KEPT_MAX{2048u};
+                const LnkEvent& event{view.as.event};
+                if ((event.kind == LNK_EVENT_SCRATCH) && (event.tick == m_telling_tick) && (m_scratches_being_told.size() < SCRATCHES_KEPT_MAX)) {
+                    Stage::ScratchTelling scratch{};
+                    scratch.position = MathLib::Vec3{event.position[0], event.position[1], event.position[2]};
+                    scratch.strength = event.strength;
+                    if (isOwn(event.creature_id)) {
+                        // The stage keys a hosted body by its ABI identity: translate, as only
+                        // the host can.
+                        const std::vector<RosterLib::Creature>& creatures{m_roster.creatures()};
+                        for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
+                            if (event.creature_id == wireIdentity(index)) {
+                                scratch.own = true;
+                                scratch.creature = creatures[index].body.creature_id;
+                            }
+                        }
+                    } else {
+                        scratch.creature = event.creature_id;
+                    }
+                    m_scratches_being_told.push_back(scratch);
+                }
+                break;
+            }
             default:
-                // EVENT: well-formed and, for a host whose guests' calls come from the rows,
-                // uninteresting.
+                // Anything else well-formed is another client's business.
                 break;
             }
         }
@@ -248,6 +279,7 @@ namespace WorldHostLib
         m_ready = false; // A newer telling has begun: whatever was whole is no longer the latest.
         std::fill(m_felt.begin(), m_felt.end(), false);
         m_guests_being_told.clear();
+        m_scratches_being_told.clear();
 
         const std::vector<RosterLib::Creature>& creatures{m_roster.creatures()};
         for (std::uint32_t row{0u}; row < view.header.creature_count; ++row) {
@@ -317,6 +349,7 @@ namespace WorldHostLib
             })) {
             m_told_tick = m_telling_tick;
             m_guests = m_guests_being_told;
+            m_scratches = m_scratches_being_told;
             // A guest the world has now placed for the first time may take the stage.
             for (const Stage::GuestTelling& guest : m_guests) {
                 if (m_placed_guests.insert(guest.creature_id).second) {

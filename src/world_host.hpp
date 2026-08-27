@@ -110,6 +110,17 @@ namespace WorldHostLib
             return m_guests;
         }
 
+        /*!
+            The scratches of the last whole telling: every body's slides this tick - the
+            hosted bodies' own included, named by their ABI identity, guests by their wire
+            identity - ready for the senses. Replaced whole at each whole tick, so a tick
+            nobody scraped in is silent.
+        */
+        [[nodiscard]] const std::vector<Stage::ScratchTelling>& scratches() const noexcept
+        {
+            return m_scratches;
+        }
+
     private:
         //! Reads everything the wire holds, never blocking; m_ready says whether a tick is whole.
         void drain();
@@ -136,6 +147,9 @@ namespace WorldHostLib
         //! The guests a whole telling has placed at least once: the ones whose shapes may stand.
         std::unordered_set<std::uint32_t> m_placed_guests;
         std::vector<Stage::GuestTelling> m_guests;
+        //! The scratch EVENTs of the tick being told, and of the last whole one.
+        std::vector<Stage::ScratchTelling> m_scratches_being_told;
+        std::vector<Stage::ScratchTelling> m_scratches;
         std::vector<Stage::GuestTelling> m_guests_being_told;
     };
 

@@ -495,6 +495,18 @@ has no onset and no bearing. `arrivals` is NULL when `arrival_count` is 0; both 
 the tick like everything else here. [ACOUSTICS.md](ACOUSTICS.md) § What a Creature Ear Needs
 carries the physics.
 
+**Scratches reach the ear too — as energy, never as an arrival.** Every slide the world sounds
+— a body's feet, a scrape along a riser, and since the chain every dragged segment of a worm,
+the listener's own body included — is delivered onto the histogram exactly as a call is, from
+where it happened, through the scraping body's own hull. But a scratch is the one sustained
+source on the Grid (the section above), noisy and modulated by the gait, with no onset to time:
+it deposits energy in the bins its distance dictates and contributes no `TglArrival`. So a worm
+hears its own spikes drag along the floor, and hears another worm's, and can tell that it does
+and roughly how loudly — and cannot range either, which is the honest physics, not a gap. A
+Program that wants to know where its own body is dragging has its contacts for its head and
+its ears for the rest, which is proprioception by sound and exactly the kind of thing a mind
+is for.
+
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
 time bin per ear, plus the arrivals' onsets, radial velocities and energies, and stops.** Anything that names a source, separates streams, reports "a wall is
 three metres to your left", or performs auditory scene analysis of any kind belongs in a Program

@@ -190,6 +190,30 @@ namespace
             flush();
         }
 
+        //! A telling with two scratch EVENTs and one vocalisation EVENT between the row and
+        //! the letter - the world's own order: the hosted body's slide, a guest's, and news
+        //! that is the spectator's business alone.
+        void tellWithScratches(const std::uint64_t tick, const std::uint32_t creature_id)
+        {
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
+            LnkCreatureState row{};
+            row.creature_id = creature_id;
+            row.position[1] = 0.05f;
+            row.segment_count = 1u;
+            check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
+            const LnkEvent own{
+                .tick = tick, .position = {0.25f, 0.0f, -0.5f}, .strength = 0.375f, .creature_id = creature_id, .kind = LNK_EVENT_SCRATCH, .reserved0 = {}};
+            check(m_library.vtable().send_event(m_connection, &own), "send_event");
+            const LnkEvent guest{.tick = tick, .position = {-2.0f, 0.0f, 1.0f}, .strength = 0.75f, .creature_id = 777u, .kind = LNK_EVENT_SCRATCH, .reserved0 = {}};
+            check(m_library.vtable().send_event(m_connection, &guest), "send_event");
+            const LnkEvent news{.tick = tick, .position = {0.0f, 0.0f, 0.0f}, .strength = 1.0f, .creature_id = 777u, .kind = LNK_EVENT_VOCALISATION, .reserved0 = {}};
+            check(m_library.vtable().send_event(m_connection, &news), "send_event");
+            const LnkProprioception letter{
+                .tick = tick, .creature_id = creature_id, .grounded = 1u, .reserved0 = {}, .specific_force = {0.0f, 9.81f, 0.0f}, .contact_count = 0u};
+            check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
+            flush();
+        }
+
         //! A letter on its own, for whatever tick it claims - the stray a host must not obey.
         void tellLetter(const std::uint64_t tick, const std::uint32_t creature_id, const bool grounded)
         {
@@ -439,6 +463,44 @@ TEST_CASE(a_master_control_from_a_different_world_refuses_the_host)
         TEST_CHECK(message.find("different world") != std::string::npos);
     }
     server.join();
+}
+
+TEST_CASE(a_scratch_told_by_the_world_reaches_the_host_with_its_teller_named)
+{
+    RehearsalMasterControl rehearsal{};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_chained", 1u, flatGround()};
+
+    std::thread server{[&rehearsal]() {
+        rehearsal.acceptAndWelcome(100u, 9u);
+    }};
+    WorldHostLib::Host host{rehearsal.address(), PATIENCE, roster};
+    server.join();
+    (void)rehearsal.awaitMessage(LNK_MSG_REZ);
+
+    // Before any telling is whole, nothing has scraped.
+    TEST_CHECK(host.scratches().empty());
+
+    rehearsal.tellWithScratches(101u, host.wireIdentity(0u));
+    const std::chrono::steady_clock::time_point settle{std::chrono::steady_clock::now() + std::chrono::milliseconds{500}};
+    bool ready{false};
+    while (!ready && (std::chrono::steady_clock::now() < settle)) {
+        ready = host.poll();
+    }
+    TEST_CHECK(ready);
+
+    // Two scratches, in the world's order: the hosted body's own first, translated to its
+    // ABI identity; the guest's second, wire-named. The vocalisation EVENT reached nobody
+    // here - calls are carried by the rows.
+    const std::vector<Stage::ScratchTelling>& scratches{host.scratches()};
+    TEST_CHECK_EQUAL(scratches.size(), static_cast<std::size_t>(2u));
+    TEST_CHECK(scratches[0].own);
+    TEST_CHECK_EQUAL(scratches[0].creature, roster.creatures().front().body.creature_id);
+    TEST_CHECK(near(scratches[0].position.x, 0.25f));
+    TEST_CHECK(near(scratches[0].position.z, -0.5f));
+    TEST_CHECK(near(scratches[0].strength, 0.375f));
+    TEST_CHECK(!scratches[1].own);
+    TEST_CHECK_EQUAL(scratches[1].creature, static_cast<std::uint64_t>(777u));
+    TEST_CHECK(near(scratches[1].strength, 0.75f));
 }
 
 TEST_CASE(a_chain_told_by_the_world_reaches_the_roster_as_its_trail)

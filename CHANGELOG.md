@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The worm hears itself (Etape 7, the ears' half).** The owner's ruling (2026-08-26): as it
+  undulates, the sharp spikes of the icosahedra scrape against the Grid floor, and the worm hears
+  itself. Master Control now sounds a scratch `EVENT` for every dragged segment (its #34); the
+  Grid's part is the ears. The creature host reads the world's scratch `EVENT`s beside each
+  tick's rows - the hosted bodies' own translated to the identity the stage keys them by, guests
+  wire-named - and publishes the whole tick's scratches with its guests (`Host::scratches()`,
+  `Stage::ScratchTelling`); the senses take them (`GridSensesSource::tellScratches`) and deliver
+  each one to every hosted ear through the call's own delivery, seeing through the scraping
+  body's hull, so a body is never deaf to its own slide. A scratch deposits energy in the ear's
+  bins and never a discrete arrival: it is the Grid's one sustained source, with no onset to time,
+  so it can be detected and not ranged - the asymmetry the acoustics documented as physically
+  correct is now the ears' behaviour. A vocalisation `EVENT` stays the spectator's news; calls
+  come from the rows as before. Tests: the senses (a guest's scratch at 3.6 m lands exactly
+  1/3.6² per band in the bin the distance dictates with `arrival_count` 0; the listener's own
+  scratch under it is heard at its strength; a call and a scratch the same tick add exactly and
+  the call's direct path is the one arrival) and the host (a rehearsal world tells two scratches
+  and a vocalisation between the row and the letter; the two scratches arrive with their tellers
+  named, the vocalisation reaches nobody). TOPOLOGY § The scrape, PROGRAM_INTERFACE § Hearing.
 - **The chain (ABI v7, Link v7).** The owner's ruling (2026-08-26): a worm is a chain of
   icosahedra joined spike to spike, and it undulates. The Grid's part: `TglRenderModel` declares
   the chain - `segment_count` (the head counted, at most `TGL_SEGMENTS_MAX` = 8) and
