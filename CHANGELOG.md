@@ -1116,6 +1116,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The wire arrives beside the tests without a collision.** The software-Vulkan verify leg
+  failed once, on a pull request that touched only documentation, with `Error copying file (if
+  different)` for `liblink.so` into `src/tests/Release` - and passed on a re-run, which is the
+  shape of a race. It was one, in Link's CMake face: it gives every consumer of
+  `lnk_copy_beside()` a copy target of its own, ordered after that consumer, and three of the
+  consumers here - `link_library_tests`, `world_client_tests`, `world_host_tests` - share
+  `src/tests/Release`, so three edges wrote the same destination file with nothing ordering them
+  against each other. The copy beside `TronGridLite`, alone in `src/Release`, was never at risk,
+  which is what made the failure read as a missing directory. Link chains the copies now (its
+  #28) and this is the pointer that brings it: only ever one copy is in flight.
 - **The documents say what the code does about threads, shutdown and replay.** Adopted from
   the owner's StringWiggler and project_nimrod. ARCHITECTURE gains "The threads, and the order
   they stop": every thread the process starts - event, render, audio output, logger, and a
