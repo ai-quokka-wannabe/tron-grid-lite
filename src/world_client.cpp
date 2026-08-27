@@ -273,6 +273,11 @@ namespace WorldClientLib
         }
         case LNK_MSG_BYE:
             throw std::runtime_error{"Master Control ended the world (BYE)."};
+        case LNK_MSG_REFUSED:
+            // A refusal is the world's letter to the host it refused; a spectator never rezzes,
+            // and a replay reads whatever the Disk recorded, letters included. Named here so
+            // the ignoring is deliberate, not a default.
+            break;
         default:
             // A message a spectator has no use for - a stray PONG, a WELCOME repeated.
             // Ignored rather than fatal: it is well-formed, merely uninteresting.

@@ -275,6 +275,9 @@ that the places protocols actually fail are the places this codebase already has
   creature, position, strength — tick-stamped notifications, never load-bearing state: without
   the kind a spectator cannot choose a sound, without the source it cannot attribute one),
   `PROPRIOCEPTION` (the owner's letter — the body's feel, to the one host that owns it),
+  `REFUSED` (the world's letter to the one host whose `REZ` it did not honour — the tick, the
+  creature, and the reason by name: owned, full, crowded, bounds; protocol v8, 2026-08-27 —
+  until then a host learned of a refusal only by never hearing its body relayed),
   `DEREZ`, `PING`/`PONG`, `BYE`.
   Late join is not a special case: `WELCOME`, the `REZ` of every live creature, then the next
   `TICK_STATE` — Quake 3's gamestate-then-snapshots in one code path. A spectator is a client
@@ -656,7 +659,7 @@ The claims survive networking and come out sharper, provided they are stated pre
 | Repository | Eventually owns | Today |
 |---|---|---|
 | **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Built: the heartbeat, the roster of record, the validator and its adversarial suite, the physics (hulls, exact contacts, friction, scratches), the Disk with rollover, the input log, and Clu |
-| **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Protocol v6, eleven messages, every one flowing its own way only; the Disk recorder and replayer |
+| **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Protocol v8, twelve messages, every one flowing its own way only; the Disk recorder and replayer |
 | **tron-grid-lite** | The client in both roles, the senses, the renderer, the shared world definition the server fingerprints | The Grid as perceived: `--window` watches and listens, `--program` hosts a creature, `--replay` plays a Disk; the physics left for Master Control |
 | **rc-worm** | The first brain: the DLL, its Qt telemetry GUI, eventually the Blender body | Cloned, parked until the ABI settled - which it has: the first inhabitant is next |
 
