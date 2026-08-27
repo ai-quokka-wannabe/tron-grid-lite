@@ -601,10 +601,17 @@ right to think hard occasionally.
 The claims survive networking and come out sharper, provided they are stated precisely:
 
 - **The world replays bit-identically** from (seed, initial state, action log) on the server's
-  build — the same per-build, per-machine scope the repository has always claimed, now pinned to
-  one process that never touches a GPU. Cross-machine floating-point divergence, the ruin of
-  lockstep RTS replays, is architecturally irrelevant here because only one machine ever
-  simulates.
+  build — **per build, any machine**, since 2026-08-27. Only one process ever simulates and it
+  never touches a GPU, and since the owner's ruling of that day the world owns its
+  transcendentals (master-control's `src/trig.rs`: `sin`, `cos`, `atan2` built from IEEE basic
+  arithmetic alone, the platform's libm banned from the crate), so the only floating-point
+  between one state and the next is arithmetic every machine rounds identically. Cross-machine
+  floating-point divergence, the ruin of lockstep RTS replays, was architecturally irrelevant
+  here and is now impossible by construction; the chain golden life recorded on a Windows desk
+  and re-simulated by Clu on a Linux runner, bit for bit, is the proof on every push. What is
+  not promised: agreement across builds (another compiler, another `target-cpu`) — the log
+  carries its build stamp and Clu names a different one. Perception keeps whatever libm it
+  likes: a picture is not state.
 - **Replay-correctness and rollback-correctness are two different properties, and this design
   needs the first.** Rollback needs only snapshots: save the state, restore the state, no
   demands on the operations in between. Replay needs deterministic operations: the same log

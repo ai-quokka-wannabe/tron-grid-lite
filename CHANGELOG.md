@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- TOPOLOGY § Determinism and replay: the world's replay promise is now **per build, any
+  machine** — master-control owns its transcendentals, so the only floating-point between one
+  state and the next is IEEE basic arithmetic, and the chain golden life recorded on a Windows
+  desk replays bit for bit on a Linux runner. What is not promised (cross-build agreement) and
+  what is untouched (perception's libm) are written down beside it.
+
 ### Added
 
 - **The worm hears itself (Etape 7, the ears' half).** The owner's ruling (2026-08-26): as it
