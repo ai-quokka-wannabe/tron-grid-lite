@@ -978,6 +978,7 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
                 + " body geometries on the stage, the device's world rebuilt.");
         }
         senses_source->tellGuests(host.guests());
+        senses_source->tellScratches(host.scratches());
         stage.update(roster.creatures());
         roster.tick(*senses_source);
         host.act();

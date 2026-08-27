@@ -118,7 +118,7 @@ public:
         Stage* stage = nullptr);
 
     /*!
-        Collects the tick's calls: who is sounding, from where, and how loudly.
+        Collects the tick's calls and scratches: who is sounding, from where, and how loudly.
 
         Read from the roster physics has settled rather than from staged intent, because staged
         copies are overwritten one by one as Programs run and a mid-loop read would hear a tick
@@ -137,6 +137,15 @@ public:
     void tellGuests(std::vector<Stage::GuestTelling> guests);
 
     /*!
+        The scratches the world sounded this tick: every body's slides, the hosted bodies'
+        own included, each with its teller named. Told before `beginTick`, which turns them
+        into sources for every hosted ear - which is how a creature hears its own spikes
+        drag along the Grid. Replaced whole each tick, so nothing rasps on after the world
+        went quiet.
+    */
+    void tellScratches(std::vector<Stage::ScratchTelling> scratches);
+
+    /*!
         Fills the traced senses for one creature.
 
         A stationary creature is answered from its previous solves rather than re-traced: the
@@ -145,11 +154,11 @@ public:
         the right one — it *is* the right one. The Grid and the configs are fixed for this source's
         lifetime, which leaves the pose as the whole key, compared exactly.
 
-        Calls are the deliberate exception to the caching: they are events rather than state, so
-        on a tick with any call sounding, every ear receives its cached hum plus every call's
-        delivery, computed fresh — an enumeration of a few dozen candidates per call, against the
-        gather's thousands of rays. The hum cache itself is never written to by a call, which is
-        what keeps the skip licence exact.
+        Calls and scratches are the deliberate exception to the caching: they are events rather
+        than state, so on a tick with any of them sounding, every ear receives its cached hum
+        plus every sound's delivery, computed fresh — an enumeration of a few dozen candidates
+        per sound, against the gather's thousands of rays. The hum cache itself is never
+        written to by either, which is what keeps the skip licence exact.
     */
     void fill(const RosterLib::Creature& creature, TglSenses& senses) override;
 
@@ -177,10 +186,10 @@ private:
         over-aligned member is padded to that alignment and MSVC reports the padding as a warning
         this repository builds with as an error.
 
-        `responses` is the hum cache and only ever holds a pure gather; `delivered` is scratch for
-        ticks with calls, holding hum plus deliveries. Two buffers rather than one, because a call
-        written into the cache would be replayed to a stationary ear for ever — the skip licence is
-        exact only while the cached answer is exactly the gather's.
+        `responses` is the hum cache and only ever holds a pure gather; `delivered` is the mix
+        for ticks with calls or scratches, holding hum plus deliveries. Two buffers rather than
+        one, because a sound written into the cache would be replayed to a stationary ear for
+        ever — the skip licence is exact only while the cached answer is exactly the gather's.
     */
     struct CreatureEars {
         uint64_t creature_id{0u};
@@ -245,5 +254,13 @@ private:
     std::vector<TglEarView> m_ear_views; //!< Wired into TglSenses; overwritten by the next fill.
     std::vector<TglEyeView> m_eye_views;
     std::vector<Call> m_calls; //!< The calls sounding this tick. Rebuilt by every beginTick.
+    /*!
+        The scratches sounding this tick as sources, built by every beginTick from the
+        tellings: the same shape as a call - a place, a strength, a body to see through -
+        delivered into the bins alone, never as an arrival.
+    */
+    std::vector<Call> m_scratches;
+    //! What the host relayed: the world's scratch events, each teller named.
+    std::vector<Stage::ScratchTelling> m_scratch_tellings;
     std::vector<Stage::GuestTelling> m_guests; //!< The world's other bodies this tick.
 };

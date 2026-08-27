@@ -350,6 +350,29 @@ undulates. Protocol v7 carries it, and the division of labour follows the doctri
   a creature's own senses see through the whole chain of its body, tail included. The senses stay
   on the head; a Program is told nothing of where its tail is.
 
+### The scrape
+
+The owner's second ruling (2026-08-26): *as it undulates, the sharp spikes of the icosahedra
+scrape against the Grid floor, and the worm hears itself.* Two halves, same division of labour:
+
+- **Master Control undulates the trail and sounds the scrape.** The undulation is authored motion
+  and says so: a lateral wave laid over the recorded path, fixed to the path by arc length the way
+  a real undulator's track is fixed to the ground, its amplitude a function of the head's speed and
+  hashed as state; the trail is walked along the wavy path by arc length so the joints stay
+  joined. Every trailing segment, dragged across the floor as the trail moves, scrapes by the
+  head's own scratch rule - its drag speed against the load the head stands with - an `EVENT` of
+  kind scratch from the floor under it. A worm of eight walking is eight scratches a tick, each at
+  its own place. No wire change: the scratch kind already existed for the head's slides.
+- **The Grid delivers every scratch to every creature ear** - the scraper's own included, which is
+  the point - through the same delivery a call takes, seeing through the scraping body's own hull.
+  A scratch deposits energy in the ear's bins and **never a discrete arrival**: it is the Grid's one
+  sustained source, noisy and modulated by the gait, with no sharp onset to time, so a creature can
+  detect it and cannot range it - the asymmetry the acoustics rule already names as physically
+  correct, now the ears' behaviour rather than a remark. The creature host reads the world's
+  scratch `EVENT`s beside each tick's rows, translates a hosted body's wire identity to the one
+  the stage keys its instances by, and hands the tick's scratches to the senses whole; the
+  spectator's ears, which already played scratches, are unchanged.
+
 ## The spectator
 
 A playout buffer with a camera and speakers — and deliberately nothing more. The audit's
@@ -497,7 +520,8 @@ one a mechanism behind a sentence this document already had, or a behaviour it h
   applies to the floor applies to every face, and a sliding contact authors an acoustic event —
   a *scratch*, its strength from slip speed against normal load, its position the contact
   point — delivered through the same acoustics the voice already uses, so creatures hear each
-  other scrape along a wall and spectators hear it Doppler-shifted. What is reported is also
+  other scrape along a wall (and themselves: in their bins, never as an arrival - § The scrape)
+  and spectators hear it Doppler-shifted. What is reported is also
   what is sensed: a contact is a **point on the body, a world normal, a depth and a slip
   velocity**, which is the creature host's touch sense and extends the `TICK_STATE` debt
   already named for it (specific force plus contacts) rather than adding a message; the scratch

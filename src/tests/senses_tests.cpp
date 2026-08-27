@@ -524,6 +524,78 @@ TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
     TEST_CHECK_EQUAL(stage.scene().geometries.size(), static_cast<size_t>(1u));
 }
 
+TEST_CASE(a_scratch_is_heard_in_the_bins_and_gives_no_arrival_to_range_from)
+{
+    /*
+        The owner's ruling, the ears' half: as the chain undulates, its spikes scrape the
+        Grid, and the worm hears itself. A scratch deposits energy in the bin its distance
+        dictates — additively, like a call — but hands over no discrete arrival: the Grid's
+        one sustained source is noisy, with no sharp onset to time, so it is easy to detect
+        and hard to range, exactly as the acoustics rules.
+    */
+    const BvhLib::Scene scene{singingFloorScene()};
+    GridSensesSource source{scene, unitStrengths()};
+
+    const std::array<TglEarDesc, 1u> ears{earAt(0.0f, 0.0f, 0.0f)};
+    RosterLib::Creature listener{hearingCreature(ears.data(), 1u)};
+    listener.body.creature_id = 7u;
+    std::vector<RosterLib::Creature> roster;
+    roster.push_back(listener);
+
+    source.beginTick(roster);
+    TglSenses quiet{};
+    source.fill(roster[0], quiet);
+    std::array<float, Acoustics::BAND_COUNT * Acoustics::BIN_COUNT> hum_only{};
+    std::memcpy(hum_only.data(), quiet.ears[0].energy, sizeof(hum_only));
+    TEST_CHECK_EQUAL(quiet.ears[0].arrival_count, 0u);
+
+    // A guest's spike scrapes 3.6 m due east: energy in the dictated bin, and no arrival.
+    source.tellScratches({Stage::ScratchTelling{.own = false, .creature = 777u, .position = MathLib::Vec3{3.6f, 1.0f, 0.0f}, .strength = 1.0f}});
+    source.beginTick(roster);
+    TglSenses heard{};
+    source.fill(roster[0], heard);
+    const uint32_t direct_bin{callBinOf(3.6f)};
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        const uint32_t index{(band * Acoustics::BIN_COUNT) + direct_bin};
+        TEST_CHECK_CLOSE(heard.ears[0].energy[index] - hum_only[index], 1.0f / (3.6f * 3.6f), 1e-6f);
+    }
+    TEST_CHECK_EQUAL(heard.ears[0].arrival_count, 0u);
+    TEST_CHECK(heard.ears[0].arrivals == nullptr);
+
+    // The listener's own scratch, from the floor its body drags across, under its own ear:
+    // a body is never deaf to its own slide. Nine tenths of a metre is inside the delivery's
+    // spreading floor (a metre, the same floor the caller's own bin-zero ear stands on), so
+    // the energy is the strength itself.
+    source.tellScratches({Stage::ScratchTelling{.own = true, .creature = 7u, .position = MathLib::Vec3{0.0f, 0.1f, 0.0f}, .strength = 0.5f}});
+    source.beginTick(roster);
+    TglSenses own{};
+    source.fill(roster[0], own);
+    const uint32_t own_bin{callBinOf(0.9f)};
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        const uint32_t index{(band * Acoustics::BIN_COUNT) + own_bin};
+        TEST_CHECK_CLOSE(own.ears[0].energy[index] - hum_only[index], 0.5f, 1e-6f);
+    }
+    TEST_CHECK_EQUAL(own.ears[0].arrival_count, 0u);
+
+    // A call and a scratch on the same tick, both 3.6 m out: the bins carry both, exactly
+    // added, and the call's direct path is the one and only arrival - the mix is additive,
+    // the ranging stays the call's alone.
+    RosterLib::Creature caller{hearingCreature(ears.data(), 1u)};
+    caller.body.creature_id = 8u;
+    caller.pose.position = MathLib::Vec3{0.0f, 1.0f, 3.6f};
+    caller.vocalisation = 1.0f;
+    roster.push_back(caller);
+    source.tellScratches({Stage::ScratchTelling{.own = false, .creature = 777u, .position = MathLib::Vec3{3.6f, 1.0f, 0.0f}, .strength = 1.0f}});
+    source.beginTick(roster);
+    TglSenses both{};
+    source.fill(roster[0], both);
+    TEST_CHECK_EQUAL(both.ears[0].arrival_count, 1u);
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        const uint32_t index{(band * Acoustics::BIN_COUNT) + direct_bin};
+        TEST_CHECK_CLOSE(both.ears[0].energy[index] - hum_only[index], 2.0f / (3.6f * 3.6f), 1e-6f);
+    }
+}
+
 TEST_CASE(a_caller_due_east_arrives_at_the_east_ear_first_by_the_interaural_distance_and_its_recession_is_heard)
 {
     /*
