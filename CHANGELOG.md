@@ -608,6 +608,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs/TOPOLOGY.md` says how the chain is joined now: pivot to pivot, each segment a rigid rod
+  a spacing long whose tips consecutive segments share (master-control, after the owner's
+  report of 2026-08-28 that the neighbours were not touching), and that rc-worm's body puts its
+  tips on its axis to meet them. No code here moves: the Grid draws the poses the world sends.
 - **The guides.** The owner's ask (2026-08-27): every repository of the organisation gets a
   development-environment guide a contributor can follow without struggling, and the
   ecosystem gets one guide to running it whole. Here: `docs/DEV_ENV_SETUP.md` brought up to
