@@ -343,9 +343,11 @@ undulates. Protocol v7 carries it, and the division of labour follows the doctri
   Every trailing segment is *kinematic trail*: a ring of the head's past poses per creature,
   sampled by distance, fixed at rez and hashed whole, and each segment stands one spacing
   further back along that path, facing the way the path runs there. Segments touch nothing; the
-  contacts are the head's. Nothing is articulated and nothing is solved, which is why the
-  rigid-body solver in the deferred table below stays deferred: a trail is not the trigger, and
-  saying so here keeps anyone from reading it as one.
+  contacts are the head's. *That was the chain until the third ruling*: since master-control
+  #41 the chain is articulated and solved - see [The undulation propels](#the-undulation-propels)
+  below - and the sentence that once stood here, that a trail is not the trigger for the
+  deferred rigid-body solver, is retired: a creature whose body is articulated was the trigger,
+  and the worm is one.
 - **`TICK_STATE` carries a pose per segment** in every row — a fixed array of seven after the
   head, so rows stay a copy-by-count and the Disk's reader never learned a variable stride; the
   slots beyond a chain are zero and a nonzero one is refused, because a tick's bytes are hashed.
@@ -642,6 +644,38 @@ The claims survive networking and come out sharper, provided they are stated pre
   unaffected. dt is sacred; the wall clock is the degree of freedom. That one sentence closes
   the spiral-of-death door.
 
+### The undulation propels
+
+The owner's third ruling (2026-08-28): *the worm still seems pushed by an invisible force
+rather than propelled by its undulation - model it physically; realism is everything, not just
+the bio side.* And the picture to build to: the worm is a robot, and the pivots where the
+spikes touch are servo motors. Until then the head was the one rigid body the world stepped,
+on the ground its command was its velocity, and the trail was kinematic with a wave laid over
+it for the look; nothing pushed against anything.
+
+- **Master Control's chain is articulated** (its Etape 8; movement 1 in #41). Every segment,
+  the head included, is a rigid body; consecutive segments share a joint tip held by a
+  constraint - the pivot - and a servo at every joint holds the angle between neighbours to a
+  commanded target through a spring of a muscle's stiffness; each segment's spikes rub on the
+  floor with Coulomb friction. The solver is XPBD - substeps and Gauss-Seidel sweeps in a fixed
+  count and a fixed order, IEEE arithmetic and the world's own trig - so replay per build any
+  machine holds, and the chain golden proves it on both platforms. The head still meets risers
+  and the air with the hull code, and a head the world moved pulls its chain after it within
+  the tick. Propulsion is friction's answer to the wave, not a command's: with isotropic
+  friction (movement 1) the wave wriggles in place; the anisotropy the spikes give - they plough
+  sideways and skid lengthwise - is movement 2, and that is where the worm moves.
+- **The gait is the creature's.** Until the wire carries servo targets (movement 3: link v9,
+  client ABI 9, `TglActions` turning from a speed and a turn into the angles a Program asks its
+  joints to hold, the servo's torque declared by the body), the world bridges the old actions
+  into a travelling wave of targets bounded so the wave's phase speed is the declared top speed.
+  A bridge, documented as one; the Program - rc-worm's own wave generator, the panel's keys
+  driving it - brings the gait itself, which is the bio side's to shape. Movement 4 gives every
+  joint's angle back as proprioception; movement 5 lets every segment meet risers and the air
+  for itself.
+- **The Grid draws what it is sent** and needs nothing new: a pose per segment was already in
+  every row. What changes on the Grid is what the eye sees - a body that goes where its own
+  pushing takes it.
+
 ## Deferred, with triggers
 
 | Deferred | Trigger to build it |
@@ -654,7 +688,7 @@ The claims survive networking and come out sharper, provided they are stated pre
 | Persistence (the world survives the server) | The first world anyone regrets losing; until then, snapshot + action log is stronger than a database |
 | Spectator delay | Participants able to consume the spectator feed as a side channel |
 | Audio beyond parametric pings, scratches and Doppler (HRTF, spectator-side occlusion) | The spectator's ears caring, which is a taste decision, not a measurement. Doppler itself left this row on 2026-08-21 — the owner ruled it realism owed now — and the parametric ears landed on 2026-08-22 |
-| Rigid-body dynamics (constraint solver, stacking, friction cones, restitution) | A creature whose body is articulated or whose task needs objects to rest on one another; until then, exact detection with kinematic response, and a mesh proxy that is the convex hull of the `REZ` mesh |
+| Rigid-body dynamics (constraint solver, stacking, friction cones, restitution) | **Triggered** (2026-08-28, the third ruling): the worm is an articulated body, and master-control's Etape 8 builds the solver movement by movement - see [The undulation propels](#the-undulation-propels). Stacking and restitution stay on their own triggers: objects resting on one another |
 | WebAssembly brain tier, out-of-process DLL runner | The first community brain from outside the circle of trust |
 
 ## The four repositories
