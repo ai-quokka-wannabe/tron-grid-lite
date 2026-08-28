@@ -608,6 +608,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs/TOPOLOGY.md`: movement 2 of Etape 8 is the keels - the anisotropy that propels the worm
+  is its tubes', read from the hull as runners, not the spikes' (a point on a hard floor rubs
+  the same every way), and the worm now moves under its own wave (master-control, movement 2).
+  Docs only.
 - `docs/TOPOLOGY.md` carries the third ruling (2026-08-28): the undulation propels. Master
   Control's chain is articulated - rigid segments, pivots, a servo at every joint, Coulomb
   friction on the spikes, XPBD - and the deferred rigid-body solver is at its trigger, being
