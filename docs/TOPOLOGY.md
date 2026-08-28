@@ -670,8 +670,10 @@ it for the look; nothing pushed against anything.
   degrees either side of its axis - a V-keel, the two bottom-face tubes of the pitched body),
   and friction is Coulomb's per runner, component by component, so its force leans away from
   the slide; that lean is the thrust. The same wave that wriggled in place carries the worm
-  1.3 m in ten seconds, straight, and as far backwards in reverse - slow against the wave's
-  own speed, and the gait is where speed lives from movement 3 on.
+  1.3 m in ten seconds, straight, and as far backwards in reverse - a fraction of the wave's
+  own speed, reported as a finding: the owner's rule is that speed is not the target, realism
+  is, and nothing is tuned for a number. From movement 3 the gait is the creature's, on the
+  same terms.
 - **The gait is the creature's.** Until the wire carries servo targets (movement 3: link v9,
   client ABI 9, `TglActions` turning from a speed and a turn into the angles a Program asks its
   joints to hold, the servo's torque declared by the body), the world bridges the old actions
