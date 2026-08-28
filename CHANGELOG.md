@@ -608,6 +608,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `docs/TOPOLOGY.md` carries the third ruling (2026-08-28): the undulation propels. Master
+  Control's chain is articulated - rigid segments, pivots, a servo at every joint, Coulomb
+  friction on the spikes, XPBD - and the deferred rigid-body solver is at its trigger, being
+  built movement by movement (master-control #41 is the first). The sentence that a trail was
+  not the trigger is retired. Nothing here moves: the Grid draws the poses the world sends.
 - `docs/TOPOLOGY.md` says how the chain is joined now: pivot to pivot, each segment a rigid rod
   a spacing long whose tips consecutive segments share (master-control, after the owner's
   report of 2026-08-28 that the neighbours were not touching), and that rc-worm's body puts its
