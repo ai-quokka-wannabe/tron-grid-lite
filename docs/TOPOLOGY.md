@@ -361,8 +361,11 @@ scrape against the Grid floor, and the worm hears itself.* Two halves, same divi
 - **Master Control undulates the trail and sounds the scrape.** The undulation is authored motion
   and says so: a lateral wave laid over the recorded path, fixed to the path by arc length the way
   a real undulator's track is fixed to the ground, its amplitude a function of the head's speed and
-  hashed as state; the trail is walked along the wavy path by arc length so the joints stay
-  joined. Every trailing segment, dragged across the floor as the trail moves, scrapes by the
+  hashed as state; the trail is walked along the wavy path pivot to pivot - each segment a rigid
+  rod a spacing long from nose tip to tail tip, consecutive rods sharing a tip - so the joints are
+  joined at one point wherever the path bends. (The owner's report, 2026-08-28: walked by arc
+  length and faced along the tangent, two tips met only on a straight run; and rc-worm's body
+  puts its two tips exactly on its axis, where the world's pivots are.) Every trailing segment, dragged across the floor as the trail moves, scrapes by the
   head's own scratch rule - its drag speed against the load the head stands with - an `EVENT` of
   kind scratch from the floor under it. A worm of eight walking is eight scratches a tick, each at
   its own place. No wire change: the scratch kind already existed for the head's slides.
