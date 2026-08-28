@@ -662,8 +662,16 @@ it for the look; nothing pushed against anything.
   machine holds, and the chain golden proves it on both platforms. The head still meets risers
   and the air with the hull code, and a head the world moved pulls its chain after it within
   the tick. Propulsion is friction's answer to the wave, not a command's: with isotropic
-  friction (movement 1) the wave wriggles in place; the anisotropy the spikes give - they plough
-  sideways and skid lengthwise - is movement 2, and that is where the worm moves.
+  friction (movement 1) the wave wriggles in place. Movement 2 is the keels, and the honest
+  finding behind them: a sharp spike on a hard floor rubs the same in every direction and could
+  propel nothing - what a spiky body rests on is its *tubes*, and a tube lying along the floor
+  is a runner that glides along itself and ploughs across itself. Master Control reads each
+  body's runners from its hull at rez rather than declaring them (the worm's are two, thirty
+  degrees either side of its axis - a V-keel, the two bottom-face tubes of the pitched body),
+  and friction is Coulomb's per runner, component by component, so its force leans away from
+  the slide; that lean is the thrust. The same wave that wriggled in place carries the worm
+  1.3 m in ten seconds, straight, and as far backwards in reverse - slow against the wave's
+  own speed, and the gait is where speed lives from movement 3 on.
 - **The gait is the creature's.** Until the wire carries servo targets (movement 3: link v9,
   client ABI 9, `TglActions` turning from a speed and a turn into the angles a Program asks its
   joints to hold, the servo's torque declared by the body), the world bridges the old actions
