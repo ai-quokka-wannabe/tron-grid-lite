@@ -163,7 +163,8 @@ namespace
                     .reserved0 = {},
                     .specific_force = {0.0f, 9.81f, 0.0f},
                     .joint_angles = {0.25f, -0.5f},
-                    .contact_count = grounded ? 1u : 0u};
+                    .contact_count = grounded ? 1u : 0u,
+                    .reserved1 = {}};
                 check(m_library.vtable().send_proprioception(m_connection, &letter, grounded ? contacts.data() : nullptr), "send_proprioception");
             }
             flush();
@@ -185,8 +186,14 @@ namespace
                 row.segments[segment].yaw = 0.1f * static_cast<float>(segment + 1u);
             }
             check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
-            const LnkProprioception letter{
-                .tick = tick, .creature_id = creature_id, .grounded = 1u, .reserved0 = {}, .specific_force = {0.0f, 9.81f, 0.0f}, .contact_count = 0u};
+            const LnkProprioception letter{.tick = tick,
+                .creature_id = creature_id,
+                .grounded = 1u,
+                .reserved0 = {},
+                .specific_force = {0.0f, 9.81f, 0.0f},
+                .joint_angles = {},
+                .contact_count = 0u,
+                .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
@@ -209,8 +216,14 @@ namespace
             check(m_library.vtable().send_event(m_connection, &guest), "send_event");
             const LnkEvent news{.tick = tick, .position = {0.0f, 0.0f, 0.0f}, .strength = 1.0f, .creature_id = 777u, .kind = LNK_EVENT_VOCALISATION, .reserved0 = {}};
             check(m_library.vtable().send_event(m_connection, &news), "send_event");
-            const LnkProprioception letter{
-                .tick = tick, .creature_id = creature_id, .grounded = 1u, .reserved0 = {}, .specific_force = {0.0f, 9.81f, 0.0f}, .contact_count = 0u};
+            const LnkProprioception letter{.tick = tick,
+                .creature_id = creature_id,
+                .grounded = 1u,
+                .reserved0 = {},
+                .specific_force = {0.0f, 9.81f, 0.0f},
+                .joint_angles = {},
+                .contact_count = 0u,
+                .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
@@ -231,7 +244,9 @@ namespace
                 .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u),
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
-                .contact_count = 0u};
+                .joint_angles = {},
+                .contact_count = 0u,
+                .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
