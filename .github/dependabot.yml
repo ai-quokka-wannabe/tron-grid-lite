@@ -9,6 +9,25 @@ updates:
         time: "00:00"
         timezone: "Europe/Ljubljana"
 
+    # The composite actions have their own manifests, and Dependabot reads only the directories
+    # it is told: without these two, the cache actions pinned inside them went stale for a month
+    # while the workflows above were kept current (found 2026-08-29).
+    - package-ecosystem: "github-actions"
+      directory: "/.github/actions/setup-vulkan-linux"
+      schedule:
+        interval: weekly
+        day: saturday
+        time: "00:00"
+        timezone: "Europe/Ljubljana"
+
+    - package-ecosystem: "github-actions"
+      directory: "/.github/actions/setup-vulkan-windows"
+      schedule:
+        interval: weekly
+        day: saturday
+        time: "00:00"
+        timezone: "Europe/Ljubljana"
+
     # The markdown linter pinned in package-lock.json: a bump is a pull request, never a surprise.
     - package-ecosystem: "npm"
       directory: "/"
