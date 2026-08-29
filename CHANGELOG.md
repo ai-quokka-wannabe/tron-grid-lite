@@ -617,6 +617,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Vulkan SDK 1.4.357.1** in CI (the Tool Updates watcher's #127): the pin in both workflows moves
+  from 1.4.357.0, and the guides say so. The composite actions fetch the SDK by version, so the
+  pin is the whole of the change; the desk builds against whatever SDK is installed there.
 - `docs/TOPOLOGY.md`: movement 2 of Etape 8 is the keels - the anisotropy that propels the worm
   is its tubes', read from the hull as runners, not the spikes' (a point on a hard floor rubs
   the same every way), and the worm now moves under its own wave (master-control, movement 2).

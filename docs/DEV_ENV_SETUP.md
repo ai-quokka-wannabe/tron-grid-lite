@@ -13,7 +13,7 @@ cmake --workflow --preset windows-msvc        # or linux-x11-gcc, linux-x11-clan
 build/windows-msvc/src/Release/TronGridLite --debug
 ```
 
-That needs a C++20 compiler, CMake 3.25+, Ninja, the Vulkan SDK 1.4.357.0 (with `slangc` and
+That needs a C++20 compiler, CMake 3.25+, Ninja, the Vulkan SDK 1.4.357.1 (with `slangc` and
 `spirv-val` - install every component), and rustup (Rust 1.95.0 is installed by the pin the
 moment cargo first runs). Everything below is the long version, with every version CI pins.
 
@@ -39,7 +39,7 @@ hardware ray tracing, so integrated graphics from the last few years are fair ga
 |------|---------|-----------------|
 | CMake | 3.25 or newer | <https://cmake.org/download/> |
 | Ninja | 1.11 or newer | <https://ninja-build.org/> (bundled with Visual Studio and most distributions) |
-| Vulkan SDK | **1.4.357.0** - the version CI builds against; newer works, the real constraint is `slangc` and `spirv-val` in its `bin` | <https://vulkan.lunarg.com/sdk/home> |
+| Vulkan SDK | **1.4.357.1** - the version CI builds against; newer works, the real constraint is `slangc` and `spirv-val` in its `bin` | <https://vulkan.lunarg.com/sdk/home> |
 | Git | any recent | <https://git-scm.com/downloads> |
 | rustup | any recent; **Rust 1.95.0** is pinned by `external/link/rust-toolchain.toml` and installed by rustup on first use | <https://rustup.rs/> |
 | Python | 3.10 or newer, for the `tools/` scripts and the pinned formatter | <https://www.python.org/downloads/> |
@@ -105,7 +105,7 @@ The installer sets `VULKAN_SDK` for you. Open a **new** terminal and check:
 echo %VULKAN_SDK%
 ```
 
-It should print something like `C:\VulkanSDK\1.4.357.0`.
+It should print something like `C:\VulkanSDK\1.4.357.1`.
 
 ### Step 3 — Verify the driver
 

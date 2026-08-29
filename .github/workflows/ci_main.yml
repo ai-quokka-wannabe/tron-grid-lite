@@ -16,7 +16,7 @@ on:
     workflow_dispatch:
 
 env:
-    VULKAN_SDK_VERSION: "1.4.357.0"
+    VULKAN_SDK_VERSION: "1.4.357.1"
 
 jobs:
     quick-checks:

@@ -97,7 +97,7 @@ When submitting:
 - C++20 compiler (MSVC 19.30+, GCC 12+, or Clang 15+)
 - CMake 3.25+
 - Ninja build system
-- Vulkan SDK 1.4.357.0 (the version CI pins; `slangc` and `spirv-val` must be in its `bin`)
+- Vulkan SDK 1.4.357.1 (the version CI pins; `slangc` and `spirv-val` must be in its `bin`)
 - rustup (Rust 1.95.0 is pinned by the Link submodule and installed on first use)
 - XCB development headers (Linux only)
 
