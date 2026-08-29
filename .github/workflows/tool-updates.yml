@@ -35,7 +35,10 @@ jobs:
                       name: Vulkan SDK
                       where: '`VULKAN_SDK_VERSION` in `.github/workflows/*.yml`'
                       current: 'grep -ohP ''VULKAN_SDK_VERSION: "\K[0-9.]+'' .github/workflows/ci_pr.yml | head -1'
-                      latest: 'curl -fsSL --retry 3 --max-time 60 https://vulkan.lunarg.com/sdk/latest/linux.txt | tr -d ''[:space:]'''
+                      # The version both platforms can install - LunarG publishes a point release for one
+                      # platform before the other (1.4.357.1 was Linux-only for a while, and the Windows
+                      # legs of a pin bump to it failed on a 404), so the lower of the two is the latest.
+                      latest: '( curl -fsSL --retry 3 --max-time 60 https://vulkan.lunarg.com/sdk/latest/linux.txt; echo; curl -fsSL --retry 3 --max-time 60 https://vulkan.lunarg.com/sdk/latest/windows.txt; echo ) | sed ''s/[^0-9.]//g'' | grep . | sort -V | head -1'
                       notes: https://vulkan.lunarg.com/sdk/home
                     - key: clang-format
                       name: clang-format (major)
