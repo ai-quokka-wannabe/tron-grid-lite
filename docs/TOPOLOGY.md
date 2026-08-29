@@ -682,6 +682,18 @@ it for the look; nothing pushed against anything.
   driving it - brings the gait itself, which is the bio side's to shape. Movement 4 gives every
   joint's angle back as proprioception; movement 5 lets every segment meet risers and the air
   for itself.
+- **Movement 3: the gait is the creature's.** Link v9 carries it - `REZ` declares a body's
+  servos by bound, `ACTIONS` the angle each is asked to hold - and the Program ABI (8) does the
+  same: `TglCreatureDesc` states the Grid's limit for each actuator class and `TglActions`
+  carries `joint_targets[7]`. Which actuators a body has follows from the body it brings - a
+  chain is a row of servos at its pivots and has no velocity actuator, a body of one segment
+  the reverse - and the Grid tells the world so at `REZ`, a bound of zero being no such
+  actuator (the Program ABI's own rule; nothing is retired). Master Control's gait bridge is
+  gone: every servo holds what it is asked, within its swing and with no more than its torque
+  (XPBD's multiplier accumulated and clamped - past its torque a servo stalls). rc-worm brings
+  the first gait: a travelling wave of joint angles, the panel's forward and turn being how
+  hard the wave runs and which way the body bends. The Grid's host relays the targets with
+  the tick-1 resend the message always had.
 - **The Grid draws what it is sent** and needs nothing new: a pose per segment was already in
   every row. What changes on the Grid is what the eye sees - a body that goes where its own
   pushing takes it.

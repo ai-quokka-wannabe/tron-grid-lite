@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Program ABI 8: the servos - Etape 8 movement 3's companion.** `TglActions` carries
+  `joint_targets[7]`, the angle each servo is asked to hold; `TglCreatureDesc` carries the
+  Grid's limit for the class (`max_joint_angle` 0.9 rad, `max_joint_torque` 5 N·m). Which
+  actuators a body has follows from the body it brings: once a Program's model is validated,
+  a chain keeps its servos and loses its velocity actuators, a body of one segment the
+  reverse, and the host tells the world so at `REZ` (link v9, `max_joint_angle` and
+  `max_joint_torque` on the wire) and relays the targets with the tick-1 resend. The layout
+  manifest and the ABI fingerprint are re-recorded; PROGRAM_INTERFACE and TOPOLOGY say the
+  rule. The link submodule moves to protocol v9.
 - **The worm hears itself (Etape 7, the ears' half).** The owner's ruling (2026-08-26): as it
   undulates, the sharp spikes of the icosahedra scrape against the Grid floor, and the worm hears
   itself. Master Control now sounds a scratch `EVENT` for every dragged segment (its #34); the

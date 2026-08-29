@@ -537,6 +537,22 @@ document deliberately does not restate the struct — the header is the specific
 listing this section used to carry proved the rule by drifting: it still showed the vertical
 actuator after the header had retired it. The decisions behind the fields:
 
+- **The servos, and which actuators a body has (ABI 8, Etape 8 movement 3).** `TglActions`
+  carries `joint_targets[7]`: the angle each servo is asked to hold this tick, joint k between
+  segments k and k + 1, positive bending the chain to the creature's left. `TglCreatureDesc`
+  carries `max_joint_angle` and `max_joint_torque`, the Grid's limit for the class. *Which*
+  actuators a body has follows from the body it brings: a chain (segment_count above one in
+  its model) is a row of servos at its pivots and has no velocity actuator - its
+  `desired_forward_speed` and `desired_turn_rate` are read by nothing - while a body of one
+  segment has the velocity actuators and no servos. The descriptor precedes the model, so it
+  states the Grid's limit for each class; once the model is validated the Grid tells the
+  world which class this body has, with a bound of zero for the other. The gait - which joint
+  bends when - is the Program's own; the Grid carries it to the world as it is, the world
+  clamps each target to the swing and holds it with no more than the torque, and how far the
+  body gets is the floor's answer, reported by the senses. rc-worm's `Gait` is the first: a
+  travelling wave of joint angles, the panel's forward and turn not a speed and a heading but
+  how hard the wave runs and which way the body bends.
+
 **There is deliberately no vertical intent.** Height is physics' business — gravity, the floor and
 whatever the body ran off — and on a Grid with no water and nothing climbable a vertical actuator
 clamped to zero for every plausible body was a field the Grid read and nothing could act on.

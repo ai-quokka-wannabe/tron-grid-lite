@@ -83,6 +83,8 @@
     X(TglCreatureDesc, max_forward_speed) \
     X(TglCreatureDesc, max_turn_rate) \
     X(TglCreatureDesc, max_vocalisation_strength) \
+    X(TglCreatureDesc, max_joint_angle) \
+    X(TglCreatureDesc, max_joint_torque) \
     X(TglCreatureDesc, padding0)
 
 #define TGL_RENDER_MATERIAL_MEMBERS(X) \
@@ -150,7 +152,8 @@
 #define TGL_ACTIONS_MEMBERS(X) \
     X(TglActions, desired_forward_speed) \
     X(TglActions, desired_turn_rate) \
-    X(TglActions, vocalisation_strength)
+    X(TglActions, vocalisation_strength) \
+    X(TglActions, joint_targets)
 
 #define TGL_PROGRAM_VTABLE_MEMBERS(X) \
     X(TglProgramVTable, struct_size) \

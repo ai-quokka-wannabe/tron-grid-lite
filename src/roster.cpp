@@ -140,7 +140,14 @@ namespace
         desc.max_forward_speed = 1.0f;
         desc.max_turn_rate = std::numbers::pi_v<float> / 2.0f;
         desc.max_vocalisation_strength = 1.0f;
-
+        /*
+            The servos, for a body that brings a chain: about fifty degrees of swing, what a
+            lateral undulator's joints move through, and five newton-metres of torque, a small
+            servo's, on a kilogram body. The descriptor precedes the model, so this is the Grid's
+            limit for the class; which class the body has is settled once its model is known.
+        */
+        desc.max_joint_angle = 0.9f;
+        desc.max_joint_torque = 5.0f;
         return desc;
     }
 
@@ -310,6 +317,17 @@ namespace RosterLib
 
                 try {
                     creature.model = copyValidatedModel(model);
+                    // Which actuators this body has follows from the body it brought: a chain
+                    // is a row of servos at its pivots and has no velocity actuator; a body of
+                    // one segment has the velocity actuators and no servos. A bound of zero is
+                    // no such actuator, and that is what the world is told at REZ.
+                    if (creature.model.segment_count > 1u) {
+                        creature.body.max_forward_speed = 0.0f;
+                        creature.body.max_turn_rate = 0.0f;
+                    } else {
+                        creature.body.max_joint_angle = 0.0f;
+                        creature.body.max_joint_torque = 0.0f;
+                    }
                 } catch (const std::exception& defect) {
                     // The rez succeeded, so the handle is real and owed its derez before the refusal
                     // leaves this frame — a Program is entitled to unwind in program_derez what it
