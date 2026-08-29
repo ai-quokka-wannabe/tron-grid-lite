@@ -52,7 +52,7 @@ extern "C"
     produces exactly the silent memory corruption the number exists to prevent, and produces it
     without failing anywhere.
 */
-#define TGL_ABI_VERSION 7u
+#define TGL_ABI_VERSION 8u
 
 /* ================================================================================================
    Toolchain glue
@@ -320,6 +320,16 @@ typedef struct TglCreatureDesc {
     float max_forward_speed;
     float max_turn_rate;
     float max_vocalisation_strength;
+
+    /*! The servos: the Grid's limit for a joint's swing (radians, the bound every joint target is
+        clamped to) and for the torque a servo holds with (newton-metres). Which actuators a body
+        has follows from the body it brings: a chain (segment_count above one in its model) is a
+        row of servos at its pivots and has no velocity actuator; a body of one segment has the
+        velocity actuators and no servos. The descriptor precedes the model, so it states the
+        Grid's limit for each class; the Grid tells the world which class this body has once the
+        model is validated, and a bound of zero there is no such actuator. */
+    float max_joint_angle;
+    float max_joint_torque;
 
     /*! Unused; present so the struct's members account for all of its bytes, which is what the
         padding assertions below demand. Alignment padding, not a reserved capability: the next
@@ -681,6 +691,13 @@ typedef struct TglActions {
         carry its whole response — the caller's own ears included, loudest and first, which is the
         only readback the voice has or needs. */
     float vocalisation_strength;
+
+    /*! The angle each servo is asked to hold this tick, radians, joint k between segments k and
+        k + 1, positive bending the chain to the creature's left; segment_count - 1 meaningful, the
+        rest zero. Clamped to +/- max_joint_angle, held with no more than max_joint_torque - past
+        that a servo stalls. The muscle: which joint bends when is the Program's own gait, and
+        the Grid carries it to the world as it is. A body of one segment has none. */
+    float joint_targets[TGL_SEGMENTS_MAX - 1u];
 } TglActions;
 
 /* ================================================================================================
@@ -797,8 +814,8 @@ TGL_STATIC_ASSERT(TGL_SUM6(TglEyeDesc, sample_directions, sample_acceptance_angl
     "TglEyeDesc has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM6(TglEarDesc, band_edges_hz, air_absorption_db_per_km, position, band_count, bin_count, bin_seconds) == sizeof(TglEarDesc),
     "TglEarDesc has padding: a member changed width.");
-TGL_STATIC_ASSERT(TGL_SUM12(TglCreatureDesc, creature_id, random_seed, eyes, ears, eye_count, ear_count, irradiance_sample_count, max_contact_count, max_forward_speed,
-                      max_turn_rate, max_vocalisation_strength, padding0)
+TGL_STATIC_ASSERT(TGL_SUM14(TglCreatureDesc, creature_id, random_seed, eyes, ears, eye_count, ear_count, irradiance_sample_count, max_contact_count, max_forward_speed,
+                      max_turn_rate, max_vocalisation_strength, max_joint_angle, max_joint_torque, padding0)
         == sizeof(TglCreatureDesc),
     "TglCreatureDesc has padding beyond its named padding member: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM4(TglRenderMaterial, colour, index_of_refraction, emission, transmission) == sizeof(TglRenderMaterial),
@@ -817,7 +834,7 @@ TGL_STATIC_ASSERT(TGL_SUM14(TglSenses, tick, eyes, ears, contacts, eye_count, ea
                       body_turn_rate, specific_force, angular_velocity, irradiance)
         == sizeof(TglSenses),
     "TglSenses has padding: a member changed width.");
-TGL_STATIC_ASSERT(TGL_SUM3(TglActions, desired_forward_speed, desired_turn_rate, vocalisation_strength) == sizeof(TglActions),
+TGL_STATIC_ASSERT(TGL_SUM4(TglActions, desired_forward_speed, desired_turn_rate, vocalisation_strength, joint_targets) == sizeof(TglActions),
     "TglActions has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM7(TglProgramVTable, struct_size, abi_version, library_init, program_rez, program_tick, program_derez, library_shutdown)
         == sizeof(TglProgramVTable),
@@ -842,7 +859,7 @@ TGL_STATIC_ASSERT(offsetof(TglEarDesc, band_count) == 28u, "TglEarDesc::band_cou
 TGL_STATIC_ASSERT(offsetof(TglEarDesc, bin_count) == 32u, "TglEarDesc::bin_count must sit at offset 32.");
 TGL_STATIC_ASSERT(offsetof(TglEarDesc, bin_seconds) == 36u, "TglEarDesc::bin_seconds must sit at offset 36.");
 
-TGL_STATIC_ASSERT(sizeof(TglCreatureDesc) == 64u, "TglCreatureDesc must be 64 bytes with no padding.");
+TGL_STATIC_ASSERT(sizeof(TglCreatureDesc) == 72u, "TglCreatureDesc must be 72 bytes with no padding.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, creature_id) == 0u, "TglCreatureDesc::creature_id must sit at offset 0.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, random_seed) == 8u, "TglCreatureDesc::random_seed must sit at offset 8.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, eyes) == 16u, "TglCreatureDesc::eyes must sit at offset 16.");
@@ -854,7 +871,9 @@ TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_contact_count) == 44u, "TglCreat
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_forward_speed) == 48u, "TglCreatureDesc::max_forward_speed must sit at offset 48.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_turn_rate) == 52u, "TglCreatureDesc::max_turn_rate must sit at offset 52.");
 TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_vocalisation_strength) == 56u, "TglCreatureDesc::max_vocalisation_strength must sit at offset 56.");
-TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, padding0) == 60u, "TglCreatureDesc::padding0 must sit at offset 60.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_joint_angle) == 60u, "TglCreatureDesc::max_joint_angle must sit at offset 60.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, max_joint_torque) == 64u, "TglCreatureDesc::max_joint_torque must sit at offset 64.");
+TGL_STATIC_ASSERT(offsetof(TglCreatureDesc, padding0) == 68u, "TglCreatureDesc::padding0 must sit at offset 68.");
 
 TGL_STATIC_ASSERT(sizeof(TglRenderMaterial) == 32u, "TglRenderMaterial is an array element, so its size is a stride. It must be 32 bytes with no padding.");
 TGL_STATIC_ASSERT(offsetof(TglRenderMaterial, colour) == 0u, "TglRenderMaterial::colour must sit at offset 0.");
@@ -913,10 +932,11 @@ TGL_STATIC_ASSERT(offsetof(TglSenses, specific_force) == 60u, "TglSenses::specif
 TGL_STATIC_ASSERT(offsetof(TglSenses, angular_velocity) == 72u, "TglSenses::angular_velocity must sit at offset 72.");
 TGL_STATIC_ASSERT(offsetof(TglSenses, irradiance) == 84u, "TglSenses::irradiance must sit at offset 84.");
 
-TGL_STATIC_ASSERT(sizeof(TglActions) == 12u, "TglActions must be 12 bytes.");
+TGL_STATIC_ASSERT(sizeof(TglActions) == 40u, "TglActions must be 40 bytes: three actuators and seven servo targets.");
 TGL_STATIC_ASSERT(offsetof(TglActions, desired_forward_speed) == 0u, "TglActions::desired_forward_speed must sit at offset 0.");
 TGL_STATIC_ASSERT(offsetof(TglActions, desired_turn_rate) == 4u, "TglActions::desired_turn_rate must sit at offset 4.");
 TGL_STATIC_ASSERT(offsetof(TglActions, vocalisation_strength) == 8u, "TglActions::vocalisation_strength must sit at offset 8.");
+TGL_STATIC_ASSERT(offsetof(TglActions, joint_targets) == 12u, "TglActions::joint_targets must sit at offset 12.");
 
 TGL_STATIC_ASSERT(sizeof(TglProgramVTable) >= TGL_PROGRAM_VTABLE_MIN_SIZE, "TglProgramVTable must be at least TGL_PROGRAM_VTABLE_MIN_SIZE bytes.");
 TGL_STATIC_ASSERT(offsetof(TglProgramVTable, struct_size) == 0u, "TglProgramVTable::struct_size must be first, for ever.");

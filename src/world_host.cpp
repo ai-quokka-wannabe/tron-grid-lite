@@ -144,7 +144,9 @@ namespace WorldHostLib
                 .triangle_count = static_cast<std::uint32_t>(triangles.size()),
                 .material_count = static_cast<std::uint32_t>(materials.size()),
                 .segment_count = creature.model.segment_count,
-                .segment_spacing = creature.model.segment_spacing};
+                .segment_spacing = creature.model.segment_spacing,
+                .max_joint_angle = creature.body.max_joint_angle,
+                .max_joint_torque = creature.body.max_joint_torque};
 
             const LnkStatus status{m_library.vtable().send_rez(m_connection, &rez, vertices.empty() ? nullptr : vertices.data(),
                 triangles.empty() ? nullptr : triangles.data(), materials.empty() ? nullptr : materials.data())};
@@ -421,8 +423,15 @@ namespace WorldHostLib
                 .previous_forward_speed = previous.desired_forward_speed,
                 .previous_turn_rate = previous.desired_turn_rate,
                 .previous_vocalisation = previous.vocalisation_strength,
+                .joint_targets = {},
+                .previous_joint_targets = {},
                 .reserved0 = {}};
-            const LnkStatus status{m_library.vtable().send_actions(m_connection, &actions)};
+            // The servos' targets, this tick's and the tick-1 resend, copied whole: the muscle the
+            // Program asked for, carried to the world as it is.
+            LnkActions with_servos{actions};
+            std::copy(std::begin(staged.joint_targets), std::end(staged.joint_targets), std::begin(with_servos.joint_targets));
+            std::copy(std::begin(previous.joint_targets), std::end(previous.joint_targets), std::begin(with_servos.previous_joint_targets));
+            const LnkStatus status{m_library.vtable().send_actions(m_connection, &with_servos)};
             if (status != LNK_OK) {
                 throw std::runtime_error{"Link refused to stage ACTIONS for creature " + std::to_string(index) + ": " + WorldClientLib::statusName(status)};
             }
