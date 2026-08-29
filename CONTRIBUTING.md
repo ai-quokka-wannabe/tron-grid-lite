@@ -74,7 +74,7 @@ When submitting:
 #### PR Requirements
 
 - [ ] Code compiles without warnings on all relevant presets
-- [ ] Code is formatted (`.clang-format`, clang-format 22.x - `pip install "clang-format~=22.1"`; CI refuses anything else)
+- [ ] Code is formatted (`.clang-format`, clang-format 23.x - `pip install "clang-format~=23.1"`; CI refuses anything else)
 - [ ] No Vulkan validation layer errors
 - [ ] Documentation is updated if needed
 - [ ] An entry added to `CHANGELOG.md` § Unreleased for anything user-visible

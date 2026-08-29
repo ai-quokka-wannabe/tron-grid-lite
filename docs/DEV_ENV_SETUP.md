@@ -320,12 +320,12 @@ once and reload the window.
 
 ## Formatting Before You Commit
 
-CI gates on **clang-format 22.1**, pinned to that version because formatters change their
+CI gates on **clang-format 23.1**, pinned to that version because formatters change their
 minds between majors. Install exactly that one, into your user site so it cannot collide with
 an LLVM on the path, and use it:
 
 ```text
-python -m pip install --user "clang-format~=22.1"
+python -m pip install --user "clang-format~=23.1"
 python -m clang_format --version          # 22.1.x
 python -m clang_format -i src/foo.cpp src/foo.hpp
 ```

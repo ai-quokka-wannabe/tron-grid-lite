@@ -94,7 +94,7 @@ jobs:
             # clean, and this is what makes the claim true. The vendored and submodule code is
             # somebody else's tree and is not judged here.
             - name: Install clang-format
-              run: python3 -m pip install --quiet "clang-format~=22.1"
+              run: python3 -m pip install --quiet "clang-format~=23.1"
 
             - name: Formatting must be canonical
               shell: bash
