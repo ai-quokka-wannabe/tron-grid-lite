@@ -146,6 +146,7 @@
     X(TglSenses, body_vertical_speed) \
     X(TglSenses, body_turn_rate) \
     X(TglSenses, joint_angles) \
+    X(TglSenses, joint_torques) \
     X(TglSenses, specific_force) \
     X(TglSenses, angular_velocity) \
     X(TglSenses, irradiance) \

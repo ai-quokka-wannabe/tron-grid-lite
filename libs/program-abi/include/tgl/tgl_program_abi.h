@@ -52,7 +52,7 @@ extern "C"
     produces exactly the silent memory corruption the number exists to prevent, and produces it
     without failing anywhere.
 */
-#define TGL_ABI_VERSION 9u
+#define TGL_ABI_VERSION 10u
 
 /* ================================================================================================
    Toolchain glue
@@ -634,6 +634,14 @@ typedef struct TglSenses {
         letter as the specific force and the contacts; the Grid copies it and derives nothing. */
     float joint_angles[TGL_SEGMENTS_MAX - 1u];
 
+    /*! The torque each servo holds its angle with at the tick's end, newton-metres, signed in
+        the angle's sense: at most max_joint_torque in magnitude, and exactly that when the servo
+        stalls - against a wall, a neighbour, the floor's grip on a runner. What organ: a motor's
+        current sense, a tendon's organ; the load a joint bears, which no pose can yield, so the
+        world that holds the servos reports it in the same letter as the angles. Same slots as
+        joint_angles; zero beyond the chain and for a body of one segment. */
+    float joint_torques[TGL_SEGMENTS_MAX - 1u];
+
     /* -- Vestibular ---------------------------------------------------------------------------- */
 
     /*! Specific force in body frame, metres per second squared: linear acceleration with gravity
@@ -661,9 +669,9 @@ typedef struct TglSenses {
         cold long before it is enough to see. */
     float irradiance;
 
-    /*! Always zero. Rounds the struct to its alignment so that no byte of it is unnamed; a
-        Program never reads it. */
-    uint32_t padding0;
+    /*! Always zero. Two words that round the struct to its alignment so that no byte of it is
+        unnamed; a Program never reads them. */
+    uint32_t padding0[2];
 } TglSenses;
 
 /*!
@@ -824,6 +832,7 @@ typedef const TglProgramVTable* (*TglGetProgramVTableFn)(uint32_t abi_version)TG
 #define TGL_SUM14(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n) (TGL_SUM7(t, a, b, c, d, e, f, g) + TGL_SUM7(t, h, i, j, k, l, m, n))
 #define TGL_SUM15(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) (TGL_SUM14(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n) + TGL_SIZEOF_MEMBER(t, o))
 #define TGL_SUM16(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) (TGL_SUM15(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) + TGL_SIZEOF_MEMBER(t, p))
+#define TGL_SUM17(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q) (TGL_SUM16(t, a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p) + TGL_SIZEOF_MEMBER(t, q))
 
 TGL_STATIC_ASSERT(TGL_SUM2(TglLibraryInfo, creature_count, nominal_dt_seconds) == sizeof(TglLibraryInfo), "TglLibraryInfo has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM6(TglEyeDesc, sample_directions, sample_acceptance_angles, position, sample_count, channels, quantisation_bits) == sizeof(TglEyeDesc),
@@ -846,8 +855,8 @@ TGL_STATIC_ASSERT(TGL_SUM6(TglEarView, energy, arrivals, arrival_count, band_cou
 TGL_STATIC_ASSERT(TGL_SUM3(TglArrival, onset_seconds, radial_velocity, energy) == sizeof(TglArrival), "TglArrival has padding: a member changed width.");
 TGL_STATIC_ASSERT(sizeof(TglArrival) == 24u, "TglArrival is an array element, so its size is a stride. It must be 24 bytes.");
 TGL_STATIC_ASSERT(TGL_SUM5(TglContact, position, impulse, normal, depth, slip) == sizeof(TglContact), "TglContact has padding: a member changed width.");
-TGL_STATIC_ASSERT(TGL_SUM16(TglSenses, tick, eyes, ears, contacts, eye_count, ear_count, contact_count, dt_seconds, body_forward_speed, body_vertical_speed,
-                      body_turn_rate, joint_angles, specific_force, angular_velocity, irradiance, padding0)
+TGL_STATIC_ASSERT(TGL_SUM17(TglSenses, tick, eyes, ears, contacts, eye_count, ear_count, contact_count, dt_seconds, body_forward_speed, body_vertical_speed,
+                      body_turn_rate, joint_angles, joint_torques, specific_force, angular_velocity, irradiance, padding0)
         == sizeof(TglSenses),
     "TglSenses has padding: a member changed width.");
 TGL_STATIC_ASSERT(TGL_SUM4(TglActions, desired_forward_speed, desired_turn_rate, vocalisation_strength, joint_targets) == sizeof(TglActions),
@@ -932,7 +941,7 @@ TGL_STATIC_ASSERT(offsetof(TglContact, slip) == 40u, "TglContact::slip must foll
 TGL_STATIC_ASSERT(offsetof(TglContact, position) == 0u, "TglContact::position must sit at offset 0.");
 TGL_STATIC_ASSERT(offsetof(TglContact, impulse) == 12u, "TglContact::impulse must sit at offset 12.");
 
-TGL_STATIC_ASSERT(sizeof(TglSenses) == 120u, "TglSenses must be 120 bytes with no padding beyond its named padding member.");
+TGL_STATIC_ASSERT(sizeof(TglSenses) == 152u, "TglSenses must be 152 bytes with no padding beyond its named padding member.");
 TGL_STATIC_ASSERT(offsetof(TglSenses, tick) == 0u, "TglSenses::tick must sit at offset 0.");
 TGL_STATIC_ASSERT(offsetof(TglSenses, eyes) == 8u, "TglSenses::eyes must sit at offset 8.");
 TGL_STATIC_ASSERT(offsetof(TglSenses, ears) == 16u, "TglSenses::ears must sit at offset 16.");
@@ -945,10 +954,11 @@ TGL_STATIC_ASSERT(offsetof(TglSenses, body_forward_speed) == 48u, "TglSenses::bo
 TGL_STATIC_ASSERT(offsetof(TglSenses, body_vertical_speed) == 52u, "TglSenses::body_vertical_speed must sit at offset 52.");
 TGL_STATIC_ASSERT(offsetof(TglSenses, body_turn_rate) == 56u, "TglSenses::body_turn_rate must sit at offset 56.");
 TGL_STATIC_ASSERT(offsetof(TglSenses, joint_angles) == 60u, "TglSenses::joint_angles must sit at offset 60.");
-TGL_STATIC_ASSERT(offsetof(TglSenses, specific_force) == 88u, "TglSenses::specific_force must sit at offset 88.");
-TGL_STATIC_ASSERT(offsetof(TglSenses, angular_velocity) == 100u, "TglSenses::angular_velocity must sit at offset 100.");
-TGL_STATIC_ASSERT(offsetof(TglSenses, irradiance) == 112u, "TglSenses::irradiance must sit at offset 112.");
-TGL_STATIC_ASSERT(offsetof(TglSenses, padding0) == 116u, "TglSenses::padding0 must sit at offset 116.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, joint_torques) == 88u, "TglSenses::joint_torques must sit at offset 88.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, specific_force) == 116u, "TglSenses::specific_force must sit at offset 116.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, angular_velocity) == 128u, "TglSenses::angular_velocity must sit at offset 128.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, irradiance) == 140u, "TglSenses::irradiance must sit at offset 140.");
+TGL_STATIC_ASSERT(offsetof(TglSenses, padding0) == 144u, "TglSenses::padding0 must sit at offset 144.");
 
 TGL_STATIC_ASSERT(sizeof(TglActions) == 40u, "TglActions must be 40 bytes: three actuators and seven servo targets.");
 TGL_STATIC_ASSERT(offsetof(TglActions, desired_forward_speed) == 0u, "TglActions::desired_forward_speed must sit at offset 0.");
