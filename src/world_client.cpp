@@ -39,6 +39,7 @@ namespace
         }
         const float turn{std::remainder(track.newest.yaw - track.previous.yaw, TWO_PI)};
         result.yaw = track.previous.yaw + turn * alpha;
+        result.pitch = track.previous.pitch + (track.newest.pitch - track.previous.pitch) * alpha;
         result.vocalisation = track.previous.vocalisation + (track.newest.vocalisation - track.previous.vocalisation) * alpha;
         // The chain blends segment by segment the way the head does. A chain that just changed
         // length (a re-rez) blends against itself: the newest telling's own poses stand.
@@ -52,6 +53,7 @@ namespace
             }
             const float segment_turn{std::remainder(now.yaw - before.yaw, TWO_PI)};
             result.segments[segment].yaw = before.yaw + segment_turn * alpha;
+            result.segments[segment].pitch = before.pitch + (now.pitch - before.pitch) * alpha;
         }
         return result;
     }

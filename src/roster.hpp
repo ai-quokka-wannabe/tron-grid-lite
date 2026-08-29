@@ -88,6 +88,10 @@ namespace RosterLib
 
         //! Radians about +Y, right-handed, so increasing yaw turns to the creature's left.
         float yaw{0.0f};
+
+        //! Radians about the body's right hand, positive nose up: a chain's segments pitch as
+        //! their own vertices meet the floor; a single body is level at zero.
+        float pitch{0.0f};
     };
 
     //! The direction a body faces at a given yaw, in world space. Unit length.
@@ -219,6 +223,10 @@ namespace RosterLib
         //! letter reports it: the encoder's reading, the joints the chain has and zero beyond.
         std::array<float, TGL_SEGMENTS_MAX - 1u> joint_angles{};
 
+        //! What every servo holds its angle with, newton-metres, as the world's letter reports
+        //! it: the load the joint bears, at most the declared torque, exactly that when stalled.
+        std::array<float, TGL_SEGMENTS_MAX - 1u> joint_torques{};
+
         //! What the voice is doing this tick: the loudness of the call sounding now, zero for a
         //! silent body. Applied from the staged intent at the top of the tick so that every ear
         //! on the roster hears one consistent tick — with no traction condition, because a body
@@ -304,7 +312,7 @@ namespace RosterLib
         //! The owner's letter for one creature: what the body felt this tick, in body frame, and
         //! what every servo holds.
         void tellFeel(uint32_t index, bool grounded, const MathLib::Vec3& specific_force, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles,
-            std::vector<TglContact> contacts);
+            const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts);
 
         [[nodiscard]] const std::vector<Creature>& creatures() const noexcept;
 

@@ -701,6 +701,13 @@ it for the look; nothing pushed against anything.
   torque or bent by the world reads differently from what it was asked, and that is the gait's
   readback. Reported by the world rather than subtracted on the Grid because the letter is the
   body's one channel of self-report and movement 5's servo load cannot be derived from poses.
+- **Movement 5: every segment meets the world for itself.** Master Control's chain is solved
+  in three dimensions - height and pitch under gravity, ball-joint pivots, every vertex of
+  every segment's hull against its own floor and the risers, the squeeze against a wall
+  inherent - and link v11 carries a pitch on every pose and every servo's torque in the letter.
+  The Program ABI (10) copies the torque into `TglSenses` beside the angle; the Grid turns
+  each instance by its pitch about its right hand after its yaw, and the spectator
+  interpolates it with the rest. The Grid still derives nothing.
 - **The Grid draws what it is sent** and needs nothing new: a pose per segment was already in
   every row. What changes on the Grid is what the eye sees - a body that goes where its own
   pushing takes it.

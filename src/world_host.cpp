@@ -325,7 +325,7 @@ namespace WorldHostLib
             // SAFETY of the borrow: the rows are the library's own until the next poll, and this
             // read completes inside this call.
             const LnkCreatureState& state{view.states[row]};
-            const RosterLib::Pose pose{.position = MathLib::Vec3{state.position[0], state.position[1], state.position[2]}, .yaw = state.yaw};
+            const RosterLib::Pose pose{.position = MathLib::Vec3{state.position[0], state.position[1], state.position[2]}, .yaw = state.yaw, .pitch = state.pitch};
             // The chain, as the world placed it: the trailing segments' poses, in chain order.
             // The wire refused any row whose count was out of range before this read.
             std::vector<RosterLib::Pose> trail;
@@ -333,7 +333,8 @@ namespace WorldHostLib
             trail.reserve(trailing);
             for (std::uint32_t segment{0u}; segment < trailing; ++segment) {
                 const LnkSegmentPose& placed{state.segments[segment]};
-                trail.push_back(RosterLib::Pose{.position = MathLib::Vec3{placed.position[0], placed.position[1], placed.position[2]}, .yaw = placed.yaw});
+                trail.push_back(RosterLib::Pose{
+                    .position = MathLib::Vec3{placed.position[0], placed.position[1], placed.position[2]}, .yaw = placed.yaw, .pitch = placed.pitch});
             }
             if (isOwn(state.creature_id)) {
                 for (std::uint32_t index{0u}; index < creatures.size(); ++index) {
@@ -381,8 +382,10 @@ namespace WorldHostLib
             // The servos' readings, one shape on both sides of the boundary.
             std::array<float, TGL_SEGMENTS_MAX - 1u> joint_angles{};
             std::copy(std::begin(letter.joint_angles), std::end(letter.joint_angles), joint_angles.begin());
+            std::array<float, TGL_SEGMENTS_MAX - 1u> joint_torques{};
+            std::copy(std::begin(letter.joint_torques), std::end(letter.joint_torques), joint_torques.begin());
             m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]}, joint_angles,
-                std::move(contacts));
+                joint_torques, std::move(contacts));
             m_felt[index] = true;
         }
 

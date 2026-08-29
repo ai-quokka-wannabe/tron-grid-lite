@@ -285,6 +285,7 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
             const LnkCreatureState row{.creature_id = 7u,
                 .position = {static_cast<float>(tick), 0.05f, 0.0f},
                 .yaw = 0.0f,
+                .pitch = 0.0f,
                 .velocity = {1.0f, 0.0f, 0.0f},
                 .yaw_rate = 0.0f,
                 .vocalisation = 0.0f,

@@ -184,11 +184,12 @@ namespace WorldStageLib
                     static_cast<std::uint32_t>(m_scene.geometries[geometry].nodes.size())));
             };
             // The head, then every trailing segment, each at its own pose, all one geometry.
-            place(RosterLib::Pose{.position = MathLib::Vec3{creature.position[0], creature.position[1], creature.position[2]}, .yaw = creature.yaw});
+            place(RosterLib::Pose{
+                .position = MathLib::Vec3{creature.position[0], creature.position[1], creature.position[2]}, .yaw = creature.yaw, .pitch = creature.pitch});
             const std::uint32_t segments{std::min(creature.segment_count, LNK_SEGMENTS_MAX)};
             for (std::uint32_t segment{0u}; segment + 1u < segments; ++segment) {
                 const LnkSegmentPose& placed{creature.segments[segment]};
-                place(RosterLib::Pose{.position = MathLib::Vec3{placed.position[0], placed.position[1], placed.position[2]}, .yaw = placed.yaw});
+                place(RosterLib::Pose{.position = MathLib::Vec3{placed.position[0], placed.position[1], placed.position[2]}, .yaw = placed.yaw, .pitch = placed.pitch});
             }
         }
         if (result.size() > instanceCapacity()) {

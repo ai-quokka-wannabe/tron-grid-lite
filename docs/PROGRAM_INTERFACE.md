@@ -348,15 +348,19 @@ swinging to its target, stalls short of it past its torque, or is bent by the wo
 neighbour, the floor's grip on a runner - and that disagreement is the only readback a gait has,
 the same way `body_forward_speed` disagrees with `desired_forward_speed`. The world that holds
 the servos reports it, in the same letter as the force and the contacts; the Grid copies and
-derives nothing, so that a servo's load, which no pose can yield, can join it on the same
-channel.
+derives nothing, so that a servo's load, which no pose can yield, joins it on the same channel -
+and since ABI v10 it does: `joint_torques` is the torque each servo holds its angle with at the
+tick's end, signed, at most the declared maximum and exactly that when the servo stalls. A
+motor's current sense, a tendon's organ. Stall is the Program's to notice by comparing the two
+numbers it already has; no flag says it for it, because none is needed and a flag would be a
+sense the body does not have.
 
 ### The senses at a glance
 
 | Sense | Field | What it physically is | Status |
 |-------|-------|----------------------|--------|
 | Vision | `eyes` | Rays traced from each eye through the shared BVH | Phase 6 |
-| Proprioception | `body_forward_speed`, `body_vertical_speed`, `body_turn_rate`, `joint_angles` | The body's own actuator state; since ABI v9 every servo's own reading | Phase 6 |
+| Proprioception | `body_forward_speed`, `body_vertical_speed`, `body_turn_rate`, `joint_angles`, `joint_torques` | The body's own actuator state; since ABI v9 every servo's own reading, since v10 its load | Phase 6 |
 | Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has | Phase 6 |
 | Touch | `contacts`, `contact_count` | Where the body was struck this tick, and how hard | Phase 6 |
 | Thermoreception | `irradiance` | A fixed quadrature over the whole sphere, undirected | Phase 6 |

@@ -65,6 +65,8 @@ namespace WorldClientLib
         std::uint32_t creature_id{0u};
         float position[3]{};
         float yaw{0.0f};
+        //! Radians about the body's right hand, positive nose up, blended like the yaw.
+        float pitch{0.0f};
         float vocalisation{0.0f};
         //! The chain: segments, the head counted, and the trailing segments' poses blended the
         //! same way, `segment_count - 1` of them meaningful.

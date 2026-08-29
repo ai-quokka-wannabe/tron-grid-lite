@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Program ABI 10: the servo's load - Etape 8 movement 5's companion.** `TglSenses` carries
+  `joint_torques[7]` beside the angles: the torque each servo holds its angle with at the
+  tick's end, signed, at most the declared maximum and exactly that when it stalls - a motor's
+  current sense, a tendon's organ, which no pose can yield. Link v11 brings it in the letter,
+  and a pitch on every pose: the roster's `Pose` carries it, the stage turns each instance by
+  it about its right hand after its yaw, the spectator interpolates it, the host's trail and
+  the guests' carry it. 148 bytes, the asserts, the manifest and the fingerprint (v10) moved.
 - **Program ABI 9: the joints back as proprioception - Etape 8 movement 4's companion.**
   `TglSenses` carries `joint_angles[7]`, the angle each servo actually holds this tick in the
   sign `joint_targets` asks in - the encoder's reading, what the joint did rather than what it
