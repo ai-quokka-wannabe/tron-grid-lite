@@ -19,6 +19,7 @@
 #include <math/vector.hpp>
 #include <tgl/tgl_program_abi.h>
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -214,6 +215,10 @@ namespace RosterLib
         float forward_speed{0.0f};
         float turn_rate{0.0f};
 
+        //! What every servo holds, radians, joint k between segments k and k + 1, as the world's
+        //! letter reports it: the encoder's reading, the joints the chain has and zero beyond.
+        std::array<float, TGL_SEGMENTS_MAX - 1u> joint_angles{};
+
         //! What the voice is doing this tick: the loudness of the call sounding now, zero for a
         //! silent body. Applied from the staged intent at the top of the tick so that every ear
         //! on the roster hears one consistent tick — with no traction condition, because a body
@@ -296,8 +301,10 @@ namespace RosterLib
         //! chain order. Told beside the pose, every tick, by the host.
         void tellTrail(uint32_t index, std::vector<Pose> trail);
 
-        //! The owner's letter for one creature: what the body felt this tick, in body frame.
-        void tellFeel(uint32_t index, bool grounded, const MathLib::Vec3& specific_force, std::vector<TglContact> contacts);
+        //! The owner's letter for one creature: what the body felt this tick, in body frame, and
+        //! what every servo holds.
+        void tellFeel(uint32_t index, bool grounded, const MathLib::Vec3& specific_force, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles,
+            std::vector<TglContact> contacts);
 
         [[nodiscard]] const std::vector<Creature>& creatures() const noexcept;
 

@@ -341,12 +341,22 @@ That is also the only sense here that reports a point **on** the creature rather
 away from it, and it is how a Program may come to know the extent of its own body — by bumping into
 the world, which is how an animal learns it too.
 
+**The joints report themselves, and the report is the encoder's, not the command.** Since ABI v9
+`joint_angles` carries the angle every servo actually holds, in the sign `joint_targets` asks in:
+what the joint did rather than what it was asked. The two disagree whenever a servo is still
+swinging to its target, stalls short of it past its torque, or is bent by the world - a wall, a
+neighbour, the floor's grip on a runner - and that disagreement is the only readback a gait has,
+the same way `body_forward_speed` disagrees with `desired_forward_speed`. The world that holds
+the servos reports it, in the same letter as the force and the contacts; the Grid copies and
+derives nothing, so that a servo's load, which no pose can yield, can join it on the same
+channel.
+
 ### The senses at a glance
 
 | Sense | Field | What it physically is | Status |
 |-------|-------|----------------------|--------|
 | Vision | `eyes` | Rays traced from each eye through the shared BVH | Phase 6 |
-| Proprioception | `body_forward_speed`, `body_vertical_speed`, `body_turn_rate` | The body's own actuator state | Phase 6 |
+| Proprioception | `body_forward_speed`, `body_vertical_speed`, `body_turn_rate`, `joint_angles` | The body's own actuator state; since ABI v9 every servo's own reading | Phase 6 |
 | Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has | Phase 6 |
 | Touch | `contacts`, `contact_count` | Where the body was struck this tick, and how hard | Phase 6 |
 | Thermoreception | `irradiance` | A fixed quadrature over the whole sphere, undirected | Phase 6 |

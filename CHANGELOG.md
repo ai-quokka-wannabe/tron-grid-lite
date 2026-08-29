@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Program ABI 9: the joints back as proprioception - Etape 8 movement 4's companion.**
+  `TglSenses` carries `joint_angles[7]`, the angle each servo actually holds this tick in the
+  sign `joint_targets` asks in - the encoder's reading, what the joint did rather than what it
+  was asked, the joints the chain has and zero beyond. Link v10's letter brings it from the
+  world that holds the servos; the host copies it into the roster beside the force and the
+  contacts, and the senses fill copies it to the Program. Fingerprint re-recorded at v9,
+  the layout manifest counts the member, and the guide says why the letter and not the
+  Grid's own subtraction. Submodule at link v10.
 - **Program ABI 8: the servos - Etape 8 movement 3's companion.** `TglActions` carries
   `joint_targets[7]`, the angle each servo is asked to hold; `TglCreatureDesc` carries the
   Grid's limit for the class (`max_joint_angle` 0.9 rad, `max_joint_torque` 5 N·m). Which

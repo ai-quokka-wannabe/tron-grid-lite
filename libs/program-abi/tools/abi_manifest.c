@@ -145,9 +145,11 @@
     X(TglSenses, body_forward_speed) \
     X(TglSenses, body_vertical_speed) \
     X(TglSenses, body_turn_rate) \
+    X(TglSenses, joint_angles) \
     X(TglSenses, specific_force) \
     X(TglSenses, angular_velocity) \
-    X(TglSenses, irradiance)
+    X(TglSenses, irradiance) \
+    X(TglSenses, padding0)
 
 #define TGL_ACTIONS_MEMBERS(X) \
     X(TglActions, desired_forward_speed) \
