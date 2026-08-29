@@ -163,6 +163,7 @@ namespace
                     .reserved0 = {},
                     .specific_force = {0.0f, 9.81f, 0.0f},
                     .joint_angles = {0.25f, -0.5f},
+                    .joint_torques = {1.5f, -5.0f},
                     .contact_count = grounded ? 1u : 0u,
                     .reserved1 = {}};
                 check(m_library.vtable().send_proprioception(m_connection, &letter, grounded ? contacts.data() : nullptr), "send_proprioception");
@@ -192,6 +193,7 @@ namespace
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
                 .joint_angles = {},
+                .joint_torques = {},
                 .contact_count = 0u,
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
@@ -222,6 +224,7 @@ namespace
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
                 .joint_angles = {},
+                .joint_torques = {},
                 .contact_count = 0u,
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
@@ -245,6 +248,7 @@ namespace
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
                 .joint_angles = {},
+                .joint_torques = {},
                 .contact_count = 0u,
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
@@ -356,6 +360,8 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     TEST_CHECK(near(creature.joint_angles[0], 0.25f));
     TEST_CHECK(near(creature.joint_angles[1], -0.5f));
     TEST_CHECK(near(creature.joint_angles[6], 0.0f));
+    TEST_CHECK(near(creature.joint_torques[0], 1.5f));
+    TEST_CHECK(near(creature.joint_torques[1], -5.0f));
     // Forward speed is the velocity along the facing: -0.5 m/s along -Z at yaw 0.25 projects to
     // 0.5 cos(0.25) forward.
     TEST_CHECK(near(creature.forward_speed, 0.5f * std::cos(0.25f)));
