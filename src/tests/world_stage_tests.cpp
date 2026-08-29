@@ -133,8 +133,8 @@ TEST_CASE(a_chain_is_a_record_per_segment_each_at_its_own_pose)
     creature.position[2] = -3.0f;
     creature.yaw = 0.0f;
     creature.segment_count = 3u;
-    creature.segments[0] = LnkSegmentPose{.position = {2.0f, 0.05f, -2.5f}, .yaw = 0.3f};
-    creature.segments[1] = LnkSegmentPose{.position = {2.2f, 0.05f, -2.0f}, .yaw = 0.6f};
+    creature.segments[0] = LnkSegmentPose{.position = {2.0f, 0.05f, -2.5f}, .yaw = 0.3f, .pitch = 0.0f};
+    creature.segments[1] = LnkSegmentPose{.position = {2.2f, 0.05f, -2.0f}, .yaw = 0.6f, .pitch = 0.0f};
 
     const std::vector<BvhLib::InstanceRecord> records{stage.records({creature})};
     TEST_CHECK_EQUAL(records.size(), 4u); // The Grid, the head, two trailing segments.
