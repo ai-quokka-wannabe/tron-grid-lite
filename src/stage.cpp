@@ -62,7 +62,10 @@ MathLib::Mat4 poseTransform(const RosterLib::Pose& pose)
 {
     // Yaw first, translation second, which is what worldFromBody does one point at a time: a body
     // point is rotated about the body's own origin and then carried to where the body stands.
-    return MathLib::Mat4::translate(pose.position) * MathLib::Mat4::rotate(MathLib::Vec3{0.0f, 1.0f, 0.0f}, pose.yaw);
+    // The yaw about the world's up, then the pitch about the body's own right hand - the
+    // world's convention since link v11, positive nose up - and then carried to where it stands.
+    return MathLib::Mat4::translate(pose.position) * MathLib::Mat4::rotate(MathLib::Vec3{0.0f, 1.0f, 0.0f}, pose.yaw)
+        * MathLib::Mat4::rotate(MathLib::Vec3{1.0f, 0.0f, 0.0f}, pose.pitch);
 }
 
 Stage::Stage(BvhLib::Bvh grid, std::vector<Material> grid_materials, const std::vector<RosterLib::Creature>& creatures) :

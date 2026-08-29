@@ -413,6 +413,7 @@ namespace RosterLib
             // The servos' own readings, as the world's letter said them.
             for (std::size_t joint{0u}; joint < creature.joint_angles.size(); ++joint) {
                 senses.joint_angles[joint] = creature.joint_angles[joint];
+                senses.joint_torques[joint] = creature.joint_torques[joint];
             }
 
             senses.specific_force[0] = creature.specific_force.x;
@@ -457,12 +458,13 @@ namespace RosterLib
     }
 
     void Roster::tellFeel(const uint32_t index, const bool grounded, const MathLib::Vec3& specific_force, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles,
-        std::vector<TglContact> contacts)
+        const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts)
     {
         Creature& creature{m_creatures.at(index)};
         creature.grounded = grounded;
         creature.specific_force = specific_force;
         creature.joint_angles = joint_angles;
+        creature.joint_torques = joint_torques;
         creature.contacts = std::move(contacts);
     }
 
