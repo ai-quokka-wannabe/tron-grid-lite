@@ -378,7 +378,10 @@ namespace WorldHostLib
                     .depth = felt.depth,
                     .slip = {felt.slip[0], felt.slip[1], felt.slip[2]}});
             }
-            m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]},
+            // The servos' readings, one shape on both sides of the boundary.
+            std::array<float, TGL_SEGMENTS_MAX - 1u> joint_angles{};
+            std::copy(std::begin(letter.joint_angles), std::end(letter.joint_angles), joint_angles.begin());
+            m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]}, joint_angles,
                 std::move(contacts));
             m_felt[index] = true;
         }

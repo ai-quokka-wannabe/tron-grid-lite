@@ -410,6 +410,10 @@ namespace RosterLib
             senses.body_forward_speed = creature.forward_speed;
             senses.body_vertical_speed = creature.velocity.y;
             senses.body_turn_rate = creature.turn_rate;
+            // The servos' own readings, as the world's letter said them.
+            for (std::size_t joint{0u}; joint < creature.joint_angles.size(); ++joint) {
+                senses.joint_angles[joint] = creature.joint_angles[joint];
+            }
 
             senses.specific_force[0] = creature.specific_force.x;
             senses.specific_force[1] = creature.specific_force.y;
@@ -452,11 +456,13 @@ namespace RosterLib
         m_creatures.at(index).trail = std::move(trail);
     }
 
-    void Roster::tellFeel(const uint32_t index, const bool grounded, const MathLib::Vec3& specific_force, std::vector<TglContact> contacts)
+    void Roster::tellFeel(const uint32_t index, const bool grounded, const MathLib::Vec3& specific_force, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles,
+        std::vector<TglContact> contacts)
     {
         Creature& creature{m_creatures.at(index)};
         creature.grounded = grounded;
         creature.specific_force = specific_force;
+        creature.joint_angles = joint_angles;
         creature.contacts = std::move(contacts);
     }
 

@@ -694,6 +694,13 @@ it for the look; nothing pushed against anything.
   the first gait: a travelling wave of joint angles, the panel's forward and turn being how
   hard the wave runs and which way the body bends. The Grid's host relays the targets with
   the tick-1 resend the message always had.
+- **Movement 4: the joints back as proprioception.** Link v10's letter carries every servo's
+  reading - `joint_angles[7]`, the neighbours' yaw difference brought within a turn, the joints
+  the chain has and zero beyond - and the Program ABI (9) copies it into `TglSenses` beside the
+  speeds. The encoder's reading, not the command: a servo still swinging, stalled past its
+  torque or bent by the world reads differently from what it was asked, and that is the gait's
+  readback. Reported by the world rather than subtracted on the Grid because the letter is the
+  body's one channel of self-report and movement 5's servo load cannot be derived from poses.
 - **The Grid draws what it is sent** and needs nothing new: a pose per segment was already in
   every row. What changes on the Grid is what the eye sees - a body that goes where its own
   pushing takes it.

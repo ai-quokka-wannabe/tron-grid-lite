@@ -162,6 +162,7 @@ namespace
                     .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u),
                     .reserved0 = {},
                     .specific_force = {0.0f, 9.81f, 0.0f},
+                    .joint_angles = {0.25f, -0.5f},
                     .contact_count = grounded ? 1u : 0u};
                 check(m_library.vtable().send_proprioception(m_connection, &letter, grounded ? contacts.data() : nullptr), "send_proprioception");
             }
@@ -336,6 +337,10 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     TEST_CHECK(near(creature.contacts.front().slip[2], -0.5f));
     TEST_CHECK(near(creature.specific_force.y, 9.81f));
     TEST_CHECK(near(creature.turn_rate, 0.1f));
+    // The servos' readings arrive as the letter said them: the Grid copies, the world judges.
+    TEST_CHECK(near(creature.joint_angles[0], 0.25f));
+    TEST_CHECK(near(creature.joint_angles[1], -0.5f));
+    TEST_CHECK(near(creature.joint_angles[6], 0.0f));
     // Forward speed is the velocity along the facing: -0.5 m/s along -Z at yaw 0.25 projects to
     // 0.5 cos(0.25) forward.
     TEST_CHECK(near(creature.forward_speed, 0.5f * std::cos(0.25f)));
