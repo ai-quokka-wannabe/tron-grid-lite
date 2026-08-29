@@ -617,6 +617,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **clang-format 23** (the Tool Updates watcher's #128): the pin moves from 22.1 in both workflows
+  and the guides. Under 23 the formatter reformats nothing in the tree - a hundred and three
+  files unchanged - so the gate moves and the code does not.
 - `docs/TOPOLOGY.md`: movement 2 of Etape 8 is the keels - the anisotropy that propels the worm
   is its tubes', read from the hull as runners, not the spikes' (a point on a hard floor rubs
   the same every way), and the worm now moves under its own wave (master-control, movement 2).
