@@ -322,7 +322,7 @@ the median plane, with Heffner and Heffner's comparative figure independently gi
 - Schröder D (2011). *Physically Based Real-Time Auralization of Interactive Virtual Environments*.
   Dissertation, RWTH Aachen University; Logos Verlag Berlin, Aachener Beiträge zur Technischen Akustik
   Band 11, ISBN 978-3-8325-3031-0. The RAVEN framework and the "diffuse rain" formulation are
-  attributable to this work via the RAVEN project documentation at <https://virtualacoustics.org/RAVEN> —
+  attributable to this work via the RAVEN project documentation at <https://www.virtualacoustics.org/RAVEN/> —
   <https://publications.rwth-aachen.de/record/50580>
 - Funkhouser T, Carlbom I, Elko G, Pingali G, Sondhi M, West J (1998). "A beam tracing approach to
   acoustic modeling for interactive virtual environments". *SIGGRAPH '98*, 21–32. DOI

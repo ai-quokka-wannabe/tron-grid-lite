@@ -576,7 +576,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   three of them, normalising the direction by two.
 
 - Initial project scaffold: build system, CI, editor config, and hello world.
-- Full project infrastructure inherited from [TronGrid](https://github.com/MatejGomboc/tron_grid):
+- Full project infrastructure inherited from [TronGrid](https://github.com/MatejGomboc/tron-grid):
   linting configs (clang-tidy, markdownlint), governance documents (contributing guide,
   code of conduct, security policy, style guide), issue and PR templates, CI workflows
   (main, PR validation, release, cache cleanup), and Claude assistant commands.

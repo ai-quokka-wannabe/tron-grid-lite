@@ -91,7 +91,7 @@ select the **"Desktop development with C++"** workload. That workload brings MSV
 CMake and Ninja.
 
 If you prefer VS Code, the
-[Build Tools for Visual Studio](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio)
+[Build Tools for Visual Studio](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
 package is enough.
 
 ### Step 2 — Install the Vulkan SDK
