@@ -40,7 +40,9 @@ jobs:
                 rm -rf lychee.tar.gz lychee-x86_64-unknown-linux-gnu
                 lychee --version
 
-            # Transient failures are retried, and the rate-limit status GitHub hands anonymous
-            # crawlers is accepted, so a red run means a link is dead rather than merely busy.
+            # Transient failures are retried with patience - gnu.org once outlasted three tries
+            # of the default twenty seconds and answered fine an hour later - and the rate-limit
+            # status GitHub hands anonymous crawlers is accepted, so a red run means a link is
+            # dead rather than merely busy.
             - name: Check every link, external included
-              run: lychee --include-fragments --no-progress --max-retries 3 --accept "200..=299,403,429" --root-dir "$(pwd)" --exclude-path build --exclude-path external --exclude-path node_modules --exclude-path tools/.venv "./**/*.md"
+              run: lychee --include-fragments --no-progress --max-retries 3 --timeout 45 --accept "200..=299,403,429" --root-dir "$(pwd)" --exclude-path build --exclude-path external --exclude-path node_modules --exclude-path tools/.venv "./**/*.md"
