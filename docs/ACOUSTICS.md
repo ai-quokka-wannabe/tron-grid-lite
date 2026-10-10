@@ -22,10 +22,10 @@ TronGrid Lite is the **stage, not the actor**. The acoustic pass ends where the 
 fills a sensor buffer and stops. Everything the surveyed literature does after that point —
 head-related transfer functions, vector-base amplitude panning, partitioned convolution,
 Doppler-shifted delay lines, Schroeder reverberators, ambisonic encoding — is **auralisation for a
-human ear** and belongs nowhere in this repository. There is no 44.1 kHz stream here and there never
-will be. That deletes roughly a third of the engineering the literature describes: Schissler and
-Manocha's 2017 system spent 75.1 ms of a 258 ms budget on audio rendering alone, and this project
-pays none of it.
+human ear** and belongs nowhere on the creature path; the spectator's speakers, presentation rather
+than a sense, sit outside it. There is no 44.1 kHz stream on that path and there never will be. That
+deletes roughly a third of the engineering the literature describes: Schissler and Manocha's 2017
+system spent 75.1 ms of a 258 ms budget on audio rendering alone, and this project pays none of it.
 
 The same boundary excludes a subtler class of thing. Several of the field's most useful tricks are
 models of a *listener* rather than of the Grid — Wwise's abstract diffraction coefficient,
@@ -803,7 +803,7 @@ nowhere to put the second ear. The item is gone and the shape it named never exi
 carries instead is one `TglEarView` per ear, each with its own energy array — see
 [The ABI shape](#the-abi-shape).
 
-The wider point survives the item that prompted it: `tgl_program_abi.h` exists now, at ABI v6,
+The wider point survives the item that prompted it: `tgl_program_abi.h` exists now, at ABI v10,
 every shape in it pinned by static asserts and a fingerprint - and the shape it gives the ear is
 the one this section argued for.
 
