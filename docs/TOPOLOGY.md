@@ -1,9 +1,10 @@
 # Topology
 
 How the Grid becomes a world rather than a process: one authoritative server, thin clients in two
-roles, creature brains as plugged-in libraries, and a User who only ever visits. This document
-assigns every responsibility to a block and justifies each assignment with a named industry
-practice or a named disaster it avoids.
+roles today, creature brains as plugged-in libraries, and a User who so far only visits (where it
+is all going is [VISION.md § The Long Arc](VISION.md#the-long-arc)). This document assigns every
+responsibility to a block and justifies each assignment with a named industry practice or a named
+disaster it avoids.
 
 The evidence behind it is a five-part audit of shipped-MMO practice — server authority, protocol
 and replication, client and spectator architecture, networked audio, and the programmable-creature
@@ -16,8 +17,8 @@ Everything below is built, and the split this document planned has happened: the
 library grew in its own repository (`link`), because the wire between two repositories should
 live in neither; Master Control moved to its own (`master-control`) and took the simulated world
 with it, the flagship deleting its copy in the same movement. This repository is the Grid as it
-is perceived - the renderer, the senses, both client roles - and the record of who owns what is
-[The four repositories](#the-four-repositories).
+is perceived - the renderer, the senses, today's two client roles - and the record of who owns
+what is [The four repositories](#the-four-repositories).
 
 ---
 
@@ -95,8 +96,10 @@ per instance. The strict minimum is three of the four — the world ticks whethe
 watches, so the spectator attaches and detaches without the animal ever noticing, which is
 exactly the property SourceTV's observers bought.
 
-Drawn small, this is the grand vision's kernel. Every block grows into its eventual role without
-re-architecting because authority is placed correctly from the first commit.
+Drawn small, this is the kernel of the [grand vision](VISION.md#the-long-arc): Master Control
+keeping one world in sync for every client, each creature's host and, one day, each User's own.
+Every block grows into its eventual role without re-architecting because authority is placed
+correctly from the first commit.
 
 ## The doctrine
 
@@ -106,17 +109,18 @@ same thing from two directions: the server's state is the only state, and client
 *intents*, never results. The audit's strongest single finding is that this project's existing
 lifecycle already obeys the doctrine more strictly than several shipped MMOs — WoW historically
 trusted client movement and fought speedhacks with surveillance for two decades; FFXIV accepts
-client-reported positions; this Grid accepts three floats of desire, sanitises them, clamps them,
+client-reported positions; this Grid accepts ten floats of desire, sanitises them, clamps them,
 and computes everything else itself. That is not a compliment to be enjoyed; it is a property to
 be preserved. The audit found the failure pattern behind every client-trust disaster surveyed —
 Ultima Online's dupes, The Division's god-modes, GTA Online's decade of griefing, Fall Guys'
 flying beans — to be the same sentence: *state the server accepted rather than computed*.
 
 **Intents in, world out, and the uplink stays narrow.** A creature's entire influence on the world
-is `desired_forward_speed`, `desired_turn_rate`, `vocalisation_strength` — twelve bytes. The audit
-names this the design's strongest security property, the same asymmetry EVE's ESI API ships: rich
-sanctioned reads, minimal sanctioned writes. Every future widening of the uplink passes through
-the same sanitise-and-clamp discipline or does not happen.
+is `desired_forward_speed`, `desired_turn_rate`, `vocalisation_strength` and `joint_targets[7]` —
+forty bytes since the servos arrived, of which a body uses only the actuators it declared. The
+audit names this the design's strongest security property, the same asymmetry EVE's ESI API ships:
+rich sanctioned reads, minimal sanctioned writes. Every future widening of the uplink passes
+through the same sanitise-and-clamp discipline or does not happen.
 
 **Under GPL, the client is honest by convention; the server is honest by construction.** A GPL
 client can be modified by anyone — that is the licence working as intended — so client-side
@@ -145,7 +149,7 @@ so the long-term lever is sending less, not hiding better.
 | Rendering the world; the free-flight camera | spectator | Presentation is the canonical delegation; the camera never replicates |
 | Interpolation buffer (2–3 ticks) | spectator | Source's `cl_interp` canon scaled to 32 Hz; without it, 32 Hz state under a high-refresh renderer visibly steps |
 | Audio rendering (speakers) | spectator | The industry split: replicate events, render sound client-side (Overwatch's "play by sound"); see [The spectator](#the-spectator) |
-| Prediction, reconciliation, lag compensation | **nobody** | They exist for human reflexes in the loop; there are none. A pure spectator interpolates; a creature senses authoritative state, full stop |
+| Prediction, reconciliation, lag compensation | **nobody yet** | They exist for a human's reflexes in the loop across a network. rc-worm's panel puts a human in the loop today, on one machine, where there is no latency to hide; whether the long arc's avatars bring that trigger is open (see [Deferred, with triggers](#deferred-with-triggers)). A pure spectator interpolates; a creature senses authoritative state, full stop |
 | Persistence, accounts, encryption, interest management | **nobody yet** | Deferred with written triggers — see [Deferred, with triggers](#deferred-with-triggers) |
 
 ## One tick, across the wire
@@ -221,16 +225,16 @@ that the places protocols actually fail are the places this codebase already has
 - **Transport, v1: TCP, one connection per client, `TCP_NODELAY` on both ends, one coalesced
   write per tick.** WoW, EVE, FFXIV and Minecraft all shipped worlds on plain TCP; Minecraft is
   the exact scale-point precedent (tiny payloads, 20 Hz, authoritative server). At roughly 2 KB
-  of world state per tick — a dozen creatures at 156 bytes each since protocol v7 carried the
-  chain in every row — the entire server broadcast is ~60 KB/s, still two orders of magnitude
-  below where the delta-compression and reliability machinery of Quake 3 and Source earns its
-  keep. The famous WoW/Nagle/delayed-ACK
-  pathology is avoided by construction: NODELAY plus one write per tick.
+  of world state per tick — a dozen creatures at 188 bytes each since every row carried the chain
+  (protocol v7) and every pose its pitch (v11) — the entire server broadcast is ~72 KB/s, still
+  two orders of magnitude below where the delta-compression and reliability machinery of Quake 3
+  and Source earns its keep. The famous WoW/Nagle/delayed-ACK pathology is avoided by
+  construction: NODELAY plus one write per tick.
 - **But UDP semantics at the message layer, from day one.** Every message self-contained and
   tick-stamped; nothing means anything by its position in the stream; the server executes the
   *latest* actions with tick ≤ T and discards stragglers, so TCP's eventual delivery can never
   inject stale intent. When a measured trigger fires — internet loss making motion stutter
-  through retransmit stalls, or a human-piloted creature — the transport swaps to the Gaffer
+  through retransmit stalls, or human piloting over the internet — the transport swaps to the Gaffer
   stack (sequence/ack/ack-bits, actions repeated across datagrams as Tribes repeated its moves,
   ≤1200-byte datagrams) without the messages above it changing. Three connect-time rules are
   recorded now so they are not reinvented under pressure on that day: an unverified source gets
@@ -353,7 +357,9 @@ undulates. Protocol v7 carries it, and the division of labour follows the doctri
   slots beyond a chain are zero and a nonzero one is refused, because a tick's bytes are hashed.
 - **The Grid draws the mesh once per segment**, consecutive instances sharing one hierarchy, and
   a creature's own senses see through the whole chain of its body, tail included. The senses stay
-  on the head; a Program is told nothing of where its tail is.
+  on the head; a Program is told nothing of where its tail is. (Touch has spread since: from
+  movement 5 every segment's contacts reach the Program, in the head's frame, beside what its
+  joints report - see [The undulation propels](#the-undulation-propels).)
 
 ### The scrape
 
@@ -371,6 +377,10 @@ scrape against the Grid floor, and the worm hears itself.* Two halves, same divi
   head's own scratch rule - its drag speed against the load the head stands with - an `EVENT` of
   kind scratch from the floor under it. A worm of eight walking is eight scratches a tick, each at
   its own place. No wire change: the scratch kind already existed for the head's slides.
+  *That was the world's half until the third ruling*: since then the world authors no undulation,
+  for the wave is the Program's gait ([The undulation propels](#the-undulation-propels)), and each
+  trailing segment still scrapes by its own drag over the tick, against the load the body stands
+  with, sounded from the floor under it.
 - **The Grid delivers every scratch to every creature ear** - the scraper's own included, which is
   the point - through the same delivery a call takes, seeing through the scraping body's own hull.
   A scratch deposits energy in the ear's bins and **never a discrete arrival**: it is the Grid's one
@@ -435,7 +445,7 @@ interpolate buffered truth, hold the last pose on starvation, never invent.
 - **The CS:GO coaching bug is the standing warning**: spectator privilege is a server-enforced
   role, not a client UI state. The spectator connects as a role that cannot submit actions, and
   the eventual mitigation ladder (below) filters *host* feeds while spectator feeds stay full —
-  the Screeps split, where humans see everything and code sees only what its senses deliver.
+  the Screeps split, where spectators see everything and code sees only what its senses deliver.
 
 ## The creature host
 
@@ -533,15 +543,15 @@ one a mechanism behind a sentence this document already had, or a behaviour it h
   what is sensed: a contact is a **point on the body, a world normal, a depth and a slip
   velocity**, which is the creature host's touch sense and extends the `TICK_STATE` debt
   already named for it (specific force plus contacts) rather than adding a message; the scratch
-  is an `EVENT` kind beside the vocalisation. The response stays kinematic — minimal-translation
-  separation and velocity projection, as today; a constraint solver is a named non-goal below.
+  is an `EVENT` kind beside the vocalisation. For a body of one segment the response stays
+  kinematic — minimal-translation separation and velocity projection; a chain meets the floor and
+  the risers inside its own solver (see [The undulation propels](#the-undulation-propels)).
 - **Three named non-goals**, so nobody helpfully builds them: no node handoffs (single-process
   authority is the design, and the handoff seam is where UO's dupes lived), no time dilation
-  (EVE's TiDi bends dt, and dt is sacred here), no database-backed hot persistence (the
-  snapshot-plus-action-log is stronger until the first world anyone regrets losing), and **no
-  rigid-body constraint solver** (stacking, resting-contact stability, friction cones,
-  restitution — the decades engines spend; the accuracy this world wants lives in detection and
-  the reported contact, not in a solver; see the deferred table for its trigger).
+  (EVE's TiDi bends dt, and dt is sacred here), and no database-backed hot persistence (the
+  snapshot-plus-action-log is stronger until the first world anyone regrets losing). A fourth,
+  **no rigid-body constraint solver**, stood here until the worm's articulated body pulled its
+  trigger (2026-08-28); stacking and restitution keep their own trigger in the deferred table.
 
 ## Trust, in writing
 
@@ -719,7 +729,7 @@ it for the look; nothing pushed against anything.
 | UDP transport + reliability layer | Measured loss stuttering motion through TCP stalls, or human-piloted control over the internet |
 | Delta compression, acked baselines | Per-tick state approaching a quarter of an MTU (~50× today's size). Refused rather than merely postponed: at ~500 bytes per tick the bookkeeping costs more than it saves |
 | Interest management / area-of-interest | Sense-integrity triggers above, or fan-out beyond ~100 entities / ~16 clients |
-| Client-side prediction, lag compensation | A human whose reflexes are in the loop — none exist by design |
+| Client-side prediction, lag compensation | A human whose reflexes are in the loop across a network. rc-worm's panel puts one in the loop today, on one machine, with no latency to hide; whether the long arc's avatars ([VISION.md](VISION.md#the-long-arc)) bring this trigger is open |
 | TLS, accounts, tokens, rate limiting | The first connection that is not 127.0.0.1 |
 | Persistence (the world survives the server) | The first world anyone regrets losing; until then, snapshot + action log is stronger than a database |
 | Spectator delay | Participants able to consume the spectator feed as a side channel |
@@ -729,12 +739,16 @@ it for the look; nothing pushed against anything.
 
 ## The four repositories
 
+Where the four are going together is [VISION.md § The Long Arc](VISION.md#the-long-arc). Which
+repository will hold its level editor is open, and so is where the human client grows beyond
+rc-worm's panel; the table below gives neither to anyone.
+
 | Repository | Eventually owns | Today |
 |---|---|---|
-| **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Built: the heartbeat, the roster of record, the validator and its adversarial suite, the physics (hulls, exact contacts, friction, scratches), the Disk with rollover, the input log, and Clu |
-| **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Protocol v8, twelve messages, every one flowing its own way only; the Disk recorder and replayer |
-| **tron-grid-lite** | The client in both roles, the senses, the renderer, the shared world definition the server fingerprints | The Grid as perceived: `--window` watches and listens, `--program` hosts a creature, `--replay` plays a Disk; the physics left for Master Control |
-| **rc-worm** | The first brain: the DLL, its Qt telemetry GUI, eventually the Blender body | Cloned, parked until the ABI settled - which it has: the first inhabitant is next |
+| **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Built: the heartbeat, the roster of record, the validator and its adversarial suite, the physics (hulls, exact contacts, friction, scratches, and the articulated chain: XPBD, a servo at every joint, every segment meeting the floor and the risers in three dimensions), the Disk with rollover, the input log, and Clu |
+| **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Protocol v11, twelve messages, every one flowing its own way only; the Disk recorder and replayer |
+| **tron-grid-lite** | The client in today's two roles, the senses, the renderer, the shared world definition the server fingerprints | The Grid as perceived: `--window` watches and listens, `--program` hosts a creature, `--replay` plays a Disk; the physics left for Master Control |
+| **rc-worm** | The first brain: the DLL, its Qt panel (which the long arc counts as v0 of the human client, [VISION.md](VISION.md#the-long-arc)), eventually the Blender body | Living: the DLL, at Program ABI 10, rezzes an eight-segment worm that brings its own gait - a travelling wave of servo targets - and a User at its Qt panel sees what the worm senses and steers how hard the wave runs and which way it bends |
 
 The protocol went to its own repository for three reasons with names. The parser is the attack
 surface — the Dark Souls III remote-code execution and the CS:GO pre-auth overflows were
@@ -783,7 +797,9 @@ the in-test `RehearsalMasterControl` class stays, being a test double for the cl
 misplaced: its two parties are the Grid and the brains, and the brains live in other
 repositories. It extracts into its own contract repository when `rc-worm` unpauses — the trigger
 is the second party becoming real, and not before, because an extraction with one consumer is
-ceremony.
+ceremony. A note beside that ruling (2026-10-10): `rc-worm` has since unpaused and builds
+against Program ABI 10, so the trigger has fired; the extraction has not been made yet, and
+until it is the header stays the flagship's to move and `rc-worm` vendors it.
 
 ## The four decisions, taken
 
@@ -806,6 +822,12 @@ only ever visit.
    triggers are the vision's own milestones — the first foreign connection, the first stranger's
    host, the first competitive stake — so deferring now and building at the trigger *is* the
    convergence path, not a detour from it.
+
+A note beside that record (2026-10-10): the grand vision is now public in full, as
+[VISION.md § The Long Arc](VISION.md#the-long-arc), and in it humans do more than visit - human
+Users are to enter the world with avatars and meet its creatures. The four answers stand as taken,
+and the defer list keeps its triggers; whether the long arc's avatars bring the prediction trigger
+is open (see [Deferred, with triggers](#deferred-with-triggers)).
 
 ## The long-term invitation
 

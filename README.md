@@ -11,7 +11,10 @@
 The aim of this project is to make Flynn's grand vision become reality: a cyberworld of glass
 and neon, populated by real, thinking AI creatures — the digital frontier built not as a film
 set but as a running system. He kept dreaming of a world he thought he'd never see; we are
-building it one honest subsystem at a time.
+building it one honest subsystem at a time. Where it leads, on a multi-year arc, is one persistent
+Grid that the creatures live in and human Users enter with avatars to meet them — told in full in
+[docs/VISION.md](docs/VISION.md#the-long-arc), and word for word the same in every repository of
+[the organisation](https://github.com/ai-quokka-wannabe).
 
 A deliberately simple Vulkan renderer for the Tron aesthetic — clean geometry, emissive
 materials, perfectly reflective surfaces, neon glow against infinite black.
@@ -23,9 +26,9 @@ hierarchy this project builds itself. **The GPU it was recorded on exposes no ra
 extensions at all** — it is a laptop GTX 1650 Ti, and it renders that scene in about fourteen
 milliseconds a frame. Record your own with [`tools/record_flyby.py`](tools/record_flyby.py).
 
-**The Grid is built for Programs, not for people.** There is no player, no controls and no
-gameplay. The User watches through a debug window — a free-flight camera for development and
-observation.
+**The Grid is built for Programs first.** Today it has no player, no controls and no gameplay:
+the User watches through a debug window — a free-flight camera for development and observation.
+Human avatars belong to the long arc, not to today.
 
 **It is the stage, not the actor.** TronGrid Lite renders senses and applies actions; it does
 not think. Programs load as shared-library plugins (DLL on Windows, SO on Linux), receive small
@@ -56,7 +59,7 @@ through the API — but you are missing out.
 | the Grid | The world this renderer simulates |
 | Program | The thing that thinks — a plugin, one per creature |
 | creature | The body the Grid simulates, which a Program drives |
-| User | The human at the debug window, watching |
+| User | A human. Today, the one at the debug window, watching, or at a Program's own panel, steering only through that Program; in the long arc, also one who enters the Grid with an avatar |
 | tick | One simulation step |
 | senses | What a creature perceives during a tick |
 | actions | What a Program asks its creature's body to do |
@@ -81,14 +84,16 @@ through the C ABI in `libs/program-abi` — and what remains of the phase is lis
 
 ## The Four Repositories
 
-The Grid is one repository of four. This one is the flagship — the renderer, the senses, both
-client roles, and the ground where every subsystem grows before it moves out.
+The Grid is one repository of four. This one is the flagship — the renderer, the senses, today's
+two client roles, and the ground where every subsystem grows before it moves out.
 [master-control](https://github.com/ai-quokka-wannabe/master-control) is the world server every
 instance here dials; [the link repository](https://github.com/ai-quokka-wannabe/link) is **Link** — the wire of the
 Grid, the protocol library the server and every client load as the same shared binary; and
 [rc-worm](https://github.com/ai-quokka-wannabe/rc-worm) is the first Program. Who owns what, and
 why every delegation is the way it is, lives in [docs/TOPOLOGY.md](docs/TOPOLOGY.md) — one table,
-kept in one place, pointed at from everywhere.
+kept in one place, pointed at from everywhere. Where the four are going together — a client for
+every creature and every User, one world held by Master Control, a level editor — is the long arc
+of [docs/VISION.md](docs/VISION.md#the-long-arc).
 
 ## Choosing a GPU
 
@@ -157,9 +162,9 @@ Grid would accept:
 ```text
 Programs in .../programs: 3.
   tgl_broken_wrong_version - UNUSABLE. Program "tgl_broken_wrong_version": was built against
-             ABI version 7 and this Grid speaks version 6. Rebuild the Program against this header.
-  tgl_driver_modelled - USABLE, ABI version 6, vtable 48 bytes. Run with --program tgl_driver_modelled.
-  tgl_driver_steady - USABLE, ABI version 6, vtable 48 bytes. Run with --program tgl_driver_steady.
+             ABI version 11 and this Grid speaks version 10. Rebuild the Program against this header.
+  tgl_driver_modelled - USABLE, ABI version 10, vtable 48 bytes. Run with --program tgl_driver_modelled.
+  tgl_driver_steady - USABLE, ABI version 10, vtable 48 bytes. Run with --program tgl_driver_steady.
 ```
 
 A Program built against an older ABI is a stale file that looks exactly like a current one, and only
@@ -266,8 +271,9 @@ cmake --build build/linux-x11-clang --config Debug
 
 ## Design Principles
 
-1. **Programs, not players** — every design decision serves the creatures and their Programs; the
-   User is an observer, never a participant
+1. **Programs first** — every design decision serves the creatures and their Programs; today the
+   User watches, or steers a creature from inside its Program, and a User with an avatar is the
+   long arc, not a near-term feature
 2. **Simple over clever** — the whole renderer should fit in one head
 3. **Deterministic ray tracing** — perfect mirrors and emissive lighting need no Monte Carlo, no
    denoiser and no ray tracing hardware: a fixed, shallow Whitted ray tree
@@ -319,7 +325,7 @@ tracing, 1980 edition, running in compute.
 
 | Document | Purpose |
 |----------|---------|
-| [docs/VISION.md](docs/VISION.md) | What the Grid is for and where it is going |
+| [docs/VISION.md](docs/VISION.md) | What the Grid is for and where it is going, including the long arc the organisation shares |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the renderer is put together |
 | [docs/MATERIALS.md](docs/MATERIALS.md) | The material model, the Fresnel and refraction maths, and the HDR path |
 | [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
@@ -354,6 +360,9 @@ tracing, 1980 edition, running in compute.
 > It needs to be *true*: every reflection honest,
 > every echo travelling the same Grid as every glint.
 > A small world, rendered simply, perceived completely.
+
+From one creature, towards one world: the long arc is told in full in
+[docs/VISION.md](docs/VISION.md#the-long-arc).
 
 ## Licence
 

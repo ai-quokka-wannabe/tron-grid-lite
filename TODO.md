@@ -21,7 +21,11 @@ What came after Phase 6 — Master Control's heartbeat, the wire, the spectator 
 `link`, and this repository hosts creatures and watches. The
 organisation's long-term invitation — OpenWorm and the other AI-animal simulation groups,
 invited to let their creatures live in the Grid once it can host a stranger's — is recorded in
-[docs/TOPOLOGY.md § The long-term invitation](docs/TOPOLOGY.md#the-long-term-invitation).
+[docs/TOPOLOGY.md § The long-term invitation](docs/TOPOLOGY.md#the-long-term-invitation). Where
+all of it is headed — one persistent Grid that the creatures live in and human Users enter with
+avatars, and a level editor — is the long arc of
+[docs/VISION.md § The Long Arc](docs/VISION.md#the-long-arc); the near-term work below stays one
+creature at a time.
 
 ## Completed etapes
 
@@ -105,7 +109,10 @@ Decisions worth pinning now, while they are cheap:
   `gridSurfaceHeight` and `gridMeshHeight` are what floor-planting and ear placement stand on. Baking
   deletes both, makes every ground query a downward ray, and trades roughly 1.5 KB of parameters for
   1.14 MiB of triangles. Of the Grid's 24,952 triangles only 120 — under half a per cent — correspond
-  to something a human placed; the rest come from about eleven numbers.
+  to something a human placed; the rest come from about eleven numbers. The level editor of the
+  long arc ([docs/VISION.md](docs/VISION.md#the-long-arc)), authoring any Grid shape and placement,
+  is where this rule and the manifest rule above are next put to the test; which repository holds
+  the editor is open.
 
 **Two defects in the official Khronos sample loader, recorded now because they are free to avoid and
 expensive to find later.** The reference `.cpp` the tutorial ships gets both wrong, so copying it is
@@ -217,7 +224,7 @@ are decisions waiting on the owner, not conclusions.
    hours — so a recording's timestamps are the same numbers coming out as going in. 25 Hz gives 0.04
    and 50 Hz gives 0.02, neither representable, both accumulating an error somebody eventually has to
    explain in a replay. The rate was not sized to what looks smooth through the debug window; that
-   window is the only part a human perceives, which is exactly why it must not drive the decision.
+   window serves a human's eye, which is exactly why it must not drive the decision.
    It lives in `RosterLib::TICK_SECONDS`, with static assertions holding it against the tick rate and
    against a four-substep division.
 4. ~~Is world replay claimed at all?~~ **Decided: claimed.** A run is reproducible from
@@ -253,7 +260,10 @@ are decisions waiting on the owner, not conclusions.
    index would be a number the Grid writes and nothing can act on, which is the same test that removed
    `TglEarDesc::direction`. Both arrive together in v2, and the bump costs nothing while no Program
    exists. Two one-sample eyes still make the creature testable against the one documented behaviour in
-   the literature, and are unaffected by this.
+   the literature, and are unaffected by this. A note beside this record (2026-10-10): the solver
+   has since come — master-control's Etape 8 articulated the chain, with a servo at every joint
+   driven by `joint_targets` (ABI 8) and read back as `joint_angles` and `joint_torques` (ABI 9
+   and 10); see [docs/TOPOLOGY.md § The undulation propels](docs/TOPOLOGY.md#the-undulation-propels).
 7. **Roster size, bounded by the top-level sweep rather than by physics.** Four bodies stays
    comfortably inside the regime `intersectScene`'s linear sweep was measured in. Twenty bodies of
    eight segments is 161 instances, and with two eyes each that is tens of millions of instance-box
@@ -349,7 +359,9 @@ sensor interface plugs in, and physics is what makes the senses stop being const
 - [x] Physics: gravity, contacts, friction — analytic where a closed form exists (ballistic
       flight, the turning arc), impulses at the contacts, the ground as the analytic function the
       floor was generated from, and the lifecycle's stage-then-act order made real
-- [ ] A remote-operated demo Program with its own telemetry GUI
+- [x] A remote-operated demo Program with its own telemetry GUI —
+      [rc-worm](https://github.com/ai-quokka-wannabe/rc-worm), steered by a User at
+      [its Qt panel](https://github.com/ai-quokka-wannabe/rc-worm/blob/main/docs/PANEL.md)
 
 ### What is left of the thirteen defects in `docs/PROGRAM_INTERFACE.md`
 

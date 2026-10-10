@@ -5,12 +5,14 @@ through rendered frames.
 
 **Two facts that govern every decision in this repo:**
 
-1. **The Grid is for Programs only, and it is the stage rather than the actor.** There is no
-   human player, no controls, no gameplay — the User only watches through a free-flight debug
-   camera. The repo's whole job is to render senses and apply actions; Programs load as
-   shared-library plugins (DLL/SO) behind a plain C ABI, so the Grid stays agnostic about how
-   any Program works inside. **Never** add cognition, learning, behaviour models or Program
-   internals here, and never write features, docs or comments that assume a human player.
+1. **The Grid is for Programs first, and it is the stage rather than the actor.** Today there is
+   no human player, no controls, no gameplay — the User watches through a free-flight debug
+   camera. Human Users entering with avatars is the organisation's long arc
+   ([docs/VISION.md](../docs/VISION.md#the-long-arc)), taken in baby steps. The repo's whole job
+   is to render senses and apply actions; Programs load as shared-library plugins (DLL/SO) behind
+   a plain C ABI, so the Grid stays agnostic about how any Program works inside. **Never** add
+   cognition, learning, behaviour models or Program internals here, and build nothing for a human
+   player ahead of the arc's own steps: near-term work stays one creature at a time.
    Programs belong to other repositories in the `ai-quokka-wannabe` organisation.
 2. **This is a fresh, independent project.** It reuses infrastructure and foundation code from
    the author's earlier [TronGrid](https://github.com/MatejGomboc/tron-grid) renderer (same

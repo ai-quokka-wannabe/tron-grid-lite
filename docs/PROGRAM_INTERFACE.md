@@ -17,7 +17,7 @@ One word per concept, used consistently in this document and in the ABI itself.
 | the Grid | The world this project renders and simulates, and the binary that runs it |
 | Program  | The thing that thinks: a shared library that drives one creature          |
 | creature | The body the Grid simulates — geometry, eyes, actuators                   |
-| User     | The human at the window, who watches and never acts                       |
+| User     | A human; today, watching at the window or steering from a Program's panel |
 | tick     | One simulation step                                                       |
 | senses   | Everything a creature perceives during one tick (`TglSenses`)             |
 | actions  | The physical intent a Program returns for that tick (`TglActions`)        |
@@ -29,9 +29,12 @@ than ordinary English words.
 
 ## Overview
 
-The Grid is inhabited exclusively by Programs. There is no human player. The User may open a debug
-window and fly a free camera through the Grid to observe and debug, but the User never acts, never
-inhabits a body, and is never visible to any creature.
+Today the Grid is inhabited by Programs alone, and there is no human player. The User may open a
+debug window and fly a free camera through the Grid to observe and debug, and that window never
+acts, never inhabits a body, and is never visible to any creature. Human Users entering with
+avatars is the long arc of [VISION.md](VISION.md#the-long-arc); how an avatar would sense and act
+is open, and whoever else is on the Grid, a Program still perceives only through its own rendered
+senses.
 
 Every creature is driven by a **Program**: a shared library (`.dll` on Windows, `.so` on Linux)
 built from a separate repository in the `ai-quokka-wannabe` organisation. The Grid loads Program
@@ -44,8 +47,9 @@ The boundary between the Grid and a Program is deliberately narrow:
   own eyes, plus a handful of numbers about its own body. It receives no object identities, no
   positions, no orientations, no distances, no health bars, no scene graph, and no privileged Grid
   state of any kind.
-- A Program emits **actions** — desired movement and turn rates. It cannot issue high-level commands
-  such as "go to the blue tower" or "attack".
+- A Program emits **actions** — the angle each joint's servo is asked to hold (desired movement and
+  turn rates for a body of one segment) and a call. It cannot issue high-level commands such as "go
+  to the blue tower" or "attack".
 - A Program never links against the Grid binary and never calls Grid functions. All traffic crosses
   a plain **C ABI** of structs and function pointers.
 
@@ -383,13 +387,15 @@ Points worth stating plainly, because they are the whole design:
 - Nothing here is a valuation. The Grid reports where the body was struck and with what impulse;
   whether that amounts to pain is the Program's business, and pain is cognition wearing a sensory
   costume.
-- **A Program is never handed a diagram of its own body** — no segment lengths, no rest pose, no
-  kinematic tree, and no joint angles. A chain's trailing segments are placed by the world and are
-  not reported back as a sense: a chain feels, sees and hears with its head, and what its tail is
-  doing it may infer from how it moved. Nowhere in an animal is there such a model either. What a
-  creature gets is where it was touched, how it is moving and what it can sense, and the shape of
-  itself is something it may learn rather than something it is told. Joint angle and joint rate
-  arrive as senses with a solver that bends a joint, not before.
+- **A Program is never handed a diagram of its own body** — no segment lengths, no rest pose and
+  no kinematic tree. A chain's trailing segments are the world's to move, and no segment's pose is
+  reported back as a sense: a chain sees and hears with its head and feels with every segment, each
+  contact given in the head's frame, and what its tail is doing it may infer from how it moved and
+  from what its joints report. Nowhere in an animal is there such a model either. What a creature
+  gets is where it was touched, how it is moving and what it can sense, and the shape of itself is
+  something it may learn rather than something it is told. Joint angles and joint loads arrived as
+  senses with the solver that bends the joints (ABI v9 and v10, above): an encoder's reading and a
+  servo's load, not a diagram.
 - Every field is populated. A modality that does not exist yet has no field waiting for it — the
   struct describes what the Grid can currently sense, and gains members when that changes.
 - **An ear delivers an impulse response, not a sound.** It says how much energy arrived in each
@@ -517,9 +523,9 @@ source on the Grid (the section above), noisy and modulated by the gait, with no
 it deposits energy in the bins its distance dictates and contributes no `TglArrival`. So a worm
 hears its own spikes drag along the floor, and hears another worm's, and can tell that it does
 and roughly how loudly — and cannot range either, which is the honest physics, not a gap. A
-Program that wants to know where its own body is dragging has its contacts for its head and
-its ears for the rest, which is proprioception by sound and exactly the kind of thing a mind
-is for.
+Program that wants to know where its own body is dragging has its contacts from every segment,
+in the head's frame, and its ears besides — proprioception by sound, and exactly the kind of
+thing a mind is for.
 
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
 time bin per ear, plus the arrivals' onsets, radial velocities and energies, and stops.** Anything that names a source, separates streams, reports "a wall is
@@ -546,10 +552,11 @@ An action is physical intent, expressed in the body frame, and nothing more.
 
 `TglActions` is declared in
 [the header](../libs/program-abi/include/tgl/tgl_program_abi.h), like everything else in the
-interface: a desired forward speed, a desired turn rate, and the loudness of one call. This
-document deliberately does not restate the struct — the header is the specification, and the one
-listing this section used to carry proved the rule by drifting: it still showed the vertical
-actuator after the header had retired it. The decisions behind the fields:
+interface: a desired forward speed, a desired turn rate, the loudness of one call, and the angle
+each joint's servo is asked to hold. This document deliberately does not restate the struct — the
+header is the specification, and the one listing this section used to carry proved the rule by
+drifting: it still showed the vertical actuator after the header had retired it. The decisions
+behind the fields:
 
 - **The servos, and which actuators a body has (ABI 8, Etape 8 movement 3).** `TglActions`
   carries `joint_targets[7]`: the angle each servo is asked to hold this tick, joint k between
@@ -585,8 +592,8 @@ whatever its body can actually manage. Non-finite values (`NaN`, infinities) are
 
 The limits themselves are a property of the body, fixed when the Program is rezzed, and they are not
 negotiable by anything a Program returns. This document promises clamping in every action field and
-once more in the lifecycle; the numbers it clamps against are the body's, and until a body exists
-they are the emptiest promise in the interface.
+once more in the lifecycle; the numbers it clamps against are the body's, handed to the Program in
+`TglCreatureDesc` at rez.
 
 **The acceptance test for the whole physics subsystem is written into the senses rather than into a
 benchmark: `body_forward_speed` must disagree with `desired_forward_speed` whenever the body is
@@ -648,6 +655,13 @@ articulated, nothing is solved, and TOPOLOGY.md's deferred rigid-body solver sta
 joint between two segments is the model's own business: a stub on each of the two spikes that
 meet, authored into the mesh, so the wire carries poses and nothing else. A single body declares
 one segment and no spacing; a chain declares a positive one; anything else refuses the rez.
+
+*That was the chain until the owner's third ruling (2026-08-28).* Since master-control's Etape 8
+the chain is articulated and solved: every segment is a rigid body, a servo at every joint holds
+the angle the Program's `joint_targets` ask for (ABI 8) — the gait is the Program's — and the
+joints report back as `joint_angles` and `joint_torques` (ABI 9 and 10). The deferred solver came
+with it; see [TOPOLOGY.md § The undulation propels](TOPOLOGY.md#the-undulation-propels). The
+joint's geometry is still the mesh's own, and the chain is still validated as above.
 
 **Offering no model is a legitimate body, and it is today's default.** A zeroed model is a creature
 with no visible shape, exactly what every body has been until now.

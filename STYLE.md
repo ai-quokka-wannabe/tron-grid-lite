@@ -30,6 +30,7 @@ Avoid duplicating information across files. Each piece of information should hav
 | Formatting rules | `.clang-format`, `.editorconfig` (enforced in CI under clang-format 22.x) |
 | Security policy | `SECURITY.md` |
 | Roadmap & phases | `TODO.md` § Roadmap |
+| The long arc: where the Grid and the organisation are going | `docs/VISION.md` § The Long Arc, one of five verbatim copies (each repository's `docs/VISION.md` and the organisation's profile page); no copy is the master, and all five change together |
 | Creature sensor resolutions | `docs/PERCEPTION.md` |
 | Who owns what across the four repositories, and the wire's design | `docs/TOPOLOGY.md` § The four repositories, § One tick across the wire |
 | The determinism and replay claims, precisely scoped | `docs/TOPOLOGY.md` § Determinism and replay, scoped |
@@ -587,9 +588,10 @@ npx markdownlint-cli2 "**/*.md"
 
 ## Tron Naming
 
-The Grid, the Programs that live on it, the User who watches it and Master Control that will
-govern the world are named by a settled vocabulary. Recorded here are only the rulings that a future reviewer, spell-checker or linter would
-otherwise "correct" into something wrong.
+The Grid, the Programs that live on it, the User who watches it today and, in the long arc, enters
+it with an avatar, and Master Control that governs the world are named by a settled vocabulary.
+Recorded here are only the rulings that a future reviewer, spell-checker or linter would otherwise
+"correct" into something wrong.
 
 **The governing principle, which decides the cases not listed:** Tron words name events on the Grid;
 plain words name events in the operating system. `program_rez`, `program_tick` and `program_derez`

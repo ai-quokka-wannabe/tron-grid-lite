@@ -226,6 +226,7 @@ These answer a question rather than draw a picture, and none needs Master Contro
 
 ## Where to read next
 
+- [VISION.md](VISION.md) — where all of this is going: the long arc every repository shares.
 - [TOPOLOGY.md](TOPOLOGY.md) — who owns what, why every delegation is the way it is, the
   protocol, determinism and replay, trust.
 - [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md) — what a Program is told and may do: the senses,

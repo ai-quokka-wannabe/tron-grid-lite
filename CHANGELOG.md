@@ -632,6 +632,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The long arc is public: `docs/VISION.md` carries the organisation's whole vision.** The owner's
+  decision (2026-10-10): the vision goes public in full, as one `## The Long Arc` section mirrored
+  word for word in every repository's vision document and on the organisation's profile page - all
+  five changed together, none of them the master. One persistent Grid where AI creatures live and
+  human Users enter with avatars to meet them - every creature on its own TronGrid Lite client,
+  every User on theirs, Master Control holding the world and keeping each client in sync, a level
+  editor for any Grid shape and placement - on a multi-year arc taken in baby steps, with rc-worm's
+  panel as v0 of the human client. The section says what the creatures are for - feeling beings, in
+  time true animal AGI, with animal-level minds as the one ceiling and no house style for brains
+  below it - and carries the ladder of senses and the standing invitation to OpenWorm and the other
+  AI-animal groups. What does not move: a Program perceives only through its own rendered senses,
+  and the Grid is the stage, not the actor. Here, § The Idea says what is true today and leads into
+  the arc, and the new § The Grid's Part in the Arc says what this repository brings to it. The
+  sentences that denied the arc as a permanent fact - "for Programs only", "Users never", "not for
+  people", "never a participant", "never acts", "a User who only ever visits" - now state today and
+  point at the arc: the README, `.claude/CLAUDE.md` (its first governing fact, in the wording the
+  owner approved), PROGRAM_INTERFACE, TOPOLOGY, STYLE and TODO; the tick-rate rationale in TODO no
+  longer calls the debug window the only thing a human perceives. ACOUSTICS scopes its
+  no-auralisation rule to the creature path, since the spectator's speakers live here too;
+  RELATED_WORK says the frontier it surveys is not this repository's to attempt, that a mind
+  reaching for it plugs in like any other Program, and that its list of non-goals is this
+  repository's and binds no mind a Program brings. Prediction and lag compensation keep a trigger,
+  now worded as a human's reflexes in the loop across a network: rc-worm's panel steers on one
+  machine today, and whether avatars bring the trigger is open. TOPOLOGY's dated record of the four
+  decisions keeps its words, with a note beside it. CONTRIBUTING, STYLE's single-source table and
+  RUNNING_THE_GRID's reading list name the vision. The documents call open what the arc leaves open:
+  what an avatar is, how it senses and acts, the rules by which Users and creatures meet, and which
+  repository holds the level editor. Older entries below keep the wording they recorded.
+  Documentation only.
 - **clang-format 23** (the Tool Updates watcher's #128): the pin moves from 22.1 in both workflows
   and the guides. Under 23 the formatter reformats nothing in the tree - a hundred and three
   files unchanged - so the gate moves and the code does not.
@@ -1156,6 +1185,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The documents catch up with the articulated worm.** Sentences written before the servos still
+  described an older Grid, and now say what the four repositories hold: TOPOLOGY's four-repositories
+  table (master-control's articulated chain, Link at protocol 11, and rc-worm living - a User at its
+  panel steering the worm's own gait - rather than parked), its uplink (forty bytes with the joint
+  targets, not twelve), its broadcast (188 bytes a row since every pose carried its pitch, about
+  72 KB/s), its contact response and its non-goals (the chain's solver pulled the constraint-solver
+  trigger, so the solver is no longer listed as a non-goal), and its UDP trigger (a human piloting
+  over the internet, which the panel on one machine is not); PROGRAM_INTERFACE's actions (a servo
+  target per joint), its clamping limits (handed over in `TglCreatureDesc` at rez, no longer waiting
+  for a body), its body-diagram rule (joint angles and loads arrived with ABI 9 and 10, and a chain
+  feels with every segment, each contact in the head's frame) and its paragraph on scratches, where
+  a Program that wants to know where its body drags has every segment's contacts, not the head's
+  alone; RELATED_WORK's body (eight rigid segments with a servo at every joint, not a position with
+  sensors); STYLE's Master Control, which governs the world now rather than will; the README's
+  `--list-programs` sample and ACOUSTICS, which now say ABI 10 rather than 6; and TODO's Etape 13
+  checklist, whose remote-operated demo Program with its own telemetry GUI is ticked as rc-worm and
+  its Qt panel. Records that keep their words gain a note beside them instead: TODO's Etape 13
+  record of the first chain (dated, that the solver has come), PROGRAM_INTERFACE's chain of ABI v7
+  and TOPOLOGY's scrape (the chain articulated, the wave the Program's gait, each trailing segment
+  still scraping by its own drag), TOPOLOGY's chain (touch reaches the Program from every segment),
+  and TOPOLOGY's ruling that the Program ABI extracts when rc-worm unpauses (it has, and the
+  extraction is still to be made; rc-worm vendors the header meanwhile). Documentation only.
 - **The cache cleanup runs itself.** `cleanup_caches.yml` was manual-only and had never been
   dispatched here, and its script knew only the Vulkan, markdownlint and CodeQL key families, so
   every `cargo-*`, `npm-*-lock-*` and `qt-*` generation fell into the never-delete fail-safe: a

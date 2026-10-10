@@ -71,8 +71,8 @@ convincing worm.
 **[NeuroMechFly v2](https://www.nature.com/articles/s41592-024-02497-y)** (*Nature Methods*, 2024,
 EPFL) is a morphologically accurate adult *Drosophila* derived from X-ray microtomography, with 65
 body segments and 122 degrees of freedom, sensory input, motor feedback and complex terrain. Where
-this project treats a body as a position with a few sensors bolted on, NeuroMechFly models the
-actual animal.
+the Grid's first creature is eight rigid segments with a servo at every joint, NeuroMechFly models
+the actual animal.
 
 **[A virtual rodent predicts the structure of neural activity across
 behaviours](https://www.nature.com/articles/s41586-024-07633-4)** (Aldarondo et al., *Nature*, 2024
@@ -87,7 +87,8 @@ same line, and work embodying connectome-derived brain emulations in such bodies
 [reported](https://eon.systems/updates/embodied-brain-emulation) — though that last one is a
 company announcement rather than a peer-reviewed result, and is listed here with that caveat.
 
-This is the frontier, it is genuinely hard, and this project is not attempting it.
+This is the frontier, and it is genuinely hard. This repository is not attempting it: it builds the
+stage, and a mind reaching that far would plug in as a Program like any other.
 
 ## Testing animal-like cognition
 
@@ -133,14 +134,15 @@ Not much, and it is worth being precise about which parts:
 - **It targets modest hardware.** The reference machine is a laptop whose GPU exposes no ray-tracing
   extensions at all.
 
-## What this project is explicitly not attempting
+## What this repository is explicitly not attempting
 
 - **Not a connectome.** No claim is made that anything here resembles a real nervous system.
 - **Not a benchmark.** There are no tasks, no rewards, no scores and no leaderboard.
 - **Not neuroscience.** No hypothesis about real animals is being tested. The biology in
   [PERCEPTION.md](PERCEPTION.md) is there to justify buffer sizes, and for no other reason.
 - **Not a Program.** The renderer is the stage. What the actors do is somebody else's repository,
-  and deliberately so — see [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md).
+  and deliberately so — see [PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md) — and nothing on this list
+  binds the mind a Program brings.
 
 What is left, after all those disclaimers, is a small honest world that runs on a cheap GPU and
-lets people plug strange little Programs into it. That is enough.
+lets people plug any kind of Program into it. That is enough.

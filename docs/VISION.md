@@ -2,17 +2,124 @@
 
 ## The Idea
 
-TronGrid Lite is a small, deliberately simple Vulkan renderer that builds the Grid — a world **for Programs only**.
+TronGrid Lite is a small, deliberately simple Vulkan renderer that builds the Grid — a world **for Programs first**.
 
-There is no human player. There is no gameplay, no score, no win condition, no story. The inhabitants of the Grid are
-**Programs**, each driving a creature that perceives the Grid through rendered images and rendered sound, and acts
-back into it through a narrow motor interface. A User never inhabits the Grid; a User only ever **watches** it,
+Today there is no human player, and there is no gameplay, no score, no win condition, no story. The inhabitants of the
+Grid are **Programs**, each driving a creature that perceives the Grid through rendered images and rendered sound, and
+acts back into it through a narrow motor interface. A User does not inhabit the Grid today; a User **watches** it,
 through a window driven by a free-flight camera — the live view of the shared world (`--window`, the spectator of
 [TOPOLOGY.md](TOPOLOGY.md)), or the serverless stage inspection (`--debug`) when the question is the rendering itself.
+Where a User does more than watch today, it is from inside a Program, not through the Grid: rc-worm, the first Program,
+has a User at its own panel for a brain, and to the Grid that is one more Program.
 
-That distinction shapes every decision in this repository. When a design question comes up, the answer is not "what
-feels good to play" — it is "what does a creature need to perceive, and what does the User need to see while
-debugging it".
+That distinction shapes every decision in this repository today. When a design question comes up, the answer is not
+"what feels good to play" — it is "what does a creature need to perceive, and what does the User need to see while
+debugging it". What a human avatar would need is a question for the step that brings the first one, and this
+document does not guess at it.
+
+That is the Grid as it stands, and it is deliberately small. Where it is headed is not, and the organisation tells it
+in one text, word for word the same in every one of its repositories and on
+[its profile page](https://github.com/ai-quokka-wannabe).
+
+<!-- The Long Arc: mirrored verbatim in every ai-quokka-wannabe repository (profile/README.md in .github and each docs/VISION.md). Change all five together. -->
+
+## The Long Arc
+
+Picture the Grid fully lit: one persistent world of glass and neon on infinite black, where AI creatures live out
+their lives, crawling its terraces and calling into its echoes, and where human Users enter with avatars to meet,
+and interact with, the AI animals. Something MMORPG-like: the digital frontier, built not as a film set but as a
+running system. That world does not exist yet. It is where this organisation is headed, on a multi-year arc.
+
+### The World It Becomes
+
+- **Every creature on its own client.** Each AI creature runs its own
+    [TronGrid Lite](https://github.com/ai-quokka-wannabe/tron-grid-lite) client: a creature host for its Program.
+- **Every User on theirs.** Each human runs a client of their own, and enters the Grid with an avatar.
+- **One world, held by Master Control.** The server holds the Grid's world state and keeps every client in sync.
+- **A level editor** for authoring any Grid shape, and any placement in it.
+
+### Real Minds, Not Masks
+
+The creatures are the point, and the aim for them is as high as an animal goes: not simulations of animals, but
+feeling beings, living in the Grid the way real animals live in the world. Not a large language model in an animal
+costume, narrating what a worm might feel, but embodied animal intelligence that earns everything it knows through
+its own body, behaves as realistically as a real animal would and, eventually, is as biologically realistic in its
+sentience as it can be made: true animal AGI. That is the one ceiling, and it is the animal's own: animal-level
+minds, never human-level ones. Below it there is no house style for brains. A brain is a Program behind a plain C
+ABI, so whatever approach people contribute can plug in and earn its keep on the same honest senses. Those senses
+are kept honest on purpose: a mind that could read the world's answer sheet would never have to become anything.
+No such mind exists yet, and nobody can promise sentience on a schedule; it is the summit this arc climbs towards.
+
+### The Ladder
+
+The creatures climb a ladder of senses, from the worm upwards, specified rung by rung in
+[PERCEPTION.md](https://github.com/ai-quokka-wannabe/tron-grid-lite/blob/main/docs/PERCEPTION.md): from `elegans`,
+two scalar photoreceptors and no image at all, through the compound eyes of insects and a rodent's panoramic
+field, up to `macropod`, a wide eye with a horizontal streak for scanning the horizon, the eye of the quokka's own
+family. Even the bottom rung is a real animal's sense: a creature that can only tell light from shade can still
+perform genuine taxis. That rung is named for *C. elegans*, where
+[OpenWorm](https://github.com/ai-quokka-wannabe/tron-grid-lite/blob/main/docs/RELATED_WORK.md#openworm-and-the-first-rung-of-the-ladder)
+has spent years modelling the animal cell by cell; anyone writing a worm's mind should start there.
+
+### The Invitation
+
+Once the Grid can host a stranger's creature, the organisation's standing goal is to reach out to the OpenWorm
+community and to the other groups simulating AI animals, and
+[invite their creatures to live in the Grid](https://github.com/ai-quokka-wannabe/tron-grid-lite/blob/main/docs/TOPOLOGY.md#the-long-term-invitation).
+The whole topology is built for it: a brain written elsewhere needs only the Program ABI and a host process.
+Nobody has been invited yet; that waits for the trust tier.
+
+### Where It Stands Today
+
+The server-authoritative half already stands, on one machine for now, as
+[TOPOLOGY.md](https://github.com/ai-quokka-wannabe/tron-grid-lite/blob/main/docs/TOPOLOGY.md) lays out: clients
+send intents, never results. [Master Control](https://github.com/ai-quokka-wannabe/master-control) ticks one world
+at 32 Hz, owns its physics and its truth, and sends the whole settled world to every client each tick through
+[Link, the wire of the Grid](https://github.com/ai-quokka-wannabe/link). Each creature host loads exactly one
+Program, the creature's brain. The first, [rc-worm](https://github.com/ai-quokka-wannabe/rc-worm), is a glass-neon
+worm, eight icosahedra joined spike to spike with a servo at every joint. Its brain, for now, is a User at
+[its panel](https://github.com/ai-quokka-wannabe/rc-worm/blob/main/docs/PANEL.md) who sees only what the worm
+senses, and steers how hard its wave runs and which way it bends; how far it gets is friction's answer, not a
+command's. Otherwise, humans watch through the spectator window. The Grid is one stage, built in code. There are
+no avatars, no level editor, no AI minds and no persistence yet, and nothing has been released.
+
+### Baby Steps
+
+"Let us take baby steps towards it" are the maintainer's own words for the arc. Near-term work stays one creature
+at a time, one honest subsystem at a time. rc-worm, steered from its panel, is the first step on the human side:
+v0 of the human client, not a throwaway. Larger steps wait behind written triggers: the security tier behind the
+first connection that is not 127.0.0.1, so no stranger's machine joins before it, and persistence behind the first
+world anyone regrets losing.
+
+### What Holds, and What Is Open
+
+At every step, a Program perceives only through
+[its own rendered senses](https://github.com/ai-quokka-wannabe/tron-grid-lite/blob/main/docs/PROGRAM_INTERFACE.md):
+no entity list, no ground-truth positions, no side door, whoever else is on the Grid. The Grid stays the stage,
+not the actor: it renders senses and applies actions, and does no creature's thinking for it. Still open, and
+left open here rather than guessed: what an avatar is, how it senses and acts, the rules by which Users and
+creatures meet, and which repository will hold the level editor. No dates are promised. Master Control opens
+every run with *Greetings, Programs!* The long arc bends towards the day it has Users to greet as well. From one
+worm, towards one world.
+
+## The Grid's Part in the Arc
+
+Of the four repositories, this one is the Grid as it is perceived: the renderer, the senses, and today's two client
+roles. One of those roles is already a piece of the arc. The creature host (`--program`) is the client every creature
+runs: one Program, its senses rendered here, its intents sent to Master Control for the world to judge; more
+creatures mean more hosts, one Program each. The other, the spectator (`--window`), is how a human watches the world
+today. Because the senses are made here, this repository keeps the promise that holds at every step of the arc:
+whoever else is on the Grid, a Program perceives only through its own rendered senses. The rungs of the ladder are
+specified here ([PERCEPTION.md](PERCEPTION.md)), and so is the plain C ABI through which a mind of any kind plugs in
+([PROGRAM_INTERFACE.md](PROGRAM_INTERFACE.md)).
+
+Two pieces of the arc are not settled here, and this document does not settle them. The human client has its v0 in
+rc-worm's panel, not a throwaway; what shape it grows into, and which repository builds it, is open. Which repository
+will hold the level editor is open as well. What an editor would put to the test here is already written down: the
+Grid's shape is compiled into both ends of the wire ([TOPOLOGY.md § The protocol](TOPOLOGY.md#the-protocol)), and its
+floor is an analytic height function, never baked to a mesh, with all but 120 of its triangles coming from about
+eleven numbers ([TODO.md § Etape 11](../TODO.md#etape-11--import-creature-bodies-as-gltf)). An editor that authors any
+Grid shape and any placement is the day those rules are read again.
 
 ## An Independent Project
 
@@ -46,7 +153,7 @@ what is around it, never a privileged read of scene state. No entity list. No gr
 creature knows what its sensors resolve, and nothing more — see [PERCEPTION.md](PERCEPTION.md) for how small that
 deliberately is.
 
-The User sits outside that contract entirely. The User's window is an instrument — it shows the
+The User at the window sits outside that contract entirely. The User's window is an instrument — it shows the
 same Grid from a free camera at a comfortable resolution, so the User can watch what a creature is doing and judge
 whether the Grid is behaving. It is never an input to any creature.
 
@@ -150,8 +257,9 @@ needed writing, debugging, and explaining, and none of them are needed for neon 
 ## Design Principles
 
 1. **Simple over clever.** The whole renderer should fit in one head.
-2. **Programs first, Users never.** The Grid exists to be perceived by creatures. User-facing output is a debugging
-   convenience and is allowed to be crude.
+2. **Programs first, Users later.** The Grid exists to be perceived by creatures. Today, User-facing output is a
+   debugging convenience and is allowed to be crude; human avatars are [the long arc](#the-long-arc), taken in baby
+   steps.
 3. **Deterministic rendering.** Same Grid state in, same image out, on the same device and the same build. This is
    essential for *testing* and for *reproducing* a creature's behaviour, and it is worth being precise that it is not
    a training benefit: the guarantee is quantised to eight bits before anything reads it, and no learner can tell a
@@ -187,7 +295,8 @@ Phase 0 --> 1 --> 2 --> 3 --> 4 --+--> 5 --+--> 6
 ```
 
 Phases 0 to 4 build the Grid. Phase 5 gives it a second sense. Phase 6 opens it to its inhabitants — and from that
-point on, the interesting work happens in the Program repositories, not here.
+point on, much of the interesting work happens in the Program repositories. What lies beyond the phases is
+[the long arc](#the-long-arc), taken in baby steps.
 
 ## The Point
 
