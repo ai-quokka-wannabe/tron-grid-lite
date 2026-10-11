@@ -364,9 +364,23 @@ tracing, 1980 edition, running in compute.
 From one creature, towards one world: the long arc is told in full in
 [docs/VISION.md](docs/VISION.md#the-long-arc).
 
+## Contributors
+
+Everyone who helps is credited here, for any kind of contribution: code, documentation, bug reports,
+reviews, ideas, answers in Discussions. The list follows the
+[All Contributors](https://allcontributors.org/en/reference/specification/) specification and is kept by hand;
+[CONTRIBUTING.md](CONTRIBUTING.md#credit-and-copyright) says how to add yourself. Contributors keep the
+copyright of what they write.
+
+| Contributor | Contributions |
+|-------------|---------------|
+| [Matej Gomboc](https://github.com/MatejGomboc) | 💻 📖 🎨 🤔 🔬 🚇 🚧 ⚠️ |
+
+The emoji follow the [All Contributors emoji key](https://allcontributors.org/en/reference/emoji-key/).
+
 ## Licence
 
-Copyright © 2026 Matej Gomboc <https://github.com/ai-quokka-wannabe/tron-grid-lite>.
+Copyright © 2026 The AiQuokkaWannabe Authors <https://github.com/ai-quokka-wannabe/tron-grid-lite>, listed under [Contributors](#contributors).
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
