@@ -21,7 +21,7 @@ That is the Grid as it stands, and it is deliberately small. Where it is headed 
 in one text, word for word the same in every one of its repositories and on
 [its profile page](https://github.com/ai-quokka-wannabe).
 
-<!-- The Long Arc: mirrored verbatim in every ai-quokka-wannabe repository (profile/README.md in .github and each docs/VISION.md). Change all five together. -->
+<!-- The Long Arc: mirrored verbatim in every ai-quokka-wannabe repository (profile/README.md in .github and each docs/VISION.md). Change all six together. -->
 
 ## The Long Arc
 

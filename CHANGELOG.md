@@ -640,6 +640,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The Long Arc has six copies.** The organisation's open research lab,
+  [iso-lab](https://github.com/ai-quokka-wannabe/iso-lab), carries the block in its own
+  `docs/VISION.md`, so the guard comment above the block in `docs/VISION.md` now says "Change all six
+  together". The block's words are unchanged.
 - **The long arc is public: `docs/VISION.md` carries the organisation's whole vision.** The owner's
   decision (2026-10-10): the vision goes public in full, as one `## The Long Arc` section mirrored
   word for word in every repository's vision document and on the organisation's profile page - all
