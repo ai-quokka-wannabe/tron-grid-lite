@@ -1240,7 +1240,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which is what made the failure read as a missing directory. Link chains the copies now (its
   #28) and this is the pointer that brings it: only ever one copy is in flight.
 - **The documents say what the code does about threads, shutdown and replay.** Adopted from
-  the owner's StringWiggler and project_nimrod. ARCHITECTURE gains "The threads, and the order
+  the owner's StringWiggler and another of the owner's projects. ARCHITECTURE gains "The threads, and the order
   they stop": every thread the process starts - event, render, audio output, logger, and a
   Program's own - with what it owns, what it talks through and how it ends, the three rules the
   table enforces, and the shutdown order (reverse construction, join before destroy, every

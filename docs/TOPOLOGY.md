@@ -638,8 +638,7 @@ The claims survive networking and come out sharper, provided they are stated pre
   from snapshots can look replayable for months. The Disk is a recording, Clu re-simulates from
   the input log alone and compares hashes, and the state hash covers hidden state; that is the
   replay property, held by construction (`clippy.toml` bans the hidden-state sources, the random
-  walk hashes twice) rather than by hope. (The distinction is the owner's, from
-  `project_nimrod`'s architecture decisions.)
+  walk hashes twice) rather than by hope. (The distinction is the owner's.)
 - **The minds do not replay.** Actions were produced by brains fed GPU-rendered senses on
   whatever hardware the host had; the same seed run live again yields a different history. The
   log reproduces the world *given* the actions; it does not reproduce the creatures' decisions.
