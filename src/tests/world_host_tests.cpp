@@ -165,6 +165,8 @@ namespace
                     .joint_angles = {0.25f, -0.5f},
                     .joint_torques = {1.5f, -5.0f},
                     .contact_count = grounded ? 1u : 0u,
+                    .intake = 0.0f,
+                    .odour = {},
                     .reserved1 = {}};
                 check(m_library.vtable().send_proprioception(m_connection, &letter, grounded ? contacts.data() : nullptr), "send_proprioception");
             }
@@ -195,6 +197,8 @@ namespace
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
+                .intake = 0.0f,
+                .odour = {},
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
@@ -226,6 +230,8 @@ namespace
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
+                .intake = 0.0f,
+                .odour = {},
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
@@ -250,6 +256,8 @@ namespace
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
+                .intake = 0.0f,
+                .odour = {},
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
