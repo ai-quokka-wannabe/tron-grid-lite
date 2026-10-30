@@ -663,6 +663,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **On link v12.** `external/link` moves to protocol 12 and client ABI 10; the Grid reads Link's C header, so its
+  own code needs nothing, and the world-client and world-host tests' hand-built servers pass the new food argument and
+  the header's `food_count`. 22 of 22 tests on MSVC; Master Control moves in the same step, and the two must land
+  together.
 - **The Long Arc has six copies.** The organisation's open research lab,
   [iso-lab](https://github.com/ai-quokka-wannabe/iso-lab), carries the block in its own
   `docs/VISION.md`, so the guard comment above the block in `docs/VISION.md` now says "Change all six
