@@ -143,7 +143,7 @@ namespace
         //! Tell one tick: one row for the creature, then its letter, in one flush.
         void tellTick(const std::uint64_t tick, const std::uint32_t creature_id, const float z, const float yaw, const bool grounded, const bool with_letter = true)
         {
-            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 0u};
             LnkCreatureState row{};
             row.creature_id = creature_id;
             row.position[0] = 1.0f;
@@ -153,7 +153,7 @@ namespace
             row.velocity[2] = -0.5f;
             row.yaw_rate = 0.1f;
             row.segment_count = 1u; // A single body: the wire refuses a chain of none.
-            check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
+            check(m_library.vtable().send_tick_state(m_connection, &header, &row, nullptr), "send_tick_state");
             if (with_letter) {
                 const std::array<LnkContact, 1> contacts{LnkContact{
                     .position = {0.0f, -0.05f, 0.0f}, .impulse = {0.0f, 0.3f, 0.0f}, .normal = {0.0f, 1.0f, 0.0f}, .depth = 0.004f, .slip = {0.0f, 0.0f, -0.5f}}};
@@ -165,6 +165,8 @@ namespace
                     .joint_angles = {0.25f, -0.5f},
                     .joint_torques = {1.5f, -5.0f},
                     .contact_count = grounded ? 1u : 0u,
+                    .intake = 0.0f,
+                    .odour = {},
                     .reserved1 = {}};
                 check(m_library.vtable().send_proprioception(m_connection, &letter, grounded ? contacts.data() : nullptr), "send_proprioception");
             }
@@ -174,7 +176,7 @@ namespace
         //! A telling whose one row is a chain of `segment_count`, its trail strung along +Z.
         void tellChain(const std::uint64_t tick, const std::uint32_t creature_id, const std::uint32_t segment_count)
         {
-            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 0u};
             LnkCreatureState row{};
             row.creature_id = creature_id;
             row.position[0] = 1.0f;
@@ -186,7 +188,7 @@ namespace
                 row.segments[segment].position[2] = 0.3f * static_cast<float>(segment + 1u);
                 row.segments[segment].yaw = 0.1f * static_cast<float>(segment + 1u);
             }
-            check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
+            check(m_library.vtable().send_tick_state(m_connection, &header, &row, nullptr), "send_tick_state");
             const LnkProprioception letter{.tick = tick,
                 .creature_id = creature_id,
                 .grounded = 1u,
@@ -195,6 +197,8 @@ namespace
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
+                .intake = 0.0f,
+                .odour = {},
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
@@ -205,12 +209,12 @@ namespace
         //! that is the spectator's business alone.
         void tellWithScratches(const std::uint64_t tick, const std::uint32_t creature_id)
         {
-            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 0u};
             LnkCreatureState row{};
             row.creature_id = creature_id;
             row.position[1] = 0.05f;
             row.segment_count = 1u;
-            check(m_library.vtable().send_tick_state(m_connection, &header, &row), "send_tick_state");
+            check(m_library.vtable().send_tick_state(m_connection, &header, &row, nullptr), "send_tick_state");
             const LnkEvent own{
                 .tick = tick, .position = {0.25f, 0.0f, -0.5f}, .strength = 0.375f, .creature_id = creature_id, .kind = LNK_EVENT_SCRATCH, .reserved0 = {}};
             check(m_library.vtable().send_event(m_connection, &own), "send_event");
@@ -226,6 +230,8 @@ namespace
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
+                .intake = 0.0f,
+                .odour = {},
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
@@ -250,6 +256,8 @@ namespace
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
+                .intake = 0.0f,
+                .odour = {},
                 .reserved1 = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();

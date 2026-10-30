@@ -139,8 +139,8 @@ namespace
 
         void tellTick(const std::uint64_t tick, const std::vector<LnkCreatureState>& rows)
         {
-            const LnkTickStateHeader header{.tick = tick, .creature_count = static_cast<std::uint32_t>(rows.size()), .reserved0 = {}};
-            check(m_library.vtable().send_tick_state(m_connection, &header, rows.empty() ? nullptr : rows.data()), "send_tick_state");
+            const LnkTickStateHeader header{.tick = tick, .creature_count = static_cast<std::uint32_t>(rows.size()), .food_count = 0u};
+            check(m_library.vtable().send_tick_state(m_connection, &header, rows.empty() ? nullptr : rows.data(), nullptr), "send_tick_state");
             flush();
         }
 
@@ -281,7 +281,7 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
         LnkClient* const recorder{library.vtable().record_open(path.c_str(), fingerprint, 10u, 0.1f, 1'700'000'000u, &status, nullptr, 0u)};
         TEST_CHECK_EQUAL(status, LNK_OK);
         for (std::uint64_t tick{11u}; tick <= 13u; ++tick) {
-            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .reserved0 = {}};
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 0u};
             const LnkCreatureState row{.creature_id = 7u,
                 .position = {static_cast<float>(tick), 0.05f, 0.0f},
                 .yaw = 0.0f,
@@ -291,7 +291,7 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
                 .vocalisation = 0.0f,
                 .segment_count = 1u, // A single body: the wire refuses a chain of none.
                 .segments = {}};
-            TEST_CHECK_EQUAL(library.vtable().send_tick_state(recorder, &header, &row), LNK_OK);
+            TEST_CHECK_EQUAL(library.vtable().send_tick_state(recorder, &header, &row, nullptr), LNK_OK);
         }
         std::uint8_t everything_left{0u};
         TEST_CHECK_EQUAL(library.vtable().flush(recorder, &everything_left), LNK_OK);
