@@ -45,8 +45,8 @@ namespace RosterLib
         way in. 25 Hz would give 0.04 and 50 Hz 0.02, neither of which is representable, and both of
         which accumulate an error somebody eventually has to explain in a replay.
 
-        The rate is never sized to what looks smooth through the debug window. That window is the one
-        part a human perceives, which is exactly why it must not drive the decision.
+        The rate is never sized to what looks smooth through the debug window. That window serves a
+        human's eye, which is exactly why it must not drive the decision.
     */
     inline constexpr float TICK_SECONDS{0.03125f};
 

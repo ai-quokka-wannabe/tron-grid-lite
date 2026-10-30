@@ -374,7 +374,7 @@ copyright of what they write.
 
 | Contributor | Contributions |
 |-------------|---------------|
-| [Vamsi-2581](https://github.com/Vamsi-2581) | 💻 |
+| [Vamsi-2581](https://github.com/Vamsi-2581) | 💻 📖 |
 | [Matej Gomboc](https://github.com/MatejGomboc) | 💻 📖 🎨 🤔 🔬 🚇 🚧 ⚠️ |
 
 The emoji follow the [All Contributors emoji key](https://allcontributors.org/en/reference/emoji-key/).

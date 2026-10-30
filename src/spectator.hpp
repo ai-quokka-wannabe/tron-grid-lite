@@ -22,17 +22,19 @@
 /*!
     Input controller for the User's free-flight debug camera.
 
-    This is the only interactive element in the entire project, and it exists purely for
-    development and observation. The User, sitting at the keyboard, flies this camera around
-    the Grid to watch what happens, to inspect geometry, and to verify that the renderer behaves
-    correctly.
+    This is the only interactive element in this repository, and it exists for observation. The
+    User, sitting at the keyboard, flies this camera through the live view (`--window`, or a Disk
+    played back with `--replay`) to watch the world, or through the serverless stage inspection
+    (`--debug`) to inspect geometry and verify that the renderer behaves correctly.
 
-    It is emphatically not a player character. The Grid is inhabited exclusively by creatures
-    driven by their own Programs; those creatures receive their actions across the plugin
-    interface and never from this class. Nothing typed at the keyboard can influence any creature,
-    and moving the debug camera has no effect whatsoever on what any creature perceives —
-    creature sensors derive their own view and projection matrices from their own state (see
-    docs/PERCEPTION.md). This camera is a window onto the Grid, never a hand inside it.
+    It is emphatically not a player character. Today the Grid is inhabited by creatures driven by
+    their own Programs alone; those creatures receive their actions across the plugin interface
+    and never from this class. Nothing typed into this window can influence any creature, and
+    moving the camera has no effect whatsoever on what any creature perceives — creature sensors
+    derive their own view and projection matrices from their own state (see docs/PERCEPTION.md).
+    A User who steers a creature today does so from that Program's own panel, never from here;
+    human Users entering with avatars are the long arc of docs/VISION.md, which this class does
+    not anticipate. This camera is a window onto the Grid, never a hand inside it.
 
     The controller owns only input state: a set of currently-held keys, a desired cursor-capture
     flag, and the accumulated mouse-look deltas. It holds no window, no camera and no renderer
