@@ -35,7 +35,7 @@ namespace
     [[nodiscard]] std::uint32_t midpoint(std::vector<MathLib::Vec3>& vertices, EdgeMidpoints& made, const std::uint32_t a, const std::uint32_t b)
     {
         const std::pair<std::uint32_t, std::uint32_t> key{std::min(a, b), std::max(a, b)};
-        const auto known{made.find(key)};
+        const EdgeMidpoints::const_iterator known{made.find(key)};
         if (known != made.end()) {
             return known->second;
         }

@@ -69,8 +69,8 @@ hardware they need is there.
   the same food; a Disk needs nothing extra, since the orbs are in its frames.
 - **Seen**: the orbs are geometry in the scene the senses already trace. A creature with eyes sees their glow and
   their reflection in the mirror floor; a creature's ears hear them as occluders. Nothing about this is special-cased:
-  they are emissive objects, as the neon tubes are. A creature whose preset has no eyes cannot see them at all - the
-  worm's case, and the reason smell matters.
+  they are emissive objects, as the neon tubes are. A creature whose preset has no eyes at all cannot see them - and the worm's
+  two photoreceptors see an orb only as a little more light, which is why smell matters.
 - **Gone, with a pew**: an orb eaten to nothing is removed, with an `EVENT` (kind: food gone) - and it goes with a
   sound, the owner's "pew" (2026-10-29): a short falling chirp emitted at the orb, as a call is. It is a real source in
   the world, not a speaker effect: the spectator's speakers play it through the same mixer as every call, and every
@@ -91,7 +91,7 @@ measurement iso-lab can make.
 
 - **The orbs** (`src/orbs.hpp`): one unit icosphere, subdivided twice (320 faces), scaled to the row's radius and
   carried to its centre. The glow follows the quantity in eight steps, from a crumb at an eighth of full to a whole
-  orb at a linear radiance of 4.0 in every channel - as bright as the floor's neon, below the pillars. Stepped
+  orb at a linear radiance of 4.0 in every channel - its brightest channel level with the neon's, below the pillars'. Stepped
   rather than continuous because that is the material model's shape: a triangle's slot is the only key the tracers
   have and the table is uploaded once, so each step is its own small geometry wearing its own emissive slot, and a
   bite that crosses a step changes which shape an orb stands in - a placement, never a re-upload, and no new shader

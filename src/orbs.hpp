@@ -49,7 +49,7 @@ namespace OrbLib
     constexpr std::uint32_t GLOW_LEVELS{8u};
 
     //! A whole orb's linear radiance, equal in every channel: white, and so blue enough for the
-    //! worm's photoreceptors. Below the pillars' brightest channel, as bright as the floor's neon.
+    //! worm's photoreceptors. Its brightest channel level with the floor's neon's, below the pillars'.
     constexpr float FULL_EMISSION{4.0f};
 
     //! The level an orb with this much food left glows at: 1 for a crumb, GLOW_LEVELS for a

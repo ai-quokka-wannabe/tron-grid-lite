@@ -44,8 +44,9 @@ namespace
     //! Block size for the buffer arena. Comfortably larger than every table this owns put together.
     constexpr vk::DeviceSize BUFFER_BLOCK_BYTES{4u * 1024u * 1024u};
 
-    //! Block size for the host-visible arena behind the dynamic instance buffers. The protocol's
-    //! whole creature cap is ~37 KB of records per frame in flight, so one block carries them all.
+    //! Block size for the host-visible arena behind the dynamic instance buffers. A full world - every
+    //! creature's segments and a full larder of orbs - is about 304 KB of records per frame in flight,
+    //! more than a block: the arena sizes a block to fit any allocation larger than this.
     constexpr vk::DeviceSize HOST_BLOCK_BYTES{256u * 1024u};
 
     /*!
