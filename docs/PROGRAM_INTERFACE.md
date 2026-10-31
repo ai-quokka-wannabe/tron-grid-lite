@@ -374,13 +374,13 @@ joints, and the Grid copies them as it copies the joints.
 | Touch | `contacts`, `contact_count` | Where the body was struck this tick, and how hard | Phase 6 |
 | Thermoreception | `irradiance` | A fixed quadrature over the whole sphere, undirected | Phase 6 |
 | Hearing | `ears` | Acoustic rays through the same BVH, delivered as an impulse response per ear | Phase 6 |
-| Interoception | `intake` | What the body swallowed this tick, in pumps, in the world's food unit | ABI v11 |
+| Interoception | `intake` | What the body swallowed this tick, one bite per pump, in the world's food unit | ABI v11 |
 | Chemoreception | `odour` | Two amphids' bound fractions, eight receptor types each, from the world's closed-form field | ABI v11 |
 
-Every one of them is a **consequence of the creature's position on the Grid**. All but the last
-two are computed by the same machinery that draws the picture; those two are computed by the world
-that holds the food, from the same positions, and copied. That is the test a modality has to pass
-to belong here.
+Every one of them is a **consequence of the creature's position on the Grid**. Vision, hearing and
+thermoreception are computed by the same machinery that draws the picture; the body's own senses,
+its gut and its nose are computed by the world that holds the body and the food, from the same
+positions, and copied. That is the test a modality has to pass to belong here.
 
 Points worth stating plainly, because they are the whole design:
 
