@@ -121,6 +121,22 @@ namespace WorldHostLib
             return m_scratches;
         }
 
+        //! The orbs of food the last whole telling held: what the stage stands for the senses.
+        [[nodiscard]] const std::vector<LnkFoodState>& foods() const noexcept
+        {
+            return m_foods;
+        }
+
+        /*!
+            The pews of the last whole telling: every orb eaten to nothing this tick, gone with
+            its chirp from where it stood - a source for every hosted ear. Replaced whole at each
+            whole tick, so a tick nobody emptied an orb in is silent.
+        */
+        [[nodiscard]] const std::vector<Stage::PewTelling>& pews() const noexcept
+        {
+            return m_pews;
+        }
+
     private:
         //! Reads everything the wire holds, never blocking; m_ready says whether a tick is whole.
         void drain();
@@ -151,6 +167,11 @@ namespace WorldHostLib
         std::vector<Stage::ScratchTelling> m_scratches_being_told;
         std::vector<Stage::ScratchTelling> m_scratches;
         std::vector<Stage::GuestTelling> m_guests_being_told;
+        //! The orbs and the pews of the tick being told, and of the last whole one.
+        std::vector<LnkFoodState> m_foods_being_told;
+        std::vector<LnkFoodState> m_foods;
+        std::vector<Stage::PewTelling> m_pews_being_told;
+        std::vector<Stage::PewTelling> m_pews;
     };
 
 } // namespace WorldHostLib

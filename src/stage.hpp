@@ -35,6 +35,11 @@
     arrangement the two-level structure was built for. Each tick, `update` moves the instances to
     the poses physics settled; nothing is ever rebuilt, only re-placed.
 
+    Food stands here as it stands in the spectator's picture: the orbs' shapes (`OrbLib`), one per
+    glow level, built once after the hosted bodies, and an instance per orb the world tells, after
+    every body and guest. So a creature's eyes see an orb's glow and its reflection, and its ears
+    meet it as an occluder, by the same traversal that meets everything else.
+
     The material table is likewise one table: the Grid's six slots first, then each creature's
     materials appended in roster order, with every body triangle's index rewritten to its global
     slot at construction. One table rather than per-body tables, because a triangle's material
@@ -105,6 +110,16 @@ public:
     };
 
     /*!
+        One orb the world emptied this tick, gone with a pew: the owner's short falling chirp,
+        sounded at the orb's centre as a call is (docs/CHEMORECEPTION.md). A real source - every
+        ear near enough hears that food was eaten, and nothing more.
+    */
+    struct PewTelling {
+        MathLib::Vec3 position{};
+        float strength{0.0f};
+    };
+
+    /*!
         The guests' shapes, replacing whatever guests were set before: one geometry per shaped
         body in creature order, appended after the hosted bodies' own, its materials appended to
         the table. Rare - a REZ or a DEREZ with rows - and the caller rebuilds the device's world
@@ -115,6 +130,21 @@ public:
 
     //! Moves every shaped guest's instance to the pose the world told. Called each tick.
     void placeGuests(const std::vector<GuestTelling>& guests);
+
+    /*!
+        Stands one orb per row the world told, after every body and guest, each in the shape of
+        its glow level and sized to its radius; an orb the telling no longer holds stands nowhere.
+        Placements only - the shapes were built at construction - but the instance count follows
+        the larder, so a device consumer sizes its buffer for LNK_TICK_STATE_MAX_FOOD more than
+        `flatten` returns. More rows than that is refused loudly, as the wire would have.
+    */
+    void placeFood(const std::vector<LnkFoodState>& foods);
+
+    //! The instances the orbs stand in, consecutive, after every body and guest.
+    [[nodiscard]] BvhLib::InstanceRange foodInstances() const noexcept
+    {
+        return BvhLib::InstanceRange{.first = m_food_instance_first, .count = static_cast<uint32_t>(m_foods.size())};
+    }
 
     //! The instances a shaped guest stands in - its head and every trailing segment, consecutive -
     //! or an empty range for one with no shape.
@@ -177,9 +207,12 @@ private:
     std::vector<float> m_acoustic_strengths;
     std::vector<Body> m_bodies; //!< Modelled creatures only, in roster order.
     std::vector<Body> m_guests; //!< Shaped guests, in creature order, after the hosted bodies.
-    size_t m_own_geometry_count{0u}; //!< Geometries setGuests keeps: the Grid and the hosted bodies.
+    size_t m_own_geometry_count{0u}; //!< Geometries setGuests keeps: the Grid, the hosted bodies and the orbs.
     size_t m_own_material_count{0u};
     size_t m_own_instance_count{0u};
+    uint32_t m_first_orb_geometry{0u}; //!< Glow level 1's geometry; level n is n - 1 beyond it.
+    uint32_t m_food_instance_first{0u}; //!< Where the orbs' instances begin: after every body and guest.
+    std::vector<LnkFoodState> m_foods; //!< The orbs standing, as last told; re-stood after setGuests.
     void cacheOffsets();
 
     //! Where each geometry landed in the concatenated buffers, cached from construction so that

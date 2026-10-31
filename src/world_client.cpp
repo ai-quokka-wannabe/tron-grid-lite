@@ -183,7 +183,7 @@ namespace WorldClientLib
                 }
                 const PendingTelling telling{std::move(*m_replay->pending)};
                 m_replay->pending.reset();
-                applyTelling(telling.header, telling.rows.empty() ? nullptr : telling.rows.data());
+                applyTelling(telling.header, telling.rows.empty() ? nullptr : telling.rows.data(), telling.foods.empty() ? nullptr : telling.foods.data());
             }
 
             const LnkStatus status{m_library.vtable().poll(m_connection, &view)};
@@ -208,6 +208,9 @@ namespace WorldClientLib
                 PendingTelling telling{};
                 telling.header = header;
                 telling.rows.assign(view.as.tick_state.states, view.as.tick_state.states + header.creature_count);
+                if (header.food_count > 0u) {
+                    telling.foods.assign(view.as.tick_state.foods, view.as.tick_state.foods + header.food_count);
+                }
                 if (m_replay->first_tick == 0u) {
                     m_replay->first_tick = header.tick;
                     m_replay->began = std::chrono::steady_clock::now();
@@ -229,7 +232,7 @@ namespace WorldClientLib
         std::uint8_t pong_flush_remainder{0u};
         switch (view.type) {
         case LNK_MSG_TICK_STATE:
-            applyTelling(view.as.tick_state.header, view.as.tick_state.states);
+            applyTelling(view.as.tick_state.header, view.as.tick_state.states, view.as.tick_state.foods);
             break;
         case LNK_MSG_EVENT:
             m_events.push_back(view.as.event);
@@ -287,7 +290,7 @@ namespace WorldClientLib
         }
     }
 
-    void Client::applyTelling(const LnkTickStateHeader& header, const LnkCreatureState* const rows)
+    void Client::applyTelling(const LnkTickStateHeader& header, const LnkCreatureState* const rows, const LnkFoodState* const foods)
     {
         /*
             The broadcast is a full snapshot: everything alive is in it, so a creature it does
@@ -305,6 +308,12 @@ namespace WorldClientLib
             next.emplace(state.creature_id, track);
         }
         m_creatures = std::move(next);
+
+        // The orbs likewise: the telling's whole larder, copied out of the library's borrow.
+        m_foods.clear();
+        if ((foods != nullptr) && (header.food_count > 0u)) {
+            m_foods.assign(foods, foods + header.food_count);
+        }
         m_tick = header.tick;
     }
 

@@ -146,6 +146,21 @@ public:
     void tellScratches(std::vector<Stage::ScratchTelling> scratches);
 
     /*!
+        The orbs of food the world holds this tick. Told before `beginTick`, which stands them on
+        the stage - seen by their glow, met by the ears as occluders - and counts an orb that
+        appeared, went or dimmed a glow level as a change the caches must respect.
+    */
+    void tellFood(std::vector<LnkFoodState> foods);
+
+    /*!
+        The pews the world sounded this tick: every orb eaten to nothing, gone with its chirp.
+        Told before `beginTick`, which makes each a source for every hosted ear exactly as a call
+        is - bins and a discrete arrival, since a chirp has the sharp onset a scratch lacks - from
+        the orb's centre, through nobody's hull. Replaced whole each tick.
+    */
+    void tellPews(std::vector<Stage::PewTelling> pews);
+
+    /*!
         Fills the traced senses for one creature.
 
         A stationary creature is answered from its previous solves rather than re-traced: the
@@ -263,4 +278,7 @@ private:
     //! What the host relayed: the world's scratch events, each teller named.
     std::vector<Stage::ScratchTelling> m_scratch_tellings;
     std::vector<Stage::GuestTelling> m_guests; //!< The world's other bodies this tick.
+    std::vector<LnkFoodState> m_foods; //!< The orbs this tick, as the world told them.
+    std::vector<LnkFoodState> m_last_foods; //!< The orbs the caches last saw, for the moved test.
+    std::vector<Stage::PewTelling> m_pews; //!< The orbs gone with a pew this tick.
 };

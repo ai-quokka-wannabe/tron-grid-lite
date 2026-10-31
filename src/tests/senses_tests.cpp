@@ -12,6 +12,7 @@
     GNU General Public License for more details.
 */
 
+#include "../orbs.hpp"
 #include "../senses.hpp"
 
 #include <testing/testing.hpp>
@@ -521,7 +522,7 @@ TEST_CASE(a_guests_body_shades_the_hum_and_a_guests_call_is_heard)
     // Taking the guests away restores the hosted scene exactly: the stage forgets their shapes.
     stage.setGuests({});
     TEST_CHECK(stage.guestInstanceOf(777u).empty());
-    TEST_CHECK_EQUAL(stage.scene().geometries.size(), static_cast<size_t>(1u));
+    TEST_CHECK_EQUAL(stage.scene().geometries.size(), static_cast<size_t>(1u + OrbLib::GLOW_LEVELS));
 }
 
 TEST_CASE(a_scratch_is_heard_in_the_bins_and_gives_no_arrival_to_range_from)
@@ -594,6 +595,69 @@ TEST_CASE(a_scratch_is_heard_in_the_bins_and_gives_no_arrival_to_range_from)
         const uint32_t index{(band * Acoustics::BIN_COUNT) + direct_bin};
         TEST_CHECK_CLOSE(both.ears[0].energy[index] - hum_only[index], 2.0f / (3.6f * 3.6f), 1e-6f);
     }
+}
+
+TEST_CASE(an_orb_shades_the_hum_and_its_pew_is_heard_as_a_call_from_where_it_stood)
+{
+    /*
+        Food, the ears' half. An orb is geometry in the scene the ears walk, so one standing
+        between an ear and the singing floor shadows the hum like any body - and when it is eaten
+        to nothing it goes with a pew, a real source at its centre: energy in the bin its distance
+        dictates and a discrete arrival to range from, since a chirp has a sharp onset.
+    */
+    const MathLib::Vec3 a{-2.0f, 0.0f, -2.0f};
+    const MathLib::Vec3 b{2.0f, 0.0f, -2.0f};
+    const MathLib::Vec3 c{-2.0f, 0.0f, 2.0f};
+    const MathLib::Vec3 d{2.0f, 0.0f, 2.0f};
+    std::vector<BvhLib::Triangle> floor_triangles;
+    floor_triangles.push_back(BvhLib::Triangle{.v0 = a, .material = 0u, .edge1 = c - a, .padding0 = 0u, .edge2 = b - a, .padding1 = 0u});
+    floor_triangles.push_back(BvhLib::Triangle{.v0 = b, .material = 0u, .edge1 = c - b, .padding0 = 0u, .edge2 = d - b, .padding1 = 0u});
+
+    const std::array<TglEarDesc, 1u> ears{earAt(0.0f, 0.0f, 0.0f)};
+    std::vector<RosterLib::Creature> creatures;
+    creatures.push_back(hearingCreature(ears.data(), 1u));
+    Stage stage{BvhLib::build(std::move(floor_triangles)), {Material{}}, creatures};
+
+    // The stage's own strengths: the floor's one, and silence for every orb slot.
+    std::vector<float> strengths(stage.materials().size(), 0.0f);
+    strengths[0] = 1.0f;
+    GridSensesSource source{stage.scene(), strengths, {}, nullptr, &stage};
+
+    source.beginTick(creatures);
+    TglSenses open_floor{};
+    source.fill(creatures[0], open_floor);
+    std::array<float, Acoustics::BAND_COUNT * Acoustics::BIN_COUNT> baseline{};
+    std::memcpy(baseline.data(), open_floor.ears[0].energy, sizeof(baseline));
+    const float open_total{totalEnergy(open_floor.ears[0])};
+    TEST_CHECK(open_total > 0.0f);
+
+    // A great orb under the listener, its top just below the ear: the floor's hum is shadowed.
+    source.tellFood({LnkFoodState{.food_id = 1u, .position = {0.0f, 0.0f, 0.0f}, .radius = 0.9f, .quantity = 1.0f}});
+    source.beginTick(creatures);
+    TglSenses shaded{};
+    source.fill(creatures[0], shaded);
+    TEST_CHECK(totalEnergy(shaded.ears[0]) < open_total * 0.5f);
+
+    // Eaten to nothing: the orb leaves the telling, and goes with a pew from 3.6 m due east.
+    source.tellFood({});
+    source.tellPews({Stage::PewTelling{.position = MathLib::Vec3{3.6f, 1.0f, 0.0f}, .strength = 1.0f}});
+    source.beginTick(creatures);
+    TglSenses heard{};
+    source.fill(creatures[0], heard);
+    const uint32_t direct_bin{callBinOf(3.6f)};
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        const uint32_t index{(band * Acoustics::BIN_COUNT) + direct_bin};
+        TEST_CHECK_CLOSE(heard.ears[0].energy[index] - baseline[index], 1.0f / (3.6f * 3.6f), 1e-6f);
+    }
+    TEST_CHECK_EQUAL(heard.ears[0].arrival_count, 1u);
+
+    // The next tick tells no pew, and the floor's hum is back bit for bit: nothing chirps on.
+    source.tellPews({});
+    source.beginTick(creatures);
+    TglSenses after{};
+    source.fill(creatures[0], after);
+    TEST_CHECK(std::memcmp(baseline.data(), after.ears[0].energy, sizeof(baseline)) == 0);
+    TEST_CHECK_EQUAL(after.ears[0].arrival_count, 0u);
 }
 
 TEST_CASE(a_caller_due_east_arrives_at_the_east_ear_first_by_the_interaural_distance_and_its_recession_is_heard)

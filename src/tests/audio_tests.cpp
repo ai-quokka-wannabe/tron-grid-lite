@@ -135,6 +135,53 @@ TEST_CASE(an_approaching_source_is_higher_and_a_receding_one_lower)
     TEST_CHECK_EQUAL(crossings(renderOne(sideways, listener, FRAMES)), base);
 }
 
+TEST_CASE(an_eaten_orb_goes_with_a_pew_that_falls_and_is_soon_over)
+{
+    /*
+        The owner's "pew": a short falling chirp from where the orb stood. Falling is counted, not
+        trusted - the first tenth of its course crosses zero more often than the last - and short
+        is measured by when the voice retires. It is placed like every other sound: from the
+        right, louder on the right.
+    */
+    LnkEvent gone{};
+    gone.tick = 40u;
+    gone.creature_id = 3u; // The eater: not the source, which is the orb.
+    gone.kind = LNK_EVENT_FOOD_GONE;
+    gone.position[0] = 2.0f;
+    gone.strength = 0.8f;
+    const AudioLib::Sound pew{AudioLib::soundOf(gone, MathLib::Vec3{5.0f, 0.0f, 0.0f})};
+    TEST_CHECK(pew.kind == AudioLib::SoundKind::Pew);
+    TEST_CHECK_CLOSE(pew.position.x, 2.0f, 1e-6f);
+    TEST_CHECK_CLOSE(pew.strength, 0.8f, 1e-6f);
+    // An orb does not move: whatever the eater was doing, the pew carries no Doppler.
+    TEST_CHECK(pew.velocity.x == 0.0f);
+
+    AudioLib::Mixer mixer{RATE};
+    mixer.setListener(AudioLib::Listener{});
+    mixer.sound(pew);
+    constexpr std::uint32_t TENTH{RATE / 10u};
+    std::vector<float> early(static_cast<std::size_t>(TENTH) * 2u, 0.0f);
+    std::vector<float> middle(static_cast<std::size_t>(TENTH) * 2u, 0.0f);
+    mixer.render(early.data(), TENTH);
+    mixer.render(middle.data(), TENTH);
+    TEST_CHECK(crossings(early) > crossings(middle) + 20u);
+    TEST_CHECK(peaks(early).right > peaks(early).left * 2.0f);
+
+    // A few hundred milliseconds and it is over.
+    std::vector<float> rest(2u * RATE, 0.0f);
+    mixer.render(rest.data(), RATE);
+    TEST_CHECK_EQUAL(mixer.liveVoices(), static_cast<std::size_t>(0u));
+
+    // And the world's other events keep their own voices.
+    gone.kind = LNK_EVENT_SCRATCH;
+    TEST_CHECK(AudioLib::soundOf(gone, MathLib::Vec3{}).kind == AudioLib::SoundKind::Scratch);
+    gone.kind = LNK_EVENT_VOCALISATION;
+    const AudioLib::Sound call{AudioLib::soundOf(gone, MathLib::Vec3{5.0f, 0.0f, 0.0f})};
+    TEST_CHECK(call.kind == AudioLib::SoundKind::Ping);
+    TEST_CHECK_EQUAL(call.creature_id, 3u);
+    TEST_CHECK_CLOSE(call.velocity.x, 5.0f, 1e-6f);
+}
+
 TEST_CASE(every_creature_has_its_own_pitch_within_an_octave)
 {
     TEST_CHECK_CLOSE(AudioLib::pitchOf(0u), 440.0f, 1e-3f);

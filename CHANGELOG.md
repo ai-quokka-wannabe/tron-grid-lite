@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Food on the Grid: glowing white orbs, and a pew when one is eaten.** The owner's ask (2026-10-29): "glowing white
+  orbs every animal can see", and "when food is consumed let it make a pew sci-fi noise". The world client keeps each
+  telling's food rows (link v12) as it keeps the creatures, Clu's replay included. Both stages stand an orb per row -
+  one unit icosphere sized to the radius, its white glow stepping down with the quantity in eight emissive levels, so
+  a bite is a placement and never a re-upload - in the spectator's picture and in the scene the creature host's eyes
+  trace and its ears walk: an eye sees the glow and its reflection, an ear meets the orb as an occluder. An orb gone
+  sounds a pew from its centre: in the spectator's mixer a sine falling two octaves in a quarter of a second, placed
+  like a call and carrying no Doppler, since an orb does not move; in the creature host a source delivered as a call
+  is, bins and an arrival. Nothing new in the shaders or the material model; a world without food renders as before,
+  and the reference render's digests did not move on either desk GPU. Tests, each seen red once: the client keeps and
+  drops food rows, both stages place one orb per row and none for a gone one, the pew falls and is soon over, and a
+  food-gone event reaches the host's pews and the ears as an arrival.
 - **Program ABI 11: the gut and the nose - chemoreception's senses, carried.** `TglSenses` carries
   `intake`, what the body swallowed this tick in the world's food unit - zero on most ticks, one bite on
   a pump, zero always for a body without a mouth - and `odour[2][8]`, the fraction of each receptor type

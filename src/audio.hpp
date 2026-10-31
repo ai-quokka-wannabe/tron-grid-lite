@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <lnk/lnk_protocol.h>
 #include <math/vector.hpp>
 
 #include <cstdint>
@@ -28,7 +29,8 @@
     Presentation, not simulation - the ABI carries no auralisation and the creatures' own ears
     are the acoustics' business (TOPOLOGY.md § The spectator). Each EVENT becomes one short
     sound: a vocalisation is a ping, a pure tone whose pitch is the creature's own, decaying;
-    a scratch is a burst of filtered noise as loud as the slide was. Both are placed by where
+    a scratch is a burst of filtered noise as loud as the slide was; an orb eaten to nothing goes
+    with a pew, a short falling chirp from where it stood. All are placed by where
     they happened relative to the listener (equal-power pan, distance attenuation) and shifted
     by the source's velocity along the line to the listener - the owner's ruling that Doppler is
     realism owed now. No HRTF, no spectator-side occlusion: those keep their trigger.
@@ -51,6 +53,7 @@ namespace AudioLib
     enum class SoundKind : std::uint8_t {
         Ping, //!< A vocalisation: a decaying tone at the creature's own pitch.
         Scratch, //!< A slide along a face: a short burst of filtered noise.
+        Pew, //!< An orb of food eaten to nothing: a short chirp falling two octaves.
     };
 
     //! One event as the mixer hears it: what, where, how fast the source moves, how loud.
@@ -65,6 +68,14 @@ namespace AudioLib
     //! The creature's own pitch: a semitone lattice from A4 by identity, so the same creature
     //! always sounds the same and two creatures are told apart by ear.
     [[nodiscard]] float pitchOf(std::uint32_t creature_id) noexcept;
+
+    /*!
+        The sound an EVENT makes: a vocalisation pings at its caller's pitch, a scratch rasps, an
+        orb gone pews. `source_velocity` is the newest telling's velocity of the event's
+        creature, the Doppler the owner ruled owed - except for a pew, whose source is the orb
+        and not its eater, and an orb does not move.
+    */
+    [[nodiscard]] Sound soundOf(const LnkEvent& event, const MathLib::Vec3& source_velocity) noexcept;
 
     class Mixer {
     public:
@@ -95,6 +106,7 @@ namespace AudioLib
         struct Voice {
             SoundKind kind{SoundKind::Ping};
             float frequency{440.0f}; //!< Hz, Doppler applied at the start.
+            float glide{1.0f}; //!< Per-sample multiplier on the frequency: the pew's fall.
             float gain_left{0.0f};
             float gain_right{0.0f};
             float phase{0.0f}; //!< Radians, the ping's oscillator.

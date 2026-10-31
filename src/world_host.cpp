@@ -282,6 +282,12 @@ namespace WorldHostLib
                 */
                 constexpr std::size_t SCRATCHES_KEPT_MAX{2048u};
                 const LnkEvent& event{view.as.event};
+                // An orb gone is a pew every hosted ear must meet, sounded at the orb. At most
+                // a larder's worth a tick: the world cannot empty more orbs than it holds.
+                if ((event.kind == LNK_EVENT_FOOD_GONE) && (event.tick == m_telling_tick) && (m_pews_being_told.size() < LNK_TICK_STATE_MAX_FOOD)) {
+                    m_pews_being_told.push_back(Stage::PewTelling{
+                        .position = MathLib::Vec3{event.position[0], event.position[1], event.position[2]}, .strength = event.strength});
+                }
                 if ((event.kind == LNK_EVENT_SCRATCH) && (event.tick == m_telling_tick) && (m_scratches_being_told.size() < SCRATCHES_KEPT_MAX)) {
                     Stage::ScratchTelling scratch{};
                     scratch.position = MathLib::Vec3{event.position[0], event.position[1], event.position[2]};
@@ -321,6 +327,9 @@ namespace WorldHostLib
         std::fill(m_felt.begin(), m_felt.end(), false);
         m_guests_being_told.clear();
         m_scratches_being_told.clear();
+        m_pews_being_told.clear();
+        // The larder, copied out of the library's borrow: the wire capped and judged it whole.
+        m_foods_being_told.assign(view.foods, view.foods + ((view.foods != nullptr) ? view.header.food_count : 0u));
 
         const std::vector<RosterLib::Creature>& creatures{m_roster.creatures()};
         for (std::uint32_t row{0u}; row < view.header.creature_count; ++row) {
@@ -400,6 +409,8 @@ namespace WorldHostLib
             m_told_tick = m_telling_tick;
             m_guests = m_guests_being_told;
             m_scratches = m_scratches_being_told;
+            m_foods = m_foods_being_told;
+            m_pews = m_pews_being_told;
             // A guest the world has now placed for the first time may take the stage.
             for (const Stage::GuestTelling& guest : m_guests) {
                 if (m_placed_guests.insert(guest.creature_id).second) {

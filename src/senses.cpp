@@ -14,6 +14,8 @@
 
 #include "senses.hpp"
 
+#include "orbs.hpp"
+
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -70,8 +72,25 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
         }
 
         m_last_body_poses = std::move(poses);
+
+        /*
+            The orbs are bodies to the senses too: one that appeared, went, or dimmed a glow level
+            changes what an eye sees and what an ear meets. Compared by what the scene holds of it
+            - where, how big, which glow - so a bite that leaves the glow level alone re-traces
+            nothing.
+        */
+        const auto same_orb = [](const LnkFoodState& a, const LnkFoodState& b) {
+            return (a.position[0] == b.position[0]) && (a.position[1] == b.position[1]) && (a.position[2] == b.position[2]) && (a.radius == b.radius)
+                && (OrbLib::glowLevel(a.quantity) == OrbLib::glowLevel(b.quantity));
+        };
+        if (!std::equal(m_foods.begin(), m_foods.end(), m_last_foods.begin(), m_last_foods.end(), same_orb)) {
+            m_bodies_moved = true;
+        }
+        m_last_foods = m_foods;
+
         m_stage->update(creatures);
         m_stage->placeGuests(m_guests);
+        m_stage->placeFood(m_foods);
     }
 
     m_calls.clear();
@@ -109,6 +128,12 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
         }
         m_scratches.push_back(Call{.position = scratch.position, .velocity = MathLib::Vec3{}, .strength = scratch.strength, .caller_instance = scraper});
     }
+
+    // The pews, as calls: from the orb's centre, still, through nobody's hull - the orb that
+    // sounded it is already gone from the scene.
+    for (const Stage::PewTelling& pew : m_pews) {
+        m_calls.push_back(Call{.position = pew.position, .velocity = MathLib::Vec3{}, .strength = pew.strength, .caller_instance = BvhLib::InstanceRange{}});
+    }
 }
 
 void GridSensesSource::tellGuests(std::vector<Stage::GuestTelling> guests)
@@ -119,6 +144,16 @@ void GridSensesSource::tellGuests(std::vector<Stage::GuestTelling> guests)
 void GridSensesSource::tellScratches(std::vector<Stage::ScratchTelling> scratches)
 {
     m_scratch_tellings = std::move(scratches);
+}
+
+void GridSensesSource::tellFood(std::vector<LnkFoodState> foods)
+{
+    m_foods = std::move(foods);
+}
+
+void GridSensesSource::tellPews(std::vector<Stage::PewTelling> pews)
+{
+    m_pews = std::move(pews);
 }
 
 GridSensesSource::CreatureEars& GridSensesSource::earStateFor(uint64_t creature_id, uint32_t ear_count)

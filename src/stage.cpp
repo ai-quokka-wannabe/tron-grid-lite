@@ -15,8 +15,11 @@
 #include "stage.hpp"
 
 #include "acoustics.hpp"
+#include "orbs.hpp"
 
 #include <algorithm>
+#include <stdexcept>
+#include <string>
 
 namespace
 {
@@ -115,9 +118,14 @@ Stage::Stage(BvhLib::Bvh grid, std::vector<Material> grid_materials, const std::
         }
     }
 
+    // The orbs' shapes, one per glow level, after the hosted bodies': silent, as a hull is.
+    m_first_orb_geometry = OrbLib::appendShapes(m_scene.geometries, m_materials);
+    m_acoustic_strengths.resize(m_materials.size(), 0.0f);
+
     m_own_geometry_count = m_scene.geometries.size();
     m_own_material_count = m_materials.size();
     m_own_instance_count = m_scene.instances.size();
+    m_food_instance_first = static_cast<uint32_t>(m_own_instance_count);
     cacheOffsets();
 }
 
@@ -199,7 +207,25 @@ void Stage::setGuests(const std::unordered_map<uint32_t, WorldClientLib::Body>& 
         m_guests.push_back(guest);
     }
 
+    // The orbs stand after the guests, wherever the guests now end.
+    m_food_instance_first = static_cast<uint32_t>(m_scene.instances.size());
+    const std::vector<LnkFoodState> standing{std::move(m_foods)};
+    m_foods.clear();
     cacheOffsets();
+    placeFood(standing);
+}
+
+void Stage::placeFood(const std::vector<LnkFoodState>& foods)
+{
+    if (foods.size() > LNK_TICK_STATE_MAX_FOOD) {
+        throw std::runtime_error{"More orbs than a telling may hold: " + std::to_string(foods.size()) + " of " + std::to_string(LNK_TICK_STATE_MAX_FOOD) + "."};
+    }
+    m_scene.instances.resize(m_food_instance_first);
+    for (const LnkFoodState& food : foods) {
+        const uint32_t geometry{m_first_orb_geometry + OrbLib::glowLevel(food.quantity) - 1u};
+        m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries[geometry], geometry, OrbLib::transform(food)));
+    }
+    m_foods = foods;
 }
 
 void Stage::placeChain(const Body& body, const RosterLib::Pose& head, const std::vector<RosterLib::Pose>& trail)

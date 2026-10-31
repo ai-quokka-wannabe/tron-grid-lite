@@ -19,6 +19,7 @@
     geometry begins, which material it wears, where a pose puts its nose — is host arithmetic.
 */
 
+#include "../orbs.hpp"
 #include "../roster.hpp"
 #include "../stage.hpp"
 #include "../world_stage.hpp"
@@ -73,8 +74,10 @@ TEST_CASE(the_empty_world_is_the_grid_alone)
 {
     const WorldStageLib::WorldStage stage{makeLittleGrid(), makeLittleMaterials(), 4u};
 
-    TEST_CHECK_EQUAL(stage.instanceCapacity(), 1u + (4u * LNK_SEGMENTS_MAX)); // A whole chain per creature.
-    TEST_CHECK_EQUAL(stage.materials().size(), 3u);
+    // A whole chain per creature, and the most orbs a telling may hold.
+    TEST_CHECK_EQUAL(stage.instanceCapacity(), 1u + (4u * LNK_SEGMENTS_MAX) + LNK_TICK_STATE_MAX_FOOD);
+    // The Grid's two slots, the placeholder's, and one per glow level of the orbs.
+    TEST_CHECK_EQUAL(stage.materials().size(), 3u + OrbLib::GLOW_LEVELS);
 
     const std::vector<BvhLib::InstanceRecord> records{stage.records({})};
     TEST_CHECK_EQUAL(records.size(), 1u);
@@ -230,10 +233,84 @@ TEST_CASE(the_placeholder_wears_its_own_material_slot)
     // shade as floor, silently.
     const BvhLib::FlatScene flat{stage.flatScene()};
     const std::uint32_t body_material{2u};
-    TEST_CHECK_EQUAL(flat.triangles.size(), 10u); // Two of the little Grid, eight of the dart.
-    for (std::size_t index{2u}; index < flat.triangles.size(); ++index) {
+    TEST_CHECK(flat.triangles.size() > 10u); // Two of the little Grid, eight of the dart, then the orbs.
+    for (std::size_t index{2u}; index < 10u; ++index) {
         TEST_CHECK_EQUAL(flat.triangles[index].material, body_material);
     }
+    // And no orb triangle wears the dart's slot or a Grid's: the orbs' slots follow the dart's.
+    for (std::size_t index{10u}; index < flat.triangles.size(); ++index) {
+        TEST_CHECK(flat.triangles[index].material > body_material);
+    }
+}
+
+TEST_CASE(every_orb_the_telling_holds_stands_at_its_centre_and_a_gone_one_stands_nowhere)
+{
+    const WorldStageLib::WorldStage stage{makeLittleGrid(), makeLittleMaterials(), 4u};
+    const BvhLib::FlatScene flat{stage.flatScene()};
+
+    // A whole orb and a quarter-eaten one beside a creature: the Grid, the creature, two orbs.
+    WorldClientLib::InterpolatedCreature creature{};
+    creature.creature_id = 7u;
+    const LnkFoodState whole{.food_id = 1u, .position = {3.0f, 0.25f, -2.0f}, .radius = 0.25f, .quantity = 1.0f};
+    const LnkFoodState quarter{.food_id = 2u, .position = {-4.0f, 0.5f, 5.0f}, .radius = 0.5f, .quantity = 0.25f};
+    const std::vector<BvhLib::InstanceRecord> records{stage.records({creature}, {whole, quarter})};
+    TEST_CHECK_EQUAL(records.size(), 4u);
+
+    // Sized to its radius and carried to its centre: the unit sphere's east pole lands a radius
+    // east of the centre, and its top a radius above.
+    const BvhLib::InstanceRecord& first{records[2]};
+    const MathLib::Vec3 east{applyRows(first.to_world_row0, first.to_world_row1, first.to_world_row2, MathLib::Vec3{1.0f, 0.0f, 0.0f})};
+    TEST_CHECK_CLOSE(east.x, 3.25f, 1e-5f);
+    TEST_CHECK_CLOSE(east.y, 0.25f, 1e-5f);
+    TEST_CHECK_CLOSE(east.z, -2.0f, 1e-5f);
+    const BvhLib::InstanceRecord& second{records[3]};
+    const MathLib::Vec3 top{applyRows(second.to_world_row0, second.to_world_row1, second.to_world_row2, MathLib::Vec3{0.0f, 1.0f, 0.0f})};
+    TEST_CHECK_CLOSE(top.x, -4.0f, 1e-5f);
+    TEST_CHECK_CLOSE(top.y, 1.0f, 1e-5f);
+    TEST_CHECK_CLOSE(top.z, 5.0f, 1e-5f);
+
+    // White, and glowing as much as is left: the whole orb at full emission, the quarter at a
+    // quarter, equal in every channel - the worm's blue-only eyes see it as every eye does.
+    const Material& bright{stage.materials()[flat.triangles[first.triangle_offset].material]};
+    const Material& dim{stage.materials()[flat.triangles[second.triangle_offset].material]};
+    TEST_CHECK_CLOSE(bright.emission.x, OrbLib::FULL_EMISSION, 1e-6f);
+    TEST_CHECK_CLOSE(bright.emission.z, OrbLib::FULL_EMISSION, 1e-6f);
+    TEST_CHECK_CLOSE(dim.emission.y, OrbLib::FULL_EMISSION * 0.25f, 1e-6f);
+    TEST_CHECK_CLOSE(dim.emission.x, dim.emission.z, 1e-6f);
+    TEST_CHECK(first.node_count > 0u);
+    TEST_CHECK(first.node_offset != records[1].node_offset); // An orb is not the dart.
+
+    // The quarter orb is eaten to nothing and leaves the telling: it stands nowhere.
+    const std::vector<BvhLib::InstanceRecord> after{stage.records({creature}, {whole})};
+    TEST_CHECK_EQUAL(after.size(), 3u);
+    TEST_CHECK_EQUAL(after[2].triangle_offset, first.triangle_offset);
+    TEST_CHECK_EQUAL(stage.records({creature}, {}).size(), 2u);
+
+    // A larder over the wire's cap is a defect, refused rather than drawn short.
+    const std::vector<LnkFoodState> glut(LNK_TICK_STATE_MAX_FOOD + 1u, whole);
+    bool refused{false};
+    try {
+        static_cast<void>(stage.records({}, glut));
+    } catch (const std::runtime_error&) {
+        refused = true;
+    }
+    TEST_CHECK(refused);
+}
+
+TEST_CASE(an_orbs_glow_steps_with_what_is_left_and_never_goes_dark_while_it_stands)
+{
+    TEST_CHECK_EQUAL(OrbLib::glowLevel(1.0f), OrbLib::GLOW_LEVELS);
+    TEST_CHECK_EQUAL(OrbLib::glowLevel(0.5f), OrbLib::GLOW_LEVELS / 2u);
+    TEST_CHECK_EQUAL(OrbLib::glowLevel(0.51f), (OrbLib::GLOW_LEVELS / 2u) + 1u);
+    TEST_CHECK_EQUAL(OrbLib::glowLevel(0.001f), 1u); // A crumb still glows.
+    TEST_CHECK(OrbLib::material(1u).emission.x > 0.0f);
+
+    // The unit orb is a closed ball of radius one: every vertex on the sphere.
+    for (const BvhLib::Triangle& triangle : OrbLib::unitOrb(0u)) {
+        TEST_CHECK_CLOSE(triangle.v0.length(), 1.0f, 1e-5f);
+        TEST_CHECK_CLOSE(triangle.v1().length(), 1.0f, 1e-5f);
+    }
+    TEST_CHECK_EQUAL(OrbLib::unitOrb(0u).size(), static_cast<std::size_t>(320u));
 }
 
 TEST_CASE(more_creatures_than_the_stage_was_built_for_is_refused)

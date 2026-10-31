@@ -12,6 +12,7 @@
     GNU General Public License for more details.
 */
 
+#include "../orbs.hpp"
 #include "../stage.hpp"
 
 #include <testing/testing.hpp>
@@ -74,9 +75,10 @@ TEST_CASE(a_bodiless_roster_stages_only_the_grid)
 
     Stage stage{littleGrid(), littleMaterials(), creatures};
 
-    TEST_CHECK_EQUAL(stage.scene().geometries.size(), 1u);
+    // The Grid, and the orbs' shapes waiting for food: geometry, never an instance until told.
+    TEST_CHECK_EQUAL(stage.scene().geometries.size(), 1u + OrbLib::GLOW_LEVELS);
     TEST_CHECK_EQUAL(stage.scene().instances.size(), 1u);
-    TEST_CHECK_EQUAL(stage.materials().size(), 1u);
+    TEST_CHECK_EQUAL(stage.materials().size(), 1u + OrbLib::GLOW_LEVELS);
     TEST_CHECK(stage.instanceOf(7u).empty());
     TEST_CHECK(stage.instanceOf(8u).empty());
 }
@@ -88,7 +90,7 @@ TEST_CASE(a_modelled_creature_stands_exactly_where_its_pose_says)
 
     Stage stage{littleGrid(), littleMaterials(), creatures};
 
-    TEST_CHECK_EQUAL(stage.scene().geometries.size(), 2u);
+    TEST_CHECK_EQUAL(stage.scene().geometries.size(), 2u + OrbLib::GLOW_LEVELS);
     TEST_CHECK_EQUAL(stage.scene().instances.size(), 2u);
     TEST_CHECK_EQUAL(stage.instanceOf(7u).first, 1u);
     TEST_CHECK_EQUAL(stage.instanceOf(7u).count, 1u);
@@ -118,7 +120,7 @@ TEST_CASE(a_chain_stands_in_consecutive_instances_of_one_geometry_and_its_trail_
     Stage stage{littleGrid(), littleMaterials(), creatures};
 
     // One geometry for the whole chain; three placements after the Grid's, one per segment.
-    TEST_CHECK_EQUAL(stage.scene().geometries.size(), 2u);
+    TEST_CHECK_EQUAL(stage.scene().geometries.size(), 2u + OrbLib::GLOW_LEVELS);
     TEST_CHECK_EQUAL(stage.scene().instances.size(), 4u);
     const BvhLib::InstanceRange own{stage.instanceOf(7u)};
     TEST_CHECK_EQUAL(own.first, 1u);
@@ -153,8 +155,8 @@ TEST_CASE(materials_join_one_table_with_global_indices)
 
     Stage stage{littleGrid(), littleMaterials(), creatures};
 
-    // One grid slot, then the body's two, in offer order.
-    TEST_CHECK_EQUAL(stage.materials().size(), 3u);
+    // One grid slot, then the body's two, in offer order, then the orbs' glow levels.
+    TEST_CHECK_EQUAL(stage.materials().size(), 3u + OrbLib::GLOW_LEVELS);
     TEST_CHECK_CLOSE(stage.materials()[1].colour.x, 0.1f, 1e-6f);
     TEST_CHECK_CLOSE(stage.materials()[2].emission.z, 3.0f, 1e-6f);
 
@@ -167,10 +169,11 @@ TEST_CASE(materials_join_one_table_with_global_indices)
     }
 
     // Every slot has an acoustic strength, and every body slot's is a written zero: a hull
-    // reflects and does not sing.
-    TEST_CHECK_EQUAL(stage.acousticStrengths().size(), 3u);
+    // reflects and does not sing, and neither does an orb: it glows, silently.
+    TEST_CHECK_EQUAL(stage.acousticStrengths().size(), 3u + OrbLib::GLOW_LEVELS);
     TEST_CHECK_EQUAL(stage.acousticStrengths()[1], 0.0f);
     TEST_CHECK_EQUAL(stage.acousticStrengths()[2], 0.0f);
+    TEST_CHECK_EQUAL(stage.acousticStrengths().back(), 0.0f);
 }
 
 TEST_CASE(an_update_moves_the_instance_and_nothing_else)
@@ -217,6 +220,64 @@ TEST_CASE(the_cheap_records_match_the_whole_flatten_to_the_byte)
 
     TEST_CHECK_EQUAL(cheap.size(), whole.instances.size());
     TEST_CHECK(std::memcmp(cheap.data(), whole.instances.data(), cheap.size() * sizeof(BvhLib::InstanceRecord)) == 0);
+}
+
+TEST_CASE(every_orb_told_stands_in_the_scene_and_a_gone_one_leaves_it)
+{
+    /*
+        The creature host's half of the orbs: the same shapes the spectator draws, standing in
+        the very scene the hosted eyes trace and the ears walk, so an orb is seen by its glow and
+        heard as an occluder with nothing special-cased. One instance per orb told, after every
+        body; none for an orb the telling no longer holds.
+    */
+    std::vector<RosterLib::Creature> creatures;
+    creatures.push_back(modelledCreature(7u, MathLib::Vec3{0.0f, 1.0f, 0.0f}, 0.0f));
+    Stage stage{littleGrid(), littleMaterials(), creatures};
+    const size_t bodies_only{stage.scene().instances.size()};
+    TEST_CHECK(stage.foodInstances().empty());
+
+    const LnkFoodState whole{.food_id = 1u, .position = {3.0f, 0.25f, -2.0f}, .radius = 0.25f, .quantity = 1.0f};
+    const LnkFoodState crumb{.food_id = 2u, .position = {-1.0f, 0.5f, 1.0f}, .radius = 0.5f, .quantity = 0.05f};
+    stage.placeFood({whole, crumb});
+    TEST_CHECK_EQUAL(stage.scene().instances.size(), bodies_only + 2u);
+    TEST_CHECK_EQUAL(stage.foodInstances().first, static_cast<uint32_t>(bodies_only));
+    TEST_CHECK_EQUAL(stage.foodInstances().count, 2u);
+
+    // At its centre, sized to its radius: the unit sphere's top lands a radius above the centre.
+    const MathLib::Vec4 top{stage.scene().instances[bodies_only + 1u].to_world * MathLib::Vec4::fromVec3(MathLib::Vec3{0.0f, 1.0f, 0.0f}, 1.0f)};
+    TEST_CHECK_CLOSE(top.x, -1.0f, 1e-5f);
+    TEST_CHECK_CLOSE(top.y, 1.0f, 1e-5f);
+    TEST_CHECK_CLOSE(top.z, 1.0f, 1e-5f);
+
+    // Each in the shape of its glow: the whole orb bright white, the crumb at the faintest step.
+    const auto emission_of = [&stage](const size_t instance) {
+        const BvhLib::Bvh& shape{stage.scene().geometries[stage.scene().instances[instance].geometry]};
+        return stage.materials()[shape.triangles.front().material].emission;
+    };
+    TEST_CHECK_CLOSE(emission_of(bodies_only).y, OrbLib::FULL_EMISSION, 1e-6f);
+    TEST_CHECK_CLOSE(emission_of(bodies_only + 1u).y, OrbLib::FULL_EMISSION / static_cast<float>(OrbLib::GLOW_LEVELS), 1e-6f);
+
+    // The crumb is eaten: one orb stands. Then the larder is empty: none do.
+    stage.placeFood({whole});
+    TEST_CHECK_EQUAL(stage.scene().instances.size(), bodies_only + 1u);
+    stage.placeFood({});
+    TEST_CHECK_EQUAL(stage.scene().instances.size(), bodies_only);
+    TEST_CHECK(stage.foodInstances().empty());
+
+    // A guest arriving keeps the orbs standing, after its own instances.
+    stage.placeFood({whole});
+    WorldClientLib::Body guest{};
+    guest.rez.creature_id = 777u;
+    guest.rez.segment_count = 1u;
+    guest.vertices = {LnkRezVertex{.position = {0.0f, 0.0f, 0.0f}}, LnkRezVertex{.position = {0.1f, 0.0f, 0.0f}}, LnkRezVertex{.position = {0.0f, 0.1f, 0.0f}}};
+    guest.triangles = {LnkRezTriangle{.vertices = {0u, 1u, 2u}, .material = 0u}};
+    guest.materials = {LnkRezMaterial{.colour = {0.0f, 0.0f, 0.0f}, .index_of_refraction = 1.5f, .emission = {0.0f, 0.0f, 0.0f}, .transmission = 0.0f}};
+    std::unordered_map<uint32_t, WorldClientLib::Body> guests;
+    guests[777u] = guest;
+    stage.setGuests(guests);
+    TEST_CHECK_EQUAL(stage.scene().instances.size(), bodies_only + 2u);
+    TEST_CHECK_EQUAL(stage.foodInstances().first, static_cast<uint32_t>(bodies_only + 1u));
+    TEST_CHECK_EQUAL(stage.foodInstances().count, 1u);
 }
 
 int main()
