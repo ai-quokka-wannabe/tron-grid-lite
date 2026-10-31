@@ -162,9 +162,9 @@ Grid would accept:
 ```text
 Programs in .../programs: 3.
   tgl_broken_wrong_version - UNUSABLE. Program "tgl_broken_wrong_version": was built against
-             ABI version 11 and this Grid speaks version 10. Rebuild the Program against this header.
-  tgl_driver_modelled - USABLE, ABI version 10, vtable 48 bytes. Run with --program tgl_driver_modelled.
-  tgl_driver_steady - USABLE, ABI version 10, vtable 48 bytes. Run with --program tgl_driver_steady.
+             ABI version 12 and this Grid speaks version 11. Rebuild the Program against this header.
+  tgl_driver_modelled - USABLE, ABI version 11, vtable 48 bytes. Run with --program tgl_driver_modelled.
+  tgl_driver_steady - USABLE, ABI version 11, vtable 48 bytes. Run with --program tgl_driver_steady.
 ```
 
 A Program built against an older ABI is a stale file that looks exactly like a current one, and only

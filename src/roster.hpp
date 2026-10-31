@@ -227,6 +227,13 @@ namespace RosterLib
         //! it: the load the joint bears, at most the declared torque, exactly that when stalled.
         std::array<float, TGL_SEGMENTS_MAX - 1u> joint_torques{};
 
+        //! What the body swallowed this tick, in the world's food unit, as the letter reports it.
+        float intake{0.0f};
+
+        //! The two amphids' bound fractions as the letter reports them: left amphid's receptors
+        //! 0..7, then the right's, TglSenses::odour flattened.
+        std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS> odour{};
+
         //! What the voice is doing this tick: the loudness of the call sounding now, zero for a
         //! silent body. Applied from the staged intent at the top of the tick so that every ear
         //! on the roster hears one consistent tick — with no traction condition, because a body
@@ -309,10 +316,11 @@ namespace RosterLib
         //! chain order. Told beside the pose, every tick, by the host.
         void tellTrail(uint32_t index, std::vector<Pose> trail);
 
-        //! The owner's letter for one creature: what the body felt this tick, in body frame, and
-        //! what every servo holds.
+        //! The owner's letter for one creature: what the body felt this tick, in body frame, what
+        //! every servo holds, what it swallowed and what its amphids smell.
         void tellFeel(uint32_t index, bool grounded, const MathLib::Vec3& specific_force, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles,
-            const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts);
+            const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts, float intake,
+            const std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS>& odour);
 
         [[nodiscard]] const std::vector<Creature>& creatures() const noexcept;
 

@@ -359,6 +359,11 @@ motor's current sense, a tendon's organ. Stall is the Program's to notice by com
 numbers it already has; no flag says it for it, because none is needed and a flag would be a
 sense the body does not have.
 
+**The gut and the nose are the world's too, and the Grid only carries them.** Since ABI v11
+`intake` is what the body swallowed this tick and `odour[2][8]` is what its two amphids smell -
+see [Chemoreception](#chemoreception-built-at-abi-11) below. Both arrive in the same letter as the
+joints, and the Grid copies them as it copies the joints.
+
 ### The senses at a glance
 
 | Sense | Field | What it physically is | Status |
@@ -369,17 +374,22 @@ sense the body does not have.
 | Touch | `contacts`, `contact_count` | Where the body was struck this tick, and how hard | Phase 6 |
 | Thermoreception | `irradiance` | A fixed quadrature over the whole sphere, undirected | Phase 6 |
 | Hearing | `ears` | Acoustic rays through the same BVH, delivered as an impulse response per ear | Phase 6 |
+| Interoception | `intake` | What the body swallowed this tick, in pumps, in the world's food unit | ABI v11 |
+| Chemoreception | `odour` | Two amphids' bound fractions, eight receptor types each, from the world's closed-form field | ABI v11 |
 
-Every one of them is a **consequence of the creature's position on the Grid**, computed by the
-same machinery that draws the picture. That is the test a modality has to pass to belong here.
+Every one of them is a **consequence of the creature's position on the Grid**. All but the last
+two are computed by the same machinery that draws the picture; those two are computed by the world
+that holds the food, from the same positions, and copied. That is the test a modality has to pass
+to belong here.
 
 Points worth stating plainly, because they are the whole design:
 
 - An eye delivers **samples**. It is not a list of what is in front of the creature. Working out
   that a bright cyan band means a neon edge, and that a neon edge means a wall, is the Program's
   job.
-- Proprioception, vestibular sensing and touch describe the creature's **own body**, which an
-  animal genuinely does have access to. They describe nothing outside it.
+- Proprioception, vestibular sensing, touch and intake describe the creature's **own body**, which
+  an animal genuinely does have access to. They describe nothing outside it. Smell does describe
+  the outside, but only as two noses' readings of what reached them - never where it came from.
 - There is deliberately no field for position, heading in Grid coordinates, distance to anything,
   object identifiers, or other creatures' states. No such field will be added. A compass was
   considered and rejected for exactly this reason: it would hand the Program the structure the Grid
@@ -533,9 +543,29 @@ three metres to your left", or performs auditory scene analysis of any kind belo
 repository. The Grid makes localisation *possible* by delivering two ears with their own signals; it
 does not perform it.
 
-### Chemoreception: deliberately absent, and worth revisiting
+### Chemoreception, built at ABI 11
 
-Smell has no place on the Grid as it stands because there is no chemistry in it — only geometry,
+Food is the world's: Master Control places the orbs, pumps the mouth and computes the odour field
+([CHEMORECEPTION.md](CHEMORECEPTION.md)), and protocol v12's letter carries the results to the one
+host that owns the body. Since ABI v11 `TglSenses` carries them, copied and nothing derived:
+
+- **`intake`** is what the body swallowed this tick, in the world's food unit: zero on most ticks,
+  one bite on a pump, zero always for a body without a mouth. A fact about the body's own gut - not
+  where the food was, how much is left, or whether it was good. Hunger and satiety are the Program's,
+  as pain is.
+- **`odour[a][r]`** is the fraction of amphid `a`'s receptors of type `r` that are bound, in
+  [0, 1]: left amphid (`a` = 0) first, `TGL_AMPHIDS` of them, `TGL_ODOUR_RECEPTORS` types each. It
+  saturates as binding does and carries the counting noise no receptor beats. It is **not** a
+  concentration, a position, a direction or a label: no reading says which orb, how far or which
+  way, and the two amphids differ only by the small distance between them. Where food is, the
+  Program infers from how the readings change as its body moves - which is how the worm does it.
+
+What follows is the section as it read before the build, kept because its argument is why the sense
+is shaped as it is.
+
+#### Deliberately absent, and worth revisiting (before ABI 11)
+
+Smell had no place on the Grid then because there was no chemistry in it — only geometry,
 light and sound. Adding it would mean a diffusing scalar field, the first subsystem the BVH
 cannot help with at all.
 
@@ -546,7 +576,7 @@ following would be a far gentler first problem for a Program than interpreting a
 
 **Revisited (2026-10-29), as a proposal:** [CHEMORECEPTION.md](CHEMORECEPTION.md) designs food, the sense of intake
 and smell. The field it uses is written in closed form rather than simulated, and is not traced, so neither half of
-the objection above is a cost; until it is built, this section's first paragraph describes the Grid as it is.
+the objection above is a cost. Built at ABI 11, above.
 
 ---
 

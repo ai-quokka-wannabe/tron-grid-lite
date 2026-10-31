@@ -150,6 +150,8 @@
     X(TglSenses, specific_force) \
     X(TglSenses, angular_velocity) \
     X(TglSenses, irradiance) \
+    X(TglSenses, intake) \
+    X(TglSenses, odour) \
     X(TglSenses, padding0)
 
 #define TGL_ACTIONS_MEMBERS(X) \

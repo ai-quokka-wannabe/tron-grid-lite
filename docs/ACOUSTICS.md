@@ -803,7 +803,7 @@ nowhere to put the second ear. The item is gone and the shape it named never exi
 carries instead is one `TglEarView` per ear, each with its own energy array — see
 [The ABI shape](#the-abi-shape).
 
-The wider point survives the item that prompted it: `tgl_program_abi.h` exists now, at ABI v10,
+The wider point survives the item that prompted it: `tgl_program_abi.h` exists now, at ABI v11,
 every shape in it pinned by static asserts and a fingerprint - and the shape it gives the ear is
 the one this section argued for.
 
