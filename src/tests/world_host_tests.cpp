@@ -266,6 +266,37 @@ namespace
             flush();
         }
 
+        //! A whole telling whose letter carries a bite and two amphids' worth of distinct
+        //! readings: intake 0.25, and receptor r of amphid a bound at 0.05 + 0.1r + 0.01a, so
+        //! every slot says which slot it is and a swapped amphid or receptor reads wrong.
+        void tellChemistry(const std::uint64_t tick, const std::uint32_t creature_id)
+        {
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 0u};
+            LnkCreatureState row{};
+            row.creature_id = creature_id;
+            row.position[1] = 0.05f;
+            row.segment_count = 1u;
+            check(m_library.vtable().send_tick_state(m_connection, &header, &row, nullptr), "send_tick_state");
+            LnkProprioception letter{.tick = tick,
+                .creature_id = creature_id,
+                .grounded = 1u,
+                .reserved0 = {},
+                .specific_force = {0.0f, 9.81f, 0.0f},
+                .joint_angles = {},
+                .joint_torques = {},
+                .contact_count = 0u,
+                .intake = 0.25f,
+                .odour = {},
+                .reserved1 = {}};
+            for (std::uint32_t amphid{0u}; amphid < LNK_AMPHIDS; ++amphid) {
+                for (std::uint32_t receptor{0u}; receptor < LNK_ODOUR_RECEPTORS; ++receptor) {
+                    letter.odour[(amphid * LNK_ODOUR_RECEPTORS) + receptor] = 0.05f + (0.1f * static_cast<float>(receptor)) + (0.01f * static_cast<float>(amphid));
+                }
+            }
+            check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
+            flush();
+        }
+
         //! The world's refusal of a body: the letter Link v8 carries to the one host it refused.
         void refuse(const std::uint64_t tick, const std::uint32_t creature_id, const std::uint8_t reason)
         {
@@ -682,6 +713,57 @@ TEST_CASE(a_chain_told_by_the_world_reaches_the_roster_as_its_trail)
     for (std::size_t segment{0u}; segment < creature.trail.size(); ++segment) {
         TEST_CHECK(near(creature.trail[segment].position.z, 0.3f * static_cast<float>(segment + 1u)));
         TEST_CHECK(near(creature.trail[segment].yaw, 0.1f * static_cast<float>(segment + 1u)));
+    }
+}
+
+TEST_CASE(the_letters_intake_and_odour_reach_the_program_as_the_world_said_them)
+{
+    /*
+        Chemoreception is the world's to compute and the Grid's only to carry: what the body
+        swallowed and what its two amphids smell arrive in the letter, and the Program must read
+        exactly those numbers in TglSenses - every slot where the letter put it, left amphid
+        first, nothing rescaled, nothing derived.
+    */
+    class RecordingSource final : public RosterLib::SensesSource {
+    public:
+        void fill(const RosterLib::Creature&, TglSenses& senses) override
+        {
+            seen = senses;
+            ++calls;
+        }
+
+        TglSenses seen{};
+        std::uint32_t calls{0u};
+    };
+
+    RehearsalMasterControl rehearsal{};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, flatGround()};
+
+    std::thread server{[&rehearsal]() {
+        rehearsal.acceptAndWelcome(100u, 9u);
+    }};
+    WorldHostLib::Host host{rehearsal.address(), PATIENCE, roster};
+    server.join();
+    static_cast<void>(rehearsal.awaitMessage(LNK_MSG_REZ));
+
+    rehearsal.tellChemistry(101u, host.wireIdentity(0u));
+    const std::chrono::steady_clock::time_point deadline{std::chrono::steady_clock::now() + PATIENCE};
+    bool ready{false};
+    while (!ready && (std::chrono::steady_clock::now() < deadline)) {
+        ready = host.poll();
+    }
+    TEST_CHECK(ready);
+
+    // The source sees the senses after the roster has set everything the letter carries and just
+    // before the Program is called with them, so what it records is what the Program reads.
+    RecordingSource source;
+    roster.tick(source);
+    TEST_CHECK_EQUAL(source.calls, 1u);
+    TEST_CHECK_EQUAL(source.seen.intake, 0.25f);
+    for (std::uint32_t amphid{0u}; amphid < TGL_AMPHIDS; ++amphid) {
+        for (std::uint32_t receptor{0u}; receptor < TGL_ODOUR_RECEPTORS; ++receptor) {
+            TEST_CHECK_EQUAL(source.seen.odour[amphid][receptor], 0.05f + (0.1f * static_cast<float>(receptor)) + (0.01f * static_cast<float>(amphid)));
+        }
     }
 }
 

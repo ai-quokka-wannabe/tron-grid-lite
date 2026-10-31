@@ -748,7 +748,7 @@ rc-worm's panel; the table below gives neither to anyone.
 | **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Built: the heartbeat, the roster of record, the validator and its adversarial suite, the physics (hulls, exact contacts, friction, scratches, and the articulated chain: XPBD, a servo at every joint, every segment meeting the floor and the risers in three dimensions), the Disk with rollover, the input log, and Clu |
 | **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Protocol v11, twelve messages, every one flowing its own way only; the Disk recorder and replayer |
 | **tron-grid-lite** | The client in today's two roles, the senses, the renderer, the shared world definition the server fingerprints | The Grid as perceived: `--window` watches and listens, `--program` hosts a creature, `--replay` plays a Disk; the physics left for Master Control |
-| **rc-worm** | The first brain: the DLL, its Qt panel (which the long arc counts as v0 of the human client, [VISION.md](VISION.md#the-long-arc)), eventually the Blender body | Living: the DLL, at Program ABI 10, rezzes an eight-segment worm that brings its own gait - a travelling wave of servo targets - and a User at its Qt panel sees what the worm senses and steers how hard the wave runs and which way it bends |
+| **rc-worm** | The first brain: the DLL, its Qt panel (which the long arc counts as v0 of the human client, [VISION.md](VISION.md#the-long-arc)), eventually the Blender body | Living: the DLL, at Program ABI 11, rezzes an eight-segment worm that brings its own gait - a travelling wave of servo targets - and a User at its Qt panel sees what the worm senses and steers how hard the wave runs and which way it bends |
 
 The protocol went to its own repository for three reasons with names. The parser is the attack
 surface — the Dark Souls III remote-code execution and the CS:GO pre-auth overflows were
@@ -798,7 +798,7 @@ misplaced: its two parties are the Grid and the brains, and the brains live in o
 repositories. It extracts into its own contract repository when `rc-worm` unpauses — the trigger
 is the second party becoming real, and not before, because an extraction with one consumer is
 ceremony. A note beside that ruling (2026-10-10): `rc-worm` has since unpaused and builds
-against Program ABI 10, so the trigger has fired; the extraction has not been made yet, and
+against Program ABI 11, so the trigger has fired; the extraction has not been made yet, and
 until it is the header stays the flagship's to move and `rc-worm` vendors it.
 
 ## The four decisions, taken

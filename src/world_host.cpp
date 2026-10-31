@@ -21,8 +21,10 @@
 #include <array>
 #include <stdexcept>
 
-// The ABI's cap and the wire's are one number, held together here, where the Grid speaks both.
+// The ABI's caps and the wire's are one number each, held together here, where the Grid speaks both.
 static_assert(TGL_SEGMENTS_MAX == LNK_SEGMENTS_MAX, "TGL_SEGMENTS_MAX and LNK_SEGMENTS_MAX drifted apart");
+static_assert(TGL_AMPHIDS == LNK_AMPHIDS, "TGL_AMPHIDS and LNK_AMPHIDS drifted apart");
+static_assert(TGL_ODOUR_RECEPTORS == LNK_ODOUR_RECEPTORS, "TGL_ODOUR_RECEPTORS and LNK_ODOUR_RECEPTORS drifted apart");
 
 namespace WorldHostLib
 {
@@ -393,8 +395,11 @@ namespace WorldHostLib
             std::copy(std::begin(letter.joint_angles), std::end(letter.joint_angles), joint_angles.begin());
             std::array<float, TGL_SEGMENTS_MAX - 1u> joint_torques{};
             std::copy(std::begin(letter.joint_torques), std::end(letter.joint_torques), joint_torques.begin());
+            // The gut and the amphids, one shape on both sides too: left amphid's eight first.
+            std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS> odour{};
+            std::copy(std::begin(letter.odour), std::end(letter.odour), odour.begin());
             m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]}, joint_angles,
-                joint_torques, std::move(contacts));
+                joint_torques, std::move(contacts), letter.intake, odour);
             m_felt[index] = true;
         }
 

@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the reference render's digests did not move on either desk GPU. Tests, each seen red once: the client keeps and
   drops food rows, both stages place one orb per row and none for a gone one, the pew falls and is soon over, and a
   food-gone event reaches the host's pews and the ears as an arrival.
+- **Program ABI 11: the gut and the nose - chemoreception's senses, carried.** `TglSenses` carries
+  `intake`, what the body swallowed this tick in the world's food unit - zero on most ticks, one bite on
+  a pump, zero always for a body without a mouth - and `odour[2][8]`, the fraction of each receptor type
+  bound at the left amphid and then the right, in [0, 1]: saturating, noisy, and never a concentration,
+  a position, a direction or a label. Link v12's letter brings both from the world that computes them;
+  the host copies them into the roster beside the joints, and the senses fill copies them to the
+  Program - the Grid derives nothing. `TGL_AMPHIDS` and `TGL_ODOUR_RECEPTORS` name the counts and are
+  held to the wire's where the Grid speaks it. `TglSenses` is 216 bytes; the asserts, the manifest and the fingerprint
+  (v11) moved. A world-host test hands the Program a bite and sixteen distinct readings and holds every
+  slot to the letter. PROGRAM_INTERFACE's chemoreception section, once "deliberately absent", now says
+  what is built; CHEMORECEPTION says the senses are built.
 - **Chemoreception's wire table matches protocol v12 as built.** The design's table put each orb's odour pattern in
   `TICK_STATE` and the food settings in the world definition; link v12 (link#49) carries neither, rightly - smell is
   the world's to compute, and food density is a launch setting written into the input log's header. The table now
