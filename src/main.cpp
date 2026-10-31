@@ -945,8 +945,20 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
         rebuilt with them because it borrows the stage's scene by reference and caches against it.
     */
     const std::string senses_shader{(shader_directory / "senses.spv").string()};
+
+    /*
+        The senses pass's placements, with room for a whole larder: the orbs stand after every
+        body and come and go with the world's telling, so the buffer is sized for the most a
+        telling may hold. The padding is blank records - a zero node count, the shader's skip -
+        until the first tick stages the real ones.
+    */
+    const auto with_room_for_food = [](std::vector<BvhLib::InstanceRecord> records) {
+        records.resize(records.size() + LNK_TICK_STATE_MAX_FOOD, BvhLib::InstanceRecord{});
+        return records;
+    };
     std::unique_ptr<const World> world{std::make_unique<const World>(device, flat, logger)};
-    std::unique_ptr<SensesTracer> senses_tracer{std::make_unique<SensesTracer>(device, *world, stage.materials(), flat.instances, max_rays, senses_shader, logger)};
+    std::unique_ptr<SensesTracer> senses_tracer{
+        std::make_unique<SensesTracer>(device, *world, stage.materials(), with_room_for_food(flat.instances), max_rays, senses_shader, logger)};
     std::unique_ptr<GridSensesSource> senses_source{
         std::make_unique<GridSensesSource>(stage.scene(), stage.acousticStrengths(), makeGridReflectors(), senses_tracer.get(), &stage)};
 
@@ -972,13 +984,15 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
             senses_source.reset();
             senses_tracer.reset();
             world = std::make_unique<const World>(device, reshaped, logger);
-            senses_tracer = std::make_unique<SensesTracer>(device, *world, stage.materials(), reshaped.instances, max_rays, senses_shader, logger);
+            senses_tracer = std::make_unique<SensesTracer>(device, *world, stage.materials(), with_room_for_food(reshaped.instances), max_rays, senses_shader, logger);
             senses_source = std::make_unique<GridSensesSource>(stage.scene(), stage.acousticStrengths(), makeGridReflectors(), senses_tracer.get(), &stage);
             logger.logInfo("The world's shapes changed (generation " + std::to_string(guest_shapes_seen) + "); " + std::to_string(stage.scene().geometries.size() - 1u)
                 + " body geometries on the stage, the device's world rebuilt.");
         }
         senses_source->tellGuests(host.guests());
         senses_source->tellScratches(host.scratches());
+        senses_source->tellFood(host.foods());
+        senses_source->tellPews(host.pews());
         stage.update(roster.creatures());
         roster.tick(*senses_source);
         host.act();
@@ -1842,7 +1856,7 @@ int main(int argc, char** argv)
             try {
                 mixer = std::make_unique<AudioLib::Mixer>(AudioLib::Output::preferredSampleRate());
                 speakers = std::make_unique<AudioLib::Output>(*mixer);
-                logger.logInfo("Ears open: " + std::to_string(mixer->sampleRate()) + " Hz, pings and scratches with Doppler. --mute silences them.");
+                logger.logInfo("Ears open: " + std::to_string(mixer->sampleRate()) + " Hz, pings, scratches and pews with Doppler. --mute silences them.");
             } catch (const std::exception& error) {
                 logger.logWarning(std::string{"No ears this run: "} + error.what());
                 mixer.reset();
@@ -2016,20 +2030,20 @@ int main(int argc, char** argv)
                 }
                 for (const LnkEvent& event : world_client->drainEvents()) {
                     if (verbose) {
-                        const char* const verb{(event.kind == LNK_EVENT_SCRATCH) ? " scratched at strength " : " vocalised at strength "};
+                        const char* const verb{(event.kind == LNK_EVENT_SCRATCH) ? " scratched at strength "
+                                : (event.kind == LNK_EVENT_FOOD_GONE)            ? " emptied an orb, its pew at strength "
+                                                                                 : " vocalised at strength "};
                         logger.logDebug("Creature " + std::to_string(event.creature_id) + verb + std::to_string(static_cast<double>(event.strength)) + ", tick "
                             + std::to_string(event.tick) + ".");
                     }
                     if (mixer != nullptr) {
                         // The ears: where it happened, how fast its source moves (the newest
                         // telling's velocity - the Doppler the owner ruled owed now), how loud.
+                        // A pew's source is the orb, which stands still; soundOf knows.
                         const LnkCreatureState* const source{world_client->newest(event.creature_id)};
                         mixer->setListener(channel.currentListener());
-                        mixer->sound(AudioLib::Sound{.kind = (event.kind == LNK_EVENT_SCRATCH) ? AudioLib::SoundKind::Scratch : AudioLib::SoundKind::Ping,
-                            .creature_id = event.creature_id,
-                            .position = MathLib::Vec3{event.position[0], event.position[1], event.position[2]},
-                            .velocity = (source != nullptr) ? MathLib::Vec3{source->velocity[0], source->velocity[1], source->velocity[2]} : MathLib::Vec3{},
-                            .strength = event.strength});
+                        mixer->sound(AudioLib::soundOf(event,
+                            (source != nullptr) ? MathLib::Vec3{source->velocity[0], source->velocity[1], source->velocity[2]} : MathLib::Vec3{}));
                     }
                 }
 
@@ -2055,7 +2069,7 @@ int main(int argc, char** argv)
                     channel.publishScene(RenderChannel::SceneUpload{.flat = world_stage->flatScene(),
                                              .materials = world_stage->materials(),
                                              .instance_capacity = world_stage->instanceCapacity()},
-                        world_stage->records(world_client->interpolated(1.0f)));
+                        world_stage->records(world_client->interpolated(1.0f), world_client->foods()));
                     published_alpha = -1.0f;
                     if (verbose) {
                         logger.logInfo("The world's shapes changed (generation " + std::to_string(bodies_generation) + "); the device's world was rebuilt.");
@@ -2065,7 +2079,7 @@ int main(int argc, char** argv)
                 const float since_arrival{std::chrono::duration<float>{std::chrono::steady_clock::now() - telling_arrived}.count()};
                 const float alpha{(nominal_dt > 0.0f) ? std::clamp(since_arrival / nominal_dt, 0.0f, 1.0f) : 1.0f};
                 if (alpha != published_alpha) {
-                    channel.publishWorld(world_stage->records(world_client->interpolated(alpha)));
+                    channel.publishWorld(world_stage->records(world_client->interpolated(alpha), world_client->foods()));
                     published_alpha = alpha;
                 }
 

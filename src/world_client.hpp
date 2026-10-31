@@ -171,6 +171,17 @@ namespace WorldClientLib
             return (known != m_creatures.end()) ? &known->second.newest : nullptr;
         }
 
+        /*!
+            The orbs of food the newest telling held, in the world's order: where each stands,
+            how big, how much is left. Replaced whole by every telling, as the creatures are, so
+            an orb eaten to nothing is simply absent from the next one. Not interpolated: an orb
+            does not move, and its quantity is the world's to step.
+        */
+        [[nodiscard]] const std::vector<LnkFoodState>& foods() const noexcept
+        {
+            return m_foods;
+        }
+
         //! Every body REZ has told and DEREZ has not yet taken, by creature.
         [[nodiscard]] const std::unordered_map<std::uint32_t, Body>& bodies() const noexcept
         {
@@ -190,6 +201,7 @@ namespace WorldClientLib
         LnkWelcome m_welcome{};
         std::uint64_t m_tick{0u};
         std::unordered_map<std::uint32_t, CreatureTrack> m_creatures;
+        std::vector<LnkFoodState> m_foods;
         std::vector<LnkEvent> m_events;
         std::unordered_map<std::uint32_t, Body> m_bodies;
         std::uint64_t m_bodies_generation{0u};
@@ -198,6 +210,7 @@ namespace WorldClientLib
         struct PendingTelling {
             LnkTickStateHeader header{};
             std::vector<LnkCreatureState> rows;
+            std::vector<LnkFoodState> foods;
         };
         //! The pacing of a replay: when playback began, and the Disk's first tick.
         struct Replay {
@@ -210,7 +223,7 @@ namespace WorldClientLib
 
         //! One message applied to the picture; shared by the live and the replayed paths.
         void apply(const LnkMessageView& view);
-        void applyTelling(const LnkTickStateHeader& header, const LnkCreatureState* rows);
+        void applyTelling(const LnkTickStateHeader& header, const LnkCreatureState* rows, const LnkFoodState* foods);
     };
 
 }

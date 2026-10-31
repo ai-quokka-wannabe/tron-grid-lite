@@ -92,7 +92,9 @@ TronGridLite 127.0.0.1:47000 --window
 ```
 
 The live view: the creatures Master Control tells of, drawn interpolated between the two newest
-ticks, with sound (`--mute` for none). Fly with `W`/`A`/`S`/`D`, `Q`/`E` down and up, look with
+ticks, with sound (`--mute` for none). Food stands as glowing white orbs, dimming as it is eaten,
+and an orb eaten to nothing goes with a pew, a short falling chirp from where it stood
+([CHEMORECEPTION.md](CHEMORECEPTION.md#on-the-grid-as-built)). Fly with `W`/`A`/`S`/`D`, `Q`/`E` down and up, look with
 the mouse; `Tab` captures the cursor. The eye starts at `(0, 6, 40)` looking down `-Z`; the
 spawn pad is near the origin, some forty metres ahead.
 

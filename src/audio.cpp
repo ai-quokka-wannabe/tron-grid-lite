@@ -32,6 +32,13 @@ namespace AudioLib
         constexpr float SCRATCH_DECAY_SECONDS{0.018f};
         constexpr float SCRATCH_GAIN{0.5f};
         constexpr float SCRATCH_CUTOFF_HZ{1800.0f};
+        //! The pew: a chirp falling exponentially from a high whistle by two octaves, as the
+        //! sci-fi blaster's is, over a quarter of a second, its envelope a quick decay.
+        constexpr float PEW_SECONDS{0.25f};
+        constexpr float PEW_DECAY_SECONDS{0.09f};
+        constexpr float PEW_GAIN{0.4f};
+        constexpr float PEW_START_HZ{1760.0f};
+        constexpr float PEW_END_HZ{440.0f};
         //! Distance at which a sound is half as loud as at the ear: a room-sized world.
         constexpr float HALF_LOUDNESS_METRES{4.0f};
         //! The most voices at once; beyond it the oldest retire early, which a burst of
@@ -44,6 +51,29 @@ namespace AudioLib
     {
         // A4 and the eleven semitones above it, by identity: an octave of creatures.
         return 440.0f * std::pow(2.0f, static_cast<float>(creature_id % 12u) / 12.0f);
+    }
+
+    Sound soundOf(const LnkEvent& event, const MathLib::Vec3& source_velocity) noexcept
+    {
+        Sound sound{};
+        sound.creature_id = event.creature_id;
+        sound.position = MathLib::Vec3{event.position[0], event.position[1], event.position[2]};
+        sound.strength = event.strength;
+        switch (event.kind) {
+        case LNK_EVENT_SCRATCH:
+            sound.kind = SoundKind::Scratch;
+            sound.velocity = source_velocity;
+            break;
+        case LNK_EVENT_FOOD_GONE:
+            // Sounded at the orb, which stands still: the eater's motion is not the source's.
+            sound.kind = SoundKind::Pew;
+            break;
+        default:
+            sound.kind = SoundKind::Ping;
+            sound.velocity = source_velocity;
+            break;
+        }
+        return sound;
     }
 
     Mixer::Mixer(const std::uint32_t sample_rate) :
@@ -111,6 +141,17 @@ namespace AudioLib
             voice.remaining = static_cast<std::uint32_t>(SCRATCH_SECONDS * rate);
             break;
         }
+        case SoundKind::Pew: {
+            voice.frequency = PEW_START_HZ * doppler;
+            voice.remaining = static_cast<std::uint32_t>(PEW_SECONDS * rate);
+            // Exponential, so the fall sounds even to the ear: the same ratio every sample.
+            voice.glide = std::pow(PEW_END_HZ / PEW_START_HZ, 1.0f / static_cast<float>(voice.remaining));
+            const float gain{std::clamp(sound.strength, 0.0f, 1.0f) * PEW_GAIN * attenuation};
+            voice.gain_left = gain * left;
+            voice.gain_right = gain * right;
+            voice.decay = std::exp(-1.0f / (PEW_DECAY_SECONDS * rate));
+            break;
+        }
         }
         return voice;
     }
@@ -124,11 +165,14 @@ namespace AudioLib
         for (Voice& voice : m_voices) {
             const std::uint32_t count{std::min(frames, voice.remaining)};
             switch (voice.kind) {
-            case SoundKind::Ping: {
-                const float step{2.0f * std::numbers::pi_v<float> * voice.frequency / rate};
+            case SoundKind::Ping:
+            case SoundKind::Pew: {
+                // A sine at the voice's frequency; the pew's glides down as it sounds, the
+                // ping's glide is one and it holds its pitch.
                 for (std::uint32_t frame{0u}; frame < count; ++frame) {
                     const float sample{std::sin(voice.phase) * voice.envelope};
-                    voice.phase += step;
+                    voice.phase += 2.0f * std::numbers::pi_v<float> * voice.frequency / rate;
+                    voice.frequency *= voice.glide;
                     if (voice.phase > 2.0f * std::numbers::pi_v<float>) {
                         voice.phase -= 2.0f * std::numbers::pi_v<float>;
                     }

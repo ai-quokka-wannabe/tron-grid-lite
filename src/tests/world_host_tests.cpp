@@ -237,6 +237,35 @@ namespace
             flush();
         }
 
+        //! A telling with two orbs beside the row and, between the row and the letter, the pew of
+        //! a third eaten to nothing this tick - the world's own order, as for the scratches.
+        void tellWithFood(const std::uint64_t tick, const std::uint32_t creature_id)
+        {
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 2u};
+            LnkCreatureState row{};
+            row.creature_id = creature_id;
+            row.position[1] = 0.05f;
+            row.segment_count = 1u;
+            const std::array<LnkFoodState, 2> larder{LnkFoodState{.food_id = 4u, .position = {3.0f, 0.25f, -2.0f}, .radius = 0.25f, .quantity = 1.0f},
+                LnkFoodState{.food_id = 6u, .position = {-5.0f, 0.25f, 4.0f}, .radius = 0.25f, .quantity = 0.5f}};
+            check(m_library.vtable().send_tick_state(m_connection, &header, &row, larder.data()), "send_tick_state");
+            const LnkEvent gone{.tick = tick, .position = {1.5f, 0.25f, -1.0f}, .strength = 0.625f, .creature_id = 777u, .kind = LNK_EVENT_FOOD_GONE, .reserved0 = {}};
+            check(m_library.vtable().send_event(m_connection, &gone), "send_event");
+            const LnkProprioception letter{.tick = tick,
+                .creature_id = creature_id,
+                .grounded = 1u,
+                .reserved0 = {},
+                .specific_force = {0.0f, 9.81f, 0.0f},
+                .joint_angles = {},
+                .joint_torques = {},
+                .contact_count = 0u,
+                .intake = 0.0f,
+                .odour = {},
+                .reserved1 = {}};
+            check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
+            flush();
+        }
+
         //! The world's refusal of a body: the letter Link v8 carries to the one host it refused.
         void refuse(const std::uint64_t tick, const std::uint32_t creature_id, const std::uint8_t reason)
         {
@@ -543,6 +572,48 @@ TEST_CASE(a_scratch_told_by_the_world_reaches_the_host_with_its_teller_named)
     TEST_CHECK(!scratches[1].own);
     TEST_CHECK_EQUAL(scratches[1].creature, static_cast<std::uint64_t>(777u));
     TEST_CHECK(near(scratches[1].strength, 0.75f));
+}
+
+TEST_CASE(the_orbs_and_a_pew_told_by_the_world_reach_the_host_for_the_senses)
+{
+    RehearsalMasterControl rehearsal{};
+    RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_chained", 1u, flatGround()};
+
+    std::thread server{[&rehearsal]() {
+        rehearsal.acceptAndWelcome(100u, 9u);
+    }};
+    WorldHostLib::Host host{rehearsal.address(), PATIENCE, roster};
+    server.join();
+    (void)rehearsal.awaitMessage(LNK_MSG_REZ);
+    TEST_CHECK(host.foods().empty());
+    TEST_CHECK(host.pews().empty());
+
+    const auto await_whole = [&host]() {
+        const std::chrono::steady_clock::time_point settle{std::chrono::steady_clock::now() + std::chrono::milliseconds{500}};
+        bool ready{false};
+        while (!ready && (std::chrono::steady_clock::now() < settle)) {
+            ready = host.poll();
+        }
+        return ready;
+    };
+
+    // The larder and the pew, once the telling is whole: the orbs for the stage, the pew for
+    // every hosted ear, sounded at the orb's centre as loudly as the world said.
+    rehearsal.tellWithFood(101u, host.wireIdentity(0u));
+    TEST_CHECK(await_whole());
+    TEST_CHECK_EQUAL(host.foods().size(), static_cast<std::size_t>(2u));
+    TEST_CHECK_EQUAL(host.foods()[1].food_id, 6u);
+    TEST_CHECK(near(host.foods()[1].quantity, 0.5f));
+    TEST_CHECK_EQUAL(host.pews().size(), static_cast<std::size_t>(1u));
+    TEST_CHECK(near(host.pews()[0].position.x, 1.5f));
+    TEST_CHECK(near(host.pews()[0].position.z, -1.0f));
+    TEST_CHECK(near(host.pews()[0].strength, 0.625f));
+
+    // The next whole telling holds no food and sounds no pew: both are gone, nothing chirps on.
+    rehearsal.tellTick(102u, host.wireIdentity(0u), 0.0f, 0.0f, true);
+    TEST_CHECK(await_whole());
+    TEST_CHECK(host.foods().empty());
+    TEST_CHECK(host.pews().empty());
 }
 
 TEST_CASE(a_refused_body_is_said_out_loud_by_name_and_the_host_stops_waiting)

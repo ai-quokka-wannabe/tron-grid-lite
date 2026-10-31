@@ -27,6 +27,7 @@ add_library(grid STATIC
     world_client.cpp
     world_host.cpp
     world_stage.cpp
+    orbs.cpp
     link_library.cpp
     audio.cpp
 )

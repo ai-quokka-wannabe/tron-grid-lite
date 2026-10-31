@@ -1,7 +1,8 @@
 # Chemoreception
 
 Food on the Grid, the body's sense of taking it in, and smell: what each is, which block owns it, and why it is
-shaped as it is. A design whose wire half is built (link v12); the world and the senses are not yet code. The
+shaped as it is. A design whose wire half is built (link v12), and whose orbs and pew the Grid draws and sounds;
+the world's food and the smell are Master Control's to build. The
 owner asked for it on 2026-10-29 ("glowing yellow orbs" for food, then white, and smell "as realistic as we did with
 the auditory and visual senses"), and iso-lab asks for both
 ([master-control#63](https://github.com/ai-quokka-wannabe/master-control/issues/63),
@@ -85,6 +86,26 @@ protein ([Edwards et al. 2008](https://doi.org/10.1371/journal.pbio.0060198)), a
 wavelengths. A brain faithful to the worm may therefore be drawn to an orb by its odour and pushed from it by its
 light. The sense reports intensity only; whether light is aversive is the Program's, and the conflict is a
 measurement iso-lab can make.
+
+### On the Grid, as built
+
+- **The orbs** (`src/orbs.hpp`): one unit icosphere, subdivided twice (320 faces), scaled to the row's radius and
+  carried to its centre. The glow follows the quantity in eight steps, from a crumb at an eighth of full to a whole
+  orb at a linear radiance of 4.0 in every channel - as bright as the floor's neon, below the pillars. Stepped
+  rather than continuous because that is the material model's shape: a triangle's slot is the only key the tracers
+  have and the table is uploaded once, so each step is its own small geometry wearing its own emissive slot, and a
+  bite that crosses a step changes which shape an orb stands in - a placement, never a re-upload, and no new shader
+  feature. An orb that is still told never goes dark.
+- **In both scenes**: the spectator's stage (`src/world_stage.hpp`) places one record per orb on the tracer's dynamic
+  instance path; the creature host's stage (`src/stage.hpp`) stands one instance per orb after every body and guest,
+  in the scene the eyes trace and the ears walk, so an eye sees an orb's glow and its reflection in the floor and an
+  ear meets it as an occluder. A telling with no food renders exactly as before - the shapes wait as geometry no
+  instance names, and the reference render, which never joins a world, is untouched.
+- **The pew** (`src/audio.hpp`): a sine falling exponentially by two octaves, 1,760 Hz to 440 Hz over a quarter of a
+  second, on a 90 ms decay, at the event's strength; placed by the orb's centre with the same pan and distance as a
+  call, and still - its source is the orb, not the eater, so it carries no Doppler. The creature host relays each
+  food-gone event of the tick as a pew the senses sound as a call: energy in the bins its distance dictates and a
+  discrete arrival, since a chirp has the sharp onset a scratch lacks.
 
 ## Intake: the mouth and the pump
 
@@ -210,7 +231,9 @@ A protocol bump (v12, with client ABI 10) and a Program ABI bump (11), taken tog
 2. **Link** v12: the food rows, the event, the letter's new fields; the protocol fingerprint moves, the world's does not. **Built** (link#49, merged 2026-10-29).
 3. **Master Control** on the wire: rows, event, letter; Clu replays food; the goldens re-recorded.
 4. **The Grid**: the orbs drawn (emissive, in the scene the senses trace), `TglSenses` grows, ABI 11; checked on every
-   adapter the desks have and on lavapipe.
+   adapter the desks have and on lavapipe. The orbs and the pew are **built** - in the spectator's picture and
+   speakers and in the creature host's eyes and ears ([as built](#on-the-grid-as-built)); `TglSenses` is its own
+   change.
 5. **rc-worm**: the panel shows the amphids and the pumps, so a User at the panel smells what the worm smells.
 
 ## Deferred, with triggers

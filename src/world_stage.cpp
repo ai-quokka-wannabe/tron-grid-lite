@@ -15,6 +15,7 @@
 
 #include "world_stage.hpp"
 
+#include "orbs.hpp"
 #include "stage.hpp"
 
 #include <math/matrix.hpp>
@@ -79,11 +80,14 @@ namespace WorldStageLib
         // Between the primary neon and the pillars in brightness: a being of light, not a lamp.
         m_materials.push_back(makeEmissive(MathLib::Vec3{0.60f, 0.85f, 0.95f}, MathLib::Vec3{2.00f, 3.40f, 4.00f}));
 
-        m_grid_material_count = m_materials.size();
-
         m_scene.geometries.push_back(std::move(grid));
         m_scene.geometries.push_back(BvhLib::build(makePlaceholderBody(body_material)));
         m_scene.instances.push_back(BvhLib::makeInstance(m_scene.geometries.front(), 0u, MathLib::Mat4::identity()));
+
+        // The orbs' shapes, one per glow level, built once: food is placed, never rebuilt.
+        m_first_orb_geometry = OrbLib::appendShapes(m_scene.geometries, m_materials);
+        m_grid_material_count = m_materials.size();
+        m_own_geometry_count = m_scene.geometries.size();
 
         cacheOffsets();
     }
@@ -106,9 +110,9 @@ namespace WorldStageLib
 
     void WorldStage::setBodies(const std::unordered_map<std::uint32_t, WorldClientLib::Body>& bodies)
     {
-        // Back to the Grid and the placeholder, then every shaped body in creature order - a
-        // fixed order, so two spectators told the same bodies build the same buffers.
-        m_scene.geometries.resize(2u);
+        // Back to the Grid, the placeholder and the orbs, then every shaped body in creature
+        // order - a fixed order, so two spectators told the same bodies build the same buffers.
+        m_scene.geometries.resize(m_own_geometry_count);
         m_materials.resize(m_grid_material_count);
         m_geometry_of.clear();
 
@@ -162,15 +166,19 @@ namespace WorldStageLib
         return BvhLib::flatten(m_scene);
     }
 
-    std::vector<BvhLib::InstanceRecord> WorldStage::records(const std::vector<WorldClientLib::InterpolatedCreature>& creatures) const
+    std::vector<BvhLib::InstanceRecord> WorldStage::records(const std::vector<WorldClientLib::InterpolatedCreature>& creatures,
+        const std::vector<LnkFoodState>& foods) const
     {
         if (creatures.size() > m_creature_capacity) {
             throw std::runtime_error{
                 "More creatures than this stage was built for: " + std::to_string(creatures.size()) + " of " + std::to_string(m_creature_capacity) + "."};
         }
+        if (foods.size() > LNK_TICK_STATE_MAX_FOOD) {
+            throw std::runtime_error{"More orbs than a telling may hold: " + std::to_string(foods.size()) + " of " + std::to_string(LNK_TICK_STATE_MAX_FOOD) + "."};
+        }
 
         std::vector<BvhLib::InstanceRecord> result;
-        result.reserve(1u + creatures.size());
+        result.reserve(1u + creatures.size() + foods.size());
         result.push_back(BvhLib::flattenInstance(m_scene.instances.front(), m_node_offsets[0], m_triangle_offsets[0],
             static_cast<std::uint32_t>(m_scene.geometries[0].nodes.size())));
 
@@ -191,6 +199,14 @@ namespace WorldStageLib
                 const LnkSegmentPose& placed{creature.segments[segment]};
                 place(RosterLib::Pose{.position = MathLib::Vec3{placed.position[0], placed.position[1], placed.position[2]}, .yaw = placed.yaw, .pitch = placed.pitch});
             }
+        }
+
+        // The orbs, after every body: each in the shape of its glow level, at its centre and size.
+        for (const LnkFoodState& food : foods) {
+            const std::uint32_t geometry{m_first_orb_geometry + OrbLib::glowLevel(food.quantity) - 1u};
+            const BvhLib::Instance instance{BvhLib::makeInstance(m_scene.geometries[geometry], geometry, OrbLib::transform(food))};
+            result.push_back(BvhLib::flattenInstance(instance, m_node_offsets[geometry], m_triangle_offsets[geometry],
+                static_cast<std::uint32_t>(m_scene.geometries[geometry].nodes.size())));
         }
         if (result.size() > instanceCapacity()) {
             throw std::runtime_error{

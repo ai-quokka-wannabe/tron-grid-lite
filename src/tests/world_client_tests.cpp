@@ -137,10 +137,12 @@ namespace
             }
         }
 
-        void tellTick(const std::uint64_t tick, const std::vector<LnkCreatureState>& rows)
+        void tellTick(const std::uint64_t tick, const std::vector<LnkCreatureState>& rows, const std::vector<LnkFoodState>& foods = {})
         {
-            const LnkTickStateHeader header{.tick = tick, .creature_count = static_cast<std::uint32_t>(rows.size()), .food_count = 0u};
-            check(m_library.vtable().send_tick_state(m_connection, &header, rows.empty() ? nullptr : rows.data(), nullptr), "send_tick_state");
+            const LnkTickStateHeader header{
+                .tick = tick, .creature_count = static_cast<std::uint32_t>(rows.size()), .food_count = static_cast<std::uint32_t>(foods.size())};
+            check(m_library.vtable().send_tick_state(m_connection, &header, rows.empty() ? nullptr : rows.data(), foods.empty() ? nullptr : foods.data()),
+                "send_tick_state");
             flush();
         }
 
@@ -281,7 +283,7 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
         LnkClient* const recorder{library.vtable().record_open(path.c_str(), fingerprint, 10u, 0.1f, 1'700'000'000u, &status, nullptr, 0u)};
         TEST_CHECK_EQUAL(status, LNK_OK);
         for (std::uint64_t tick{11u}; tick <= 13u; ++tick) {
-            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 0u};
+            const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 1u};
             const LnkCreatureState row{.creature_id = 7u,
                 .position = {static_cast<float>(tick), 0.05f, 0.0f},
                 .yaw = 0.0f,
@@ -291,7 +293,9 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
                 .vocalisation = 0.0f,
                 .segment_count = 1u, // A single body: the wire refuses a chain of none.
                 .segments = {}};
-            TEST_CHECK_EQUAL(library.vtable().send_tick_state(recorder, &header, &row, nullptr), LNK_OK);
+            // An orb on the Disk too, shrinking a bite a tick: Clu draws the food it recorded.
+            const LnkFoodState orb{.food_id = 5u, .position = {2.0f, 0.25f, 2.0f}, .radius = 0.25f, .quantity = 1.0f - (0.1f * static_cast<float>(tick - 11u))};
+            TEST_CHECK_EQUAL(library.vtable().send_tick_state(recorder, &header, &row, &orb), LNK_OK);
         }
         std::uint8_t everything_left{0u};
         TEST_CHECK_EQUAL(library.vtable().flush(recorder, &everything_left), LNK_OK);
@@ -307,6 +311,8 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
     clu.poll();
     TEST_CHECK_EQUAL(clu.tick(), 11u);
     TEST_CHECK_EQUAL(clu.creatureCount(), 1u);
+    TEST_CHECK_EQUAL(clu.foods().size(), static_cast<std::size_t>(1u));
+    TEST_CHECK_CLOSE(clu.foods().front().quantity, 1.0f, 1e-6f);
     clu.poll();
     TEST_CHECK_EQUAL(clu.tick(), 11u);
     TEST_CHECK(!clu.ended());
@@ -325,6 +331,7 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
     TEST_CHECK(clu.ended());
     TEST_CHECK_EQUAL(clu.tick(), 13u);
     TEST_CHECK_CLOSE(clu.interpolated(1.0f).front().position[0], 13.0f, 1e-6f);
+    TEST_CHECK_CLOSE(clu.foods().front().quantity, 0.8f, 1e-6f);
     clu.poll(); // Polling a played-out Disk is a no-op, never a throw.
     TEST_CHECK_EQUAL(clu.creatureCount(), 1u);
 
@@ -439,6 +446,39 @@ TEST_CASE(a_pinged_spectator_answers_pong_because_silence_gets_it_reaped)
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
     TEST_CHECK(answered);
+}
+
+TEST_CASE(the_orbs_of_each_telling_are_kept_and_a_gone_one_leaves_the_rows)
+{
+    RehearsalMasterControl rehearsal{};
+    std::thread server{[&rehearsal]() {
+        rehearsal.acceptAndWelcome(400u);
+    }};
+    WorldClientLib::Client client{rehearsal.address(), PATIENCE};
+    server.join();
+    TEST_CHECK(client.foods().empty());
+
+    // Two orbs beside a creature: kept whole, in the world's order, so the stage can draw them.
+    const LnkFoodState whole{.food_id = 11u, .position = {3.0f, 0.25f, -2.0f}, .radius = 0.25f, .quantity = 1.0f};
+    const LnkFoodState half{.food_id = 12u, .position = {-4.0f, 0.25f, 5.0f}, .radius = 0.25f, .quantity = 0.5f};
+    rehearsal.tellTick(401u, {creature(7u, 0.0f, 0.0f)}, {whole, half});
+    pollUntilTick(client, 401u);
+    TEST_CHECK_EQUAL(client.foods().size(), static_cast<std::size_t>(2u));
+    TEST_CHECK_EQUAL(client.foods()[0].food_id, 11u);
+    TEST_CHECK_CLOSE(client.foods()[0].position[0], 3.0f, 1e-6f);
+    TEST_CHECK_EQUAL(client.foods()[1].food_id, 12u);
+    TEST_CHECK_CLOSE(client.foods()[1].quantity, 0.5f, 1e-6f);
+
+    // The half orb is eaten to nothing: the next telling no longer holds it, and neither does the
+    // client - the broadcast is the whole world, for food as for creatures.
+    rehearsal.tellTick(402u, {creature(7u, 0.0f, 0.0f)}, {whole});
+    pollUntilTick(client, 402u);
+    TEST_CHECK_EQUAL(client.foods().size(), static_cast<std::size_t>(1u));
+    TEST_CHECK_EQUAL(client.foods()[0].food_id, 11u);
+
+    rehearsal.tellTick(403u, {creature(7u, 0.0f, 0.0f)});
+    pollUntilTick(client, 403u);
+    TEST_CHECK(client.foods().empty());
 }
 
 TEST_CASE(a_derez_between_snapshots_removes_the_creature)
