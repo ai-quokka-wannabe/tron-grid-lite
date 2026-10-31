@@ -415,6 +415,13 @@ namespace RosterLib
                 senses.joint_angles[joint] = creature.joint_angles[joint];
                 senses.joint_torques[joint] = creature.joint_torques[joint];
             }
+            // The gut and the nose, as the world's letter said them: left amphid first.
+            senses.intake = creature.intake;
+            for (std::size_t amphid{0u}; amphid < TGL_AMPHIDS; ++amphid) {
+                for (std::size_t receptor{0u}; receptor < TGL_ODOUR_RECEPTORS; ++receptor) {
+                    senses.odour[amphid][receptor] = creature.odour[(amphid * TGL_ODOUR_RECEPTORS) + receptor];
+                }
+            }
 
             senses.specific_force[0] = creature.specific_force.x;
             senses.specific_force[1] = creature.specific_force.y;
@@ -458,7 +465,8 @@ namespace RosterLib
     }
 
     void Roster::tellFeel(const uint32_t index, const bool grounded, const MathLib::Vec3& specific_force, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles,
-        const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts)
+        const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts, const float intake,
+        const std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS>& odour)
     {
         Creature& creature{m_creatures.at(index)};
         creature.grounded = grounded;
@@ -466,6 +474,8 @@ namespace RosterLib
         creature.joint_angles = joint_angles;
         creature.joint_torques = joint_torques;
         creature.contacts = std::move(contacts);
+        creature.intake = intake;
+        creature.odour = odour;
     }
 
     const std::vector<Creature>& Roster::creatures() const noexcept

@@ -15,7 +15,7 @@
 #
 # No struct here contains padding, so a struct's members always account for all of it.
 
-abi-version 10
+abi-version 11
 pointer-size 8
 
 struct TglLibraryInfo 8 4
@@ -100,7 +100,7 @@ member TglArrival onset_seconds 0 4
 member TglArrival radial_velocity 4 4
 member TglArrival energy 8 16
 
-struct TglSenses 152 8
+struct TglSenses 216 8
 member TglSenses tick 0 8
 member TglSenses eyes 8 8
 member TglSenses ears 16 8
@@ -117,7 +117,9 @@ member TglSenses joint_torques 88 28
 member TglSenses specific_force 116 12
 member TglSenses angular_velocity 128 12
 member TglSenses irradiance 140 4
-member TglSenses padding0 144 8
+member TglSenses intake 144 4
+member TglSenses odour 148 64
+member TglSenses padding0 212 4
 
 struct TglActions 40 4
 member TglActions desired_forward_speed 0 4
