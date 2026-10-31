@@ -30,11 +30,41 @@ milliseconds a frame. Record your own with [`tools/record_flyby.py`](tools/recor
 the User watches through a debug window — a free-flight camera for development and observation.
 Human avatars belong to the long arc, not to today.
 
+![rc-worm, a green chain of eight segments, crawling the neon Grid among glowing pillars and white food orbs](images/grid_worm.webp)
+
+That is not a render for show: it is the spectator window on a live world, with
+[rc-worm](https://github.com/ai-quokka-wannabe/rc-worm) crawling under
+[Master Control](https://github.com/ai-quokka-wannabe/master-control)'s physics and the white food orbs it can
+smell. [docs/RUNNING_THE_GRID.md](docs/RUNNING_THE_GRID.md) stands the same scene up on your machine.
+
+> **Start here.** Build with one of the presets under [Building](#building) (or follow
+> [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) from a bare machine), run it with
+> [docs/RUNNING_THE_GRID.md](docs/RUNNING_THE_GRID.md), then pick a
+> [good first issue](https://github.com/ai-quokka-wannabe/tron-grid-lite/issues?q=is%3Aopen+label%3A%22good+first+issue%22).
+> [CONTRIBUTING.md](CONTRIBUTING.md) has the house rules; questions are welcome in
+> [Discussions](https://github.com/ai-quokka-wannabe/tron-grid-lite/discussions).
+
 **It is the stage, not the actor.** TronGrid Lite renders senses and applies actions; it does
 not think. Programs load as shared-library plugins (DLL on Windows, SO on Linux), receive small
 buffers of senses, and return actions — so the Grid stays **completely agnostic about how any
 Program works inside**. No Program internals live here, and none should: Programs are other
 repositories' business, behind a plain C ABI.
+
+One tick of a hosted creature, end to end:
+
+```mermaid
+flowchart LR
+    MC["Master Control<br/>physics, food, smell"] -- "TICK_STATE<br/>bodies, orbs, the letter" --> HOST
+    subgraph HOST["TronGrid Lite: creature host"]
+        STAGE["stage the bodies<br/>on the Grid"] --> EYES["eyes: rays<br/>through the BVH"]
+        STAGE --> EARS["ears: sound<br/>through the same BVH"]
+        EYES --> SENSES["TglSenses<br/>sight, hearing, touch,<br/>smell, gut"]
+        EARS --> SENSES
+    end
+    SENSES -- "C ABI" --> PROG["Program<br/>e.g. rc-worm"]
+    PROG -- "TglActions" --> ACT["ACTIONS"]
+    ACT --> MC
+```
 
 **A Program can be written in any language that compiles to a shared library**, and the interface is
 kept plain so that this is true rather than merely claimed: one exported symbol, and structs of

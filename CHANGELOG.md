@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live world, how to build and check on the Windows desk, and the way from a change to a PR - each mirrored verbatim
   in every repo that uses it and improved every time it is used, so no session reinvents them.
 
+- **The README shows the Grid alive, and where to start.** A live capture of rc-worm crawling among the white
+  food orbs (`images/grid_worm.webp`, 44 KB) follows the opening, with a Start-here block (build, run, good first
+  issues, Discussions), and a Mermaid diagram walks one tick of a hosted creature: Master Control's TICK_STATE,
+  the staged bodies, eyes and ears through the BVH, `TglSenses` over the C ABI, `TglActions` back as ACTIONS.
+
 - **Food on the Grid: glowing white orbs, and a pew when one is eaten.** The owner's ask (2026-10-29): "glowing white
   orbs every animal can see", and "when food is consumed let it make a pew sci-fi noise". The world client keeps each
   telling's food rows (link v12) as it keeps the creatures, Clu's replay included. Both stages stand an orb per row -
