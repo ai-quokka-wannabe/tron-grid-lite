@@ -14,7 +14,6 @@
 */
 
 #include "orbs.hpp"
-
 #include <algorithm>
 #include <array>
 #include <cmath>

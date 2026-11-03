@@ -23,7 +23,7 @@
 #include <logging/logger.hpp>
 #include <vector>
 
-//! Owns the Vulkan instance and (in debug) the validation debug messenger, destruction order is handled by vk::raii — no manual cleanup needed.
+//! Owns the Vulkan instance and (in debug) the validation debug messenger; vk::raii handles the destruction order, so no manual cleanup is needed.
 class Instance {
 public:
     /*!

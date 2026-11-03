@@ -27,18 +27,15 @@
 
 #include "../link_library.hpp"
 #include "../loader_os.hpp"
-
 #include <lnk/lnk_client.h>
 #include <lnk/lnk_protocol.h>
-
+#include <testing/testing.hpp>
 #include <array>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 #include <string>
-
-#include <testing/testing.hpp>
 
 namespace
 {

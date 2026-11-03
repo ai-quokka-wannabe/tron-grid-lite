@@ -44,7 +44,7 @@ namespace VulkanHelpers
         uploaded into, which outlives it and reclaims everything at once.
     */
     struct DeviceBuffer {
-        vk::raii::Buffer buffer{nullptr};
+        vk::raii::Buffer buffer{nullptr}; //!< The buffer, bound into the arena it was uploaded into.
     };
 
     /*!
@@ -90,7 +90,7 @@ namespace VulkanHelpers
         \param data Bytes to upload. Must be at least `bytes` long.
         \param bytes Size of the buffer. Must not be zero — Vulkan rejects a zero-sized buffer, so a
                caller with nothing to upload has to pass one placeholder element instead.
-        \return The buffer and the memory backing it, both owned by the caller.
+        \return The buffer, owned by the caller; the memory backing it belongs to `arena`.
     */
     [[nodiscard]] inline DeviceBuffer uploadStorageBuffer(const Device& device, MemoryArena& arena, const void* data, vk::DeviceSize bytes)
     {

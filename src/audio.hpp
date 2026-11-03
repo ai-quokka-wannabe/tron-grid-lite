@@ -17,8 +17,8 @@
 
 #include <lnk/lnk_protocol.h>
 #include <math/vector.hpp>
-
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <vector>
 
@@ -100,7 +100,7 @@ namespace AudioLib
         }
 
         //! Voices still sounding, for the log and the tests.
-        [[nodiscard]] std::size_t liveVoices();
+        [[nodiscard]] std::size_t liveVoices() const;
 
     private:
         struct Voice {
@@ -109,7 +109,7 @@ namespace AudioLib
             float glide{1.0f}; //!< Per-sample multiplier on the frequency: the pew's fall.
             float gain_left{0.0f};
             float gain_right{0.0f};
-            float phase{0.0f}; //!< Radians, the ping's oscillator.
+            float phase{0.0f}; //!< Radians, the oscillator of a ping or a pew.
             float envelope{1.0f};
             float decay{0.0f}; //!< Per-sample multiplier on the envelope.
             float lowpass{0.0f}; //!< The scratch's one-pole state.
@@ -118,8 +118,8 @@ namespace AudioLib
 
         [[nodiscard]] Voice voiceFor(const Sound& sound, const Listener& listener) const;
 
-        std::uint32_t m_sample_rate;
-        std::mutex m_mutex;
+        std::uint32_t m_sample_rate{0u}; //!< Frames per second, fixed at construction.
+        mutable std::mutex m_mutex; //!< Guards the listener, the voices and the noise state across threads.
         Listener m_listener{};
         std::vector<Voice> m_voices;
         std::uint32_t m_noise{0x9E37'79B9u}; //!< The noise source's state: an LCG, seeded once.
@@ -145,7 +145,7 @@ namespace AudioLib
 
     private:
         struct Impl;
-        Impl* m_impl{nullptr};
+        std::unique_ptr<Impl> m_impl; //!< The platform's half, defined where the platform is.
     };
 
 } // namespace AudioLib

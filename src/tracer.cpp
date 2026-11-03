@@ -19,14 +19,12 @@
 #include <math/vector.hpp>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
-#include <fstream>
 #include <stdexcept>
 
 namespace
 {
-
-    using VulkanHelpers::findMemoryType;
 
     //! Workgroup size, matching the [numthreads(8, 8, 1)] in trace.slang.
     constexpr uint32_t WORKGROUP_SIZE{8u};
@@ -34,10 +32,9 @@ namespace
     /*!
         Block size for the output-image arena.
 
-        Two 1280x720 half-float images are about 7 MiB together, so at this size the common case is
-        a single allocation and a resize to anything reasonable stays a single allocation. A larger
-        window simply gets a block sized to fit — the arena treats this as a granularity rather than
-        a ceiling.
+        Two 1280x720 half-float images are about 14 MiB together, so at this size the common case is
+        a single allocation. A larger window - 1920x1080 needs about 32 MiB - simply gets a block
+        sized to fit: the arena treats this as a granularity rather than a ceiling.
     */
     constexpr vk::DeviceSize IMAGE_BLOCK_BYTES{16u * 1024u * 1024u};
 
@@ -286,6 +283,9 @@ void Tracer::stageInstances(const uint32_t frame_slot, const std::vector<BvhLib:
 {
     if (!hasDynamicInstances()) {
         throw std::runtime_error{"This tracer renders static placements: it was built with no dynamic instance capacity."};
+    }
+    if (frame_slot >= m_frames_in_flight) {
+        throw std::runtime_error{"Frame slot " + std::to_string(frame_slot) + " is beyond this tracer's " + std::to_string(m_frames_in_flight) + " frames in flight."};
     }
     if (records.size() > m_dynamic_capacity) {
         throw std::runtime_error{"More placements than this tracer was built for: " + std::to_string(records.size()) + " of " + std::to_string(m_dynamic_capacity) + "."};

@@ -73,7 +73,7 @@ namespace
     {
         throw std::logic_error{std::string{"assertions are not enforcing anything: "} + what};
     }
-}
+} // namespace
 
 TEST_CASE(the_check_macro_actually_fails_on_a_false_expression)
 {

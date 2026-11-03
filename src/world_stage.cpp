@@ -14,12 +14,9 @@
 */
 
 #include "world_stage.hpp"
-
 #include "orbs.hpp"
 #include "stage.hpp"
-
 #include <math/matrix.hpp>
-
 #include <algorithm>
 #include <array>
 #include <stdexcept>
@@ -184,7 +181,7 @@ namespace WorldStageLib
 
         for (const WorldClientLib::InterpolatedCreature& creature : creatures) {
             // Its own shape when REZ gave it one; the placeholder otherwise.
-            const auto shaped{m_geometry_of.find(creature.creature_id)};
+            const std::unordered_map<std::uint32_t, std::uint32_t>::const_iterator shaped{m_geometry_of.find(creature.creature_id)};
             const std::uint32_t geometry{(shaped != m_geometry_of.end()) ? shaped->second : 1u};
             const auto place = [&](const RosterLib::Pose& pose) {
                 const BvhLib::Instance instance{BvhLib::makeInstance(m_scene.geometries[geometry], geometry, poseTransform(pose))};

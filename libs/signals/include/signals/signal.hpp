@@ -68,8 +68,8 @@ namespace SignalsLib
             Equivalent to a `consume()` loop, with two differences a caller must want rather than merely tolerate. Messages
             emitted while the caller processes the batch wait for the next drain instead of extending this one, so a drain is
             bounded even if producers outpace the consumer. And `empty()` reports true from the moment of the swap, while the
-            batch may still be unprocessed in the caller's hands — so a thread using emptiness as a proxy for "everything
-            processed", as `Logger::flush` does, must stay with the `consume()` loop.
+            batch may still be unprocessed in the caller's hands — so emptiness is no proxy for "everything processed", which
+            is why `Logger::flush` counts completed writes instead.
         */
         [[nodiscard]] std::queue<T> drain()
         {

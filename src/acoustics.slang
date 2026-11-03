@@ -17,7 +17,7 @@
 //     traces, through the very same `grid_bvh` module, and accumulating what arrives into a
 //     histogram of energy against delay.
 //
-//     `src/acoustics.hpp` is the specification and this file mirrors it, exactly as `trace.slang`
+//     `src/acoustics.hpp` is the specification and this file mirrors it, exactly as `grid_bvh.slang`
 //     mirrors `libs/bvh`. A change to one that is not mirrored in the other is a bug in this file,
 //     whichever one is "right", and `--verify-acoustics` exists to catch precisely that.
 //
@@ -273,8 +273,8 @@ void acousticMain(uint3 group_id: SV_GroupID, uint3 local_id: SV_GroupThreadID)
             */
             // Out to world space first: the edges are in the instance's own frame, and the ray this
             // reflects is a world-space ray. Exact for a rigid placement, which is what a body is,
-            // and wrong for a non-uniformly scaled one — the same caveat trace.slang carries, for the
-            // same reason, and nothing places a scaled instance today.
+            // and wrong for a non-uniformly scaled one — the same caveat grid_optics.slang carries, for
+            // the same reason, and nothing places a non-uniformly scaled instance.
             const Instance instance = instances[hit.instance];
             const float3 local_normal = cross(triangle.edge1, triangle.edge2);
             const float3 face_normal = normalize(transformDirection(instance.to_world_row0, instance.to_world_row1, instance.to_world_row2, local_normal));

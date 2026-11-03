@@ -60,7 +60,7 @@ namespace WindowLib
         static LRESULT CALLBACK wndProcStatic(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
         //! Instance window procedure handling Win32 messages.
-        LRESULT wndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
+        [[nodiscard]] LRESULT wndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
         HWND m_hwnd{nullptr}; //!< Native window handle.
         HINSTANCE m_hinstance{nullptr}; //!< Application instance handle.
@@ -83,7 +83,7 @@ namespace WindowLib
         int32_t m_warp_target_x{0};
         int32_t m_warp_target_y{0};
 
-        static constexpr const wchar_t* CLASS_NAME = L"TronGridLiteWindowClass"; //!< Win32 window class name.
+        static constexpr const wchar_t* CLASS_NAME{L"TronGridLiteWindowClass"}; //!< Win32 window class name.
         static bool m_class_registered; //!< Tracks whether the Win32 window class has been registered.
     };
 

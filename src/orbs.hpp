@@ -16,11 +16,9 @@
 #pragma once
 
 #include "components.hpp"
-
 #include <bvh/bvh.hpp>
 #include <lnk/lnk_protocol.h>
 #include <math/matrix.hpp>
-
 #include <cstdint>
 #include <vector>
 

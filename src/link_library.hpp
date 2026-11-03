@@ -16,7 +16,6 @@
 #pragma once
 
 #include <lnk/lnk_client.h>
-
 #include <cstdint>
 #include <filesystem>
 

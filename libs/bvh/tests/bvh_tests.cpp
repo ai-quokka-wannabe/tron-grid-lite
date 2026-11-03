@@ -547,7 +547,7 @@ TEST_CASE(a_skipped_instance_is_transparent_to_the_ray)
     const BvhLib::Hit past_both{BvhLib::intersectScene(scene, origin, forward, 100.0f, 0u, 1u)};
     TEST_CHECK(!past_both.valid);
 
-    // And NO_INSTANCE skips nothing, which is every caller that predates bodies.
+    // And NO_INSTANCE skips nothing.
     const BvhLib::Hit unskipped{BvhLib::intersectScene(scene, origin, forward, 100.0f, BvhLib::NO_INSTANCE, BvhLib::NO_INSTANCE)};
     TEST_CHECK(unskipped.valid);
     TEST_CHECK_EQUAL(unskipped.instance, 1u);
@@ -574,8 +574,8 @@ TEST_CASE(an_instance_naming_a_missing_geometry_is_skipped_not_crashed)
 {
     /*
         The skip exists in intersectScene and is otherwise exercised only through flatten's
-        node-count-zero spelling of it. Phase 6 is when instances start being added and removed at
-        runtime, which is exactly when a stale geometry index becomes possible.
+        node-count-zero spelling of it. A scene whose instances change at runtime is exactly where a
+        stale geometry index becomes possible.
     */
     BvhLib::Bvh geometry{BvhLib::build({makeTriangle(MathLib::Vec3{-1.0f, -1.0f, -5.0f}, MathLib::Vec3{1.0f, -1.0f, -5.0f}, MathLib::Vec3{0.0f, 1.0f, -5.0f})})};
 

@@ -19,10 +19,8 @@
 #include "senses.hpp"
 #include "vulkan_helpers.hpp"
 #include "world.hpp"
-
 #include <logging/logger.hpp>
 #include <math/vector.hpp>
-
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -73,17 +71,17 @@ public:
 
         \param rays Origin, direction interleaved: ray i is elements 2i and 2i + 1, w ignored.
         \param max_bounces Total ray segments per sample, at least 1.
-        \return One radiance triple per ray, in ray order, in the w component nothing.
+        \return One radiance triple per ray, in ray order, with nothing in the w component.
     */
     [[nodiscard]] std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t max_bounces) override;
 
 private:
-    const Device* m_device; //!< Non-owning.
-    const World* m_world; //!< Non-owning.
+    const Device* m_device{nullptr}; //!< Non-owning.
+    const World* m_world{nullptr}; //!< Non-owning.
 
-    uint32_t m_max_rays; //!< Capacity of the ray and result buffers.
-    uint32_t m_instance_capacity; //!< Placements the instance buffer was sized for.
-    uint32_t m_instance_count; //!< Placements the next solve traces against.
+    uint32_t m_max_rays{0u}; //!< Capacity of the ray and result buffers.
+    uint32_t m_instance_capacity{0u}; //!< Placements the instance buffer was sized for.
+    uint32_t m_instance_count{0u}; //!< Placements the next solve traces against.
 
     MemoryArena m_device_arena; //!< Holds the material table.
     MemoryArena m_host_arena; //!< Holds the mapped buffers below.

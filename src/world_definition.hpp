@@ -18,18 +18,16 @@
 #include "acoustics.hpp"
 #include "components.hpp"
 #include "geometry.hpp"
-
 #include <bvh/bvh.hpp>
-
 #include <vector>
 
 /*!
     The Grid the whole world agrees on: its floor, its geometry, its materials, its mirrors.
 
     One assembly for every consumer, which is the entire point of this header. The renderer
-    uploads what `buildGridTriangles` returns, the headless Program run gathers hearing from it,
-    and Master Control will one day step physics against the very same floor — so a creature
-    necessarily hears the Grid the User would see, rather than a second copy maintained in step.
+    uploads what `buildGridTriangles` returns, the creature host gathers hearing from it, and
+    Master Control steps physics against a Rust port of the same ground function, held to this one
+    bit-exactly by golden vectors — so a creature necessarily hears the Grid the User would see, rather than a second copy maintained in step.
     That is why this lives outside `main.cpp`: a truth with more than one consumer cannot live in
     the anonymous namespace of one of them (`docs/TOPOLOGY.md` § The four repositories).
 
@@ -53,20 +51,20 @@ inline constexpr GridFloorConfig GRID_FLOOR_CONFIG{.cells = 64u, .cell_size = 2.
 /*!
     Every triangle of the Grid, materials assigned, ready for `BvhLib::build`.
 
-    One assembly for every consumer: the renderer uploads what this returns, and the headless
-    Program run gathers hearing from it — so a creature necessarily hears the very Grid the User
+    One assembly for every consumer: the renderer uploads what this returns, and the creature host
+    gathers hearing from it — so a creature necessarily hears the very Grid the User
     would see, rather than a second copy maintained in step.
 */
 [[nodiscard]] std::vector<BvhLib::Triangle> buildGridTriangles();
 
 /*!
-    The Grid's acoustic mirror planes: every terrace level the floor can quantise to, and the
-    outward faces of everything standing on it.
+    The Grid's acoustic mirror planes: every terrace level the floor can quantise to, every riser
+    of the drawn floor, and the outward faces of everything standing on it.
 
     Derived from the very config the floor is generated from and the very placements the box
     meshes are built from, so the candidate list cannot drift from the geometry the validation
-    rays then test it against. The list proposes; the Grid disposes. Ten boxes of five faces
-    and seven candidate levels — the top one exists only where the noise reaches exactly one,
+    rays then test it against. The list proposes; the Grid disposes. Every riser, ten boxes of
+    five faces and seven candidate levels — the top one exists only where the noise reaches exactly one,
     which the shipped landscape never does, so it is a candidate that validation rejects
     everywhere rather than an echo that arrives from nowhere.
 */

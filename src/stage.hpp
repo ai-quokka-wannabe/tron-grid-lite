@@ -17,10 +17,8 @@
 #include "components.hpp"
 #include "roster.hpp"
 #include "world_client.hpp"
-
 #include <bvh/bvh.hpp>
 #include <math/matrix.hpp>
-
 #include <cstdint>
 #include <unordered_map>
 #include <vector>

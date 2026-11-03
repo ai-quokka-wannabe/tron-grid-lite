@@ -157,15 +157,22 @@ namespace Acoustics
 
             const MathLib::Vec3 direction{offset * (1.0f / length)};
             const BvhLib::Hit hit{BvhLib::intersectScene(scene, from, direction, length + SURFACE_EPSILON, skip_a, skip_b)};
-            if (!hit.valid || (std::fabs(hit.distance - length) > SURFACE_EPSILON)) {
+            if ((!hit.valid) || (std::fabs(hit.distance - length) > SURFACE_EPSILON)) {
                 return false;
             }
 
             return std::fabs(struckFaceNormal(scene, hit).dot(plane_normal)) >= MIRROR_ALIGNMENT_MINIMUM;
         }
 
+        //! A reflection point and the total path through it, or `valid == false`.
+        struct MirrorPath {
+            MathLib::Vec3 point{}; //!< Where the path meets the mirror plane.
+            float path{0.0f}; //!< Source to point to ear, in metres.
+            bool valid{false}; //!< False when the plane offers no reflection.
+        };
+
         /*!
-            One validated image-source path, or nothing.
+            One image-source path, constructed but not yet validated, or nothing.
 
             The construction is the classical one: mirror the source in the plane, and the straight
             line from the image to the ear crosses the plane at the reflection point, with the
@@ -177,12 +184,6 @@ namespace Acoustics
             \param plane_distance The plane as `dot(normal, x) == distance`.
             \return The reflection point and total path, or `valid == false`.
         */
-        struct MirrorPath {
-            MathLib::Vec3 point{};
-            float path{0.0f};
-            bool valid{false};
-        };
-
         [[nodiscard]] MirrorPath mirrorInPlane(const MathLib::Vec3& source, const MathLib::Vec3& ear, const MathLib::Vec3& plane_normal, float plane_distance)
         {
             const float side_source{plane_normal.dot(source) - plane_distance};
@@ -219,7 +220,7 @@ namespace Acoustics
         void deliverImage(ImpulseResponse& response, const BvhLib::Scene& scene, const MathLib::Vec3& source, float strength, const MathLib::Vec3& ear,
             const CallConfig& config, const MathLib::Vec3& plane_normal, const MirrorPath& mirror, float radial_velocity)
         {
-            if (!mirror.valid || (mirror.path > config.range_metres)) {
+            if ((!mirror.valid) || (mirror.path > config.range_metres)) {
                 return;
             }
 
@@ -403,7 +404,7 @@ namespace Acoustics
         }
 
         // The radial velocity: how fast the path from ear to source lengthens - positive
-        // receding, negative approaching - from the settled velocities the gather already reads.
+        // receding, negative approaching - from the settled velocities the config carries.
         const MathLib::Vec3 ear_to_source{source - ear};
         const float separation{ear_to_source.length()};
         const float radial_velocity{(separation > 1e-6f) ? (config.source_velocity - config.listener_velocity).dot(ear_to_source * (1.0f / separation)) : 0.0f};
@@ -444,7 +445,7 @@ namespace Acoustics
             deliverImage(response, scene, source, strength, ear, config, up, mirrorInPlane(source, ear, up, height), radial_velocity);
         }
 
-        // The box faces: finite rectangles, so the reflection point must land inside the face
+        // The rectangular faces, risers and box faces alike: finite, so the reflection point must land inside the face
         // before any ray is spent on it. The edges are perpendicular by RectFace's own contract,
         // which is what lets each coordinate be tested independently.
         for (const RectFace& face : reflectors.faces) {

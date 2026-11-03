@@ -14,9 +14,7 @@
 */
 
 #include "world_host.hpp"
-
 #include "world_client.hpp"
-
 #include <algorithm>
 #include <array>
 #include <stdexcept>
@@ -233,7 +231,7 @@ namespace WorldHostLib
                 body.vertices.assign(told.vertices, told.vertices + told.rez.vertex_count);
                 body.triangles.assign(told.triangles, told.triangles + told.rez.triangle_count);
                 body.materials.assign(told.materials, told.materials + told.rez.material_count);
-                const auto previous{m_guest_bodies.find(told.rez.creature_id)};
+                const std::unordered_map<std::uint32_t, WorldClientLib::Body>::const_iterator previous{m_guest_bodies.find(told.rez.creature_id)};
                 const bool shape_changes{!body.empty() || ((previous != m_guest_bodies.end()) && !previous->second.empty())};
                 m_guest_bodies[told.rez.creature_id] = std::move(body);
                 // A shape stands on the stage only once the world has placed it: a body whose
@@ -244,7 +242,8 @@ namespace WorldHostLib
                 break;
             }
             case LNK_MSG_DEREZ:
-                if (const auto body{m_guest_bodies.find(view.as.derez.creature_id)}; body != m_guest_bodies.end()) {
+                if (const std::unordered_map<std::uint32_t, WorldClientLib::Body>::const_iterator body{m_guest_bodies.find(view.as.derez.creature_id)};
+                    body != m_guest_bodies.end()) {
                     if (!body->second.empty() && m_placed_guests.contains(view.as.derez.creature_id)) {
                         ++m_guest_shapes_generation;
                     }
@@ -414,7 +413,7 @@ namespace WorldHostLib
             // A guest the world has now placed for the first time may take the stage.
             for (const Stage::GuestTelling& guest : m_guests) {
                 if (m_placed_guests.insert(guest.creature_id).second) {
-                    const auto body{m_guest_bodies.find(guest.creature_id)};
+                    const std::unordered_map<std::uint32_t, WorldClientLib::Body>::const_iterator body{m_guest_bodies.find(guest.creature_id)};
                     if ((body != m_guest_bodies.end()) && !body->second.empty()) {
                         ++m_guest_shapes_generation;
                     }
@@ -426,7 +425,7 @@ namespace WorldHostLib
 
     void Host::act()
     {
-        // The world did not wait for the mind. Whatever it told while the Program thought is read
+        // The world did not wait for the Program. Whatever it told while the Program thought is read
         // first, so the intent is tagged for the tick the world will step next - never for one it
         // has already stepped, which Master Control would refuse as stale, on the record.
         drain();

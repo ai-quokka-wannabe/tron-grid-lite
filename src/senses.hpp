@@ -17,11 +17,9 @@
 #include "acoustics.hpp"
 #include "roster.hpp"
 #include "stage.hpp"
-
 #include <bvh/bvh.hpp>
 #include <math/vector.hpp>
 #include <tgl/tgl_program_abi.h>
-
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -110,7 +108,7 @@ public:
         \param radiance_solver Answers eye and irradiance rays. May be null, in which case a body
                declaring either sense is refused. Borrowed; must outlive this source.
         \param stage The creatures' standing in the scene. May be null for a run whose bodies never
-               move and never occlude — every test that predates bodies. When present, `scene` must
+               move and never occlude, such as a test with no bodies. When present, `scene` must
                be the stage's own scene, because the instances this source skips are indices into
                it. Borrowed; must outlive this source.
     */
@@ -123,8 +121,7 @@ public:
         Read from the roster physics has settled rather than from staged intent, because staged
         copies are overwritten one by one as Programs run and a mid-loop read would hear a tick
         that never happened. Cheap by construction — a handful of comparisons — and cleared every
-        tick, so a tick nobody announces is a silent one, which keeps every fill outside a roster
-        exactly as it was before calls existed.
+        tick, so a tick nobody announces is a silent one.
     */
     void beginTick(const std::vector<RosterLib::Creature>& creatures) override;
 
@@ -245,21 +242,23 @@ private:
     //! Returns this creature's vision state, creating it on first sight.
     [[nodiscard]] CreatureVision& visionStateFor(const TglCreatureDesc& body);
 
+    //! Fills one creature's ears: the cached hum, plus this tick's sounds when any are sounding.
     void fillEars(const RosterLib::Creature& creature, TglSenses& senses);
+
+    //! Fills one creature's eyes and irradiance, re-solving only when the pose or a body moved.
     void fillVision(const RosterLib::Creature& creature, TglSenses& senses);
 
     const BvhLib::Scene& m_scene; //!< The Grid. Non-owning.
     std::vector<float> m_source_strengths; //!< Acoustic strength per material slot.
     Acoustics::Reflectors m_reflectors; //!< Mirror planes for a call's early reflections.
-    RadianceSolver* m_radiance_solver; //!< Answers eye and irradiance rays. Non-owning; may be null.
-    Stage* m_stage; //!< The bodies' standing in the scene. Non-owning; may be null.
+    RadianceSolver* m_radiance_solver{nullptr}; //!< Answers eye and irradiance rays. Non-owning; may be null.
+    Stage* m_stage{nullptr}; //!< The bodies' standing in the scene. Non-owning; may be null.
 
     /*!
         True while any body has moved since the last tick, which stales every traced-sense cache.
 
-        The caches key on the listener's own pose because that used to be everything a solve read;
-        a body standing in the scene is read too, so a tick on which one moved must re-solve even
-        for a listener that held still. Bodiless rosters never set it, and pay nothing.
+        The caches key on the listener's own pose, but a solve reads every body standing in the
+        scene as well, so a tick on which one moved must re-solve even for a listener that held still. Bodiless rosters never set it, and pay nothing.
     */
     bool m_bodies_moved{false};
     std::vector<RosterLib::Pose> m_last_body_poses; //!< One per modelled creature, in roster order.

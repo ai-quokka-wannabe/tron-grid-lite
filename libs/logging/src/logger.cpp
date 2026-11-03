@@ -118,7 +118,7 @@ namespace LoggingLib
             here instead, with no interleaving left to fear.
         */
         const std::size_t target{m_enqueued.load(std::memory_order_acquire)};
-        while ((m_written.load(std::memory_order_acquire) < target) && !m_worker_exited.load(std::memory_order_acquire)) {
+        while ((m_written.load(std::memory_order_acquire) < target) && (!m_worker_exited.load(std::memory_order_acquire))) {
             m_cv.notify_one();
             std::this_thread::yield();
         }

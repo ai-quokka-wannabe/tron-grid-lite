@@ -258,14 +258,14 @@ uint32_t Device::survey(const Instance& instance, VkSurfaceKHR surface, LoggingL
         const std::string reason{rejectionReason(physical_devices[index], surface)};
         const int score{rateDevice(physical_devices[index], surface)};
 
-        std::string line{"  [" + std::to_string(index) + "] " + properties.deviceName.data() + " — " + deviceTypeName(properties.deviceType) + ", Vulkan "
+        std::string line{"  [" + std::to_string(index) + "] " + properties.deviceName.data() + " - " + deviceTypeName(properties.deviceType) + ", Vulkan "
             + formatVersion(properties.apiVersion)};
 
         if (reason.empty()) {
             ++usable;
-            logger.logInfo(line + " — USABLE, score " + std::to_string(score) + ". Run with --gpu " + std::to_string(index) + ".");
+            logger.logInfo(line + " - USABLE, score " + std::to_string(score) + ". Run with --gpu " + std::to_string(index) + ".");
         } else {
-            logger.logInfo(line + " — unusable: " + reason + ".");
+            logger.logInfo(line + " - UNUSABLE: " + reason + ".");
         }
     }
 

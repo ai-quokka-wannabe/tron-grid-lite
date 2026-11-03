@@ -29,7 +29,6 @@
 
 #include <math.h>
 #include <stdlib.h>
-
 #include <tgl/tgl_program_abi.h>
 
 static int g_creature_state = 0;

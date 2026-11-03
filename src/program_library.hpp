@@ -15,7 +15,6 @@
 #pragma once
 
 #include <tgl/tgl_program_abi.h>
-
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>

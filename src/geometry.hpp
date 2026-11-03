@@ -73,8 +73,8 @@ static_assert(std::is_trivially_copyable_v<Vertex>, "Vertex must be trivially co
 
     Because the vertices are per-face, `indices` is always the trivial sequence 0, 1, 2, 3, … and
     `vertices.size()` is always a multiple of three. It is kept anyway because an index buffer is
-    what both the rasteriser and the eventual BVH triangle table want, and because a later
-    welding or deduplication pass would only have to change the generators, not their consumers.
+    what the BVH triangle table reads, and because a later welding or deduplication pass would
+    then only have to change the generators, not their consumers.
 */
 struct Mesh {
     std::vector<Vertex> vertices; //!< Per-face vertices — three per triangle, no shared-vertex indexing.
@@ -95,8 +95,8 @@ struct Mesh {
     /*!
         Appends another mesh, shifting its indices so they address the merged vertex array.
 
-        This is how the several sub-meshes of the Grid are concatenated into the single flat
-        triangle buffer that the `Geometry` component slices with a first-triangle/count pair.
+        This is how the several sub-meshes of the Grid are concatenated into the one triangle soup
+        the hierarchy builder indexes.
 
         \param other Mesh to append. Left unchanged.
     */
@@ -110,7 +110,7 @@ struct Mesh {
     genuinely vertical risers wherever neighbouring levels differ. The relief decides where the
     terraces are; the drawn floor holds every facet horizontal or vertical, with nothing tilted in
     between. The risers cost triangles — two per stepped cell boundary, on top of the two every
-    cell always had — and they are the whole point.
+    cell has — and they are the whole point.
 
     It earns its place twice over. Optically, the stepped mirror breaks the neon into terrace-edge
     lines with dark cliffs beneath them, which reads as something built rather than grown.
@@ -180,14 +180,11 @@ struct NeonGrid {
 /*!
     Returns the height of the floor surface at a world-space position.
 
-    Deterministic, stateless and continuous: the same coordinates always give the same height, on
-    every machine and every run, which is what a reproducible recording requires. Anything that
-    must sit on the floor calls this rather than assuming zero — the floor mesh, the neon tubes
-    laid along its grid lines, and every object planted on it.
-
-    Sampling by world position rather than by grid index is what lets an object standing at an
-    arbitrary place find its own ground; the floor and the tubes agree exactly because they pass
-    the same coordinates, computed the same way, from the same integer grid.
+    Deterministic and stateless: the same coordinates always give the same height, on every
+    machine and every run, which is what a reproducible recording requires. This is the analytic
+    relief the drawn floor is derived from — the floor's cells and the neon's lips sample it at
+    cell centres, so the two agree exactly — and anything that must stand on the drawn floor asks
+    `gridMeshHeight` instead.
 
     \param world_x World-space X, in metres.
     \param world_z World-space Z, in metres.
@@ -260,7 +257,7 @@ struct GridWall {
 
     These walls are what make monostatic echolocation real on the Grid: a call emitted towards a
     riser strikes a genuinely vertical face and comes straight back, where the tilted facets of a
-    corner-sampled heightfield deflected it skyward.
+    corner-sampled heightfield would deflect it skyward.
 
     \param config Floor dimensions and relief.
     \return One wall per cell boundary whose neighbouring levels differ. Empty for a flat floor.
@@ -268,12 +265,14 @@ struct GridWall {
 [[nodiscard]] std::vector<GridWall> gridRiserWalls(const GridFloorConfig& config);
 
 /*!
-    Generates the grid floor: a subdivided plane displaced by `gridSurfaceHeight`.
+    Generates the grid floor: one flat quad per cell at the cell's own level, joined by the
+    vertical risers of `gridRiserWalls`.
 
     This is the Grid's default surface and the first thing the BVH indexes. Face normals are
-    derived from the displaced triangles rather than assumed upward, so the relief shades and
-    reflects correctly. Vertices carry a `uv` measured in grid cells from the centre of the floor,
-    so a shader can derive grid-line coordinates from `uv` alone without knowing the world extent.
+    derived from each triangle's own edges, so a riser faces the lower cell's air. A cell's
+    vertices carry a `uv` measured in grid cells from the centre of the floor, so a shader can
+    derive grid-line coordinates from `uv` alone without knowing the world extent; a riser's `uv`
+    runs along and up the wall, in cell units.
 
     \param config Floor dimensions and relief.
     \return Mesh with per-face vertices and trivial indices.
@@ -281,9 +280,10 @@ struct GridWall {
 [[nodiscard]] Mesh generateGridFloor(const GridFloorConfig& config);
 
 /*!
-    Generates neon tubes along every grid line of a flat grid floor.
+    Generates neon tubes along every grid line of the grid floor.
 
-    One thin quad is emitted per grid edge, lifted slightly above the floor. Every edge whose row
+    One thin quad is emitted per grid edge, lying flat on the higher of the two cell levels the
+    edge borders and lifted slightly above it. Every edge whose row
     or column index is a multiple of `NeonTubeConfig::major_interval` goes to the accent sub-mesh,
     the rest to the primary sub-mesh. Vertices carry `uv.x` running 0 to 1 along the tube and
     `uv.y` being 0 or 1 across its width, so a shader can fade a tube towards its ends if it wants.

@@ -21,12 +21,10 @@
 */
 
 #include "../audio.hpp"
-
+#include <testing/testing.hpp>
 #include <cmath>
 #include <cstdint>
 #include <vector>
-
-#include <testing/testing.hpp>
 
 namespace
 {
@@ -42,7 +40,7 @@ namespace
     [[nodiscard]] Channels peaks(const std::vector<float>& stereo)
     {
         Channels result{};
-        for (std::size_t frame{0u}; frame < stereo.size() / 2u; ++frame) {
+        for (std::size_t frame{0u}; frame < (stereo.size() / 2u); ++frame) {
             result.left = std::max(result.left, std::fabs(stereo[frame * 2u]));
             result.right = std::max(result.right, std::fabs(stereo[(frame * 2u) + 1u]));
         }
@@ -53,10 +51,10 @@ namespace
     [[nodiscard]] std::uint32_t crossings(const std::vector<float>& stereo)
     {
         std::uint32_t count{0u};
-        for (std::size_t frame{1u}; frame < stereo.size() / 2u; ++frame) {
+        for (std::size_t frame{1u}; frame < (stereo.size() / 2u); ++frame) {
             const float a{stereo[(frame - 1u) * 2u]};
             const float b{stereo[frame * 2u]};
-            if ((a < 0.0f && b >= 0.0f) || (a >= 0.0f && b < 0.0f)) {
+            if (((a < 0.0f) && (b >= 0.0f)) || ((a >= 0.0f) && (b < 0.0f))) {
                 ++count;
             }
         }
@@ -73,7 +71,7 @@ namespace
         return stereo;
     }
 
-}
+} // namespace
 
 TEST_CASE(silence_is_zeros_and_a_finished_voice_retires)
 {
@@ -96,14 +94,14 @@ TEST_CASE(a_sound_to_the_right_is_louder_on_the_right_and_a_far_one_is_quieter)
     const AudioLib::Listener listener{};
     const AudioLib::Sound right{.kind = AudioLib::SoundKind::Ping, .creature_id = 3u, .position = {2.0f, 0.0f, 0.0f}, .velocity = {}, .strength = 1.0f};
     const Channels right_peaks{peaks(renderOne(right, listener, 2048u))};
-    TEST_CHECK(right_peaks.right > right_peaks.left * 4.0f);
+    TEST_CHECK(right_peaks.right > (right_peaks.left * 4.0f));
 
     const AudioLib::Sound ahead{.kind = AudioLib::SoundKind::Ping, .creature_id = 3u, .position = {0.0f, 0.0f, -2.0f}, .velocity = {}, .strength = 1.0f};
     const Channels ahead_peaks{peaks(renderOne(ahead, listener, 2048u))};
     TEST_CHECK_CLOSE(ahead_peaks.left, ahead_peaks.right, 1e-4f);
 
     const AudioLib::Sound far{.kind = AudioLib::SoundKind::Ping, .creature_id = 3u, .position = {0.0f, 0.0f, -40.0f}, .velocity = {}, .strength = 1.0f};
-    TEST_CHECK(peaks(renderOne(far, listener, 2048u)).left < ahead_peaks.left * 0.25f);
+    TEST_CHECK(peaks(renderOne(far, listener, 2048u)).left < (ahead_peaks.left * 0.25f));
 
     // A scratch is a sound too, and a silent strength is silence.
     const AudioLib::Sound scratch{.kind = AudioLib::SoundKind::Scratch, .creature_id = 3u, .position = {0.0f, 0.0f, -2.0f}, .velocity = {}, .strength = 0.5f};
@@ -126,9 +124,9 @@ TEST_CASE(an_approaching_source_is_higher_and_a_receding_one_lower)
     const std::uint32_t base{crossings(renderOne(still, listener, FRAMES))};
     const std::uint32_t up{crossings(renderOne(approaching, listener, FRAMES))};
     const std::uint32_t down{crossings(renderOne(receding, listener, FRAMES))};
-    TEST_CHECK(base >= 86u && base <= 90u);
-    TEST_CHECK(up > base + 6u); // 440 * 1/0.9 = 489 Hz: ~98 crossings
-    TEST_CHECK(down < base - 6u); // 440 * 1/1.1 = 400 Hz: ~80 crossings
+    TEST_CHECK((base >= 86u) && (base <= 90u));
+    TEST_CHECK(up > (base + 6u)); // 440 * 1/0.9 = 489 Hz: ~98 crossings
+    TEST_CHECK(down < (base - 6u)); // 440 * 1/1.1 = 400 Hz: ~80 crossings
     // And a sideways source, not closing, keeps its pitch exactly.
     const AudioLib::Sound sideways{
         .kind = AudioLib::SoundKind::Ping, .creature_id = 0u, .position = {0.0f, 0.0f, -20.0f}, .velocity = {34.3f, 0.0f, 0.0f}, .strength = 1.0f};
@@ -164,8 +162,8 @@ TEST_CASE(an_eaten_orb_goes_with_a_pew_that_falls_and_is_soon_over)
     std::vector<float> middle(static_cast<std::size_t>(TENTH) * 2u, 0.0f);
     mixer.render(early.data(), TENTH);
     mixer.render(middle.data(), TENTH);
-    TEST_CHECK(crossings(early) > crossings(middle) + 20u);
-    TEST_CHECK(peaks(early).right > peaks(early).left * 2.0f);
+    TEST_CHECK(crossings(early) > (crossings(middle) + 20u));
+    TEST_CHECK(peaks(early).right > (peaks(early).left * 2.0f));
 
     // A few hundred milliseconds and it is over.
     std::vector<float> rest(2u * RATE, 0.0f);

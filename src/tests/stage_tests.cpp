@@ -14,9 +14,7 @@
 
 #include "../orbs.hpp"
 #include "../stage.hpp"
-
 #include <testing/testing.hpp>
-
 #include <array>
 #include <cstdint>
 #include <cstring>

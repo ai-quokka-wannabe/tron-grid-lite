@@ -19,7 +19,6 @@
 #include "roster.hpp"
 #include "stage.hpp"
 #include "world_client.hpp"
-
 #include <chrono>
 #include <cstdint>
 #include <string>
@@ -35,10 +34,10 @@
     Program library, dialled into the world as a creature host. It rezzes each creature the
     Program drives — its bounds and the render model the Grid accepted at rez — reads the world's
     telling (`TICK_STATE` for the pose, the owner's letter `PROPRIOCEPTION` for the body's feel),
-    hands both to the roster so the minds can tick, and sends every mind's intent back as
+    hands both to the roster so the Programs can tick, and sends every Program's intent back as
     `ACTIONS`, the previous tick's intent piggybacked per the silence rules.
 
-    The host has no clock of its own. It ticks the minds when the world has told a tick whole —
+    The host has no clock of its own. It ticks the Programs when the world has told a tick whole —
     every own body's letter received after that tick's rows — and never interpolates, predicts or
     extrapolates on the sense path: senses come from authoritative tick-N state only.
 */
@@ -65,7 +64,7 @@ namespace WorldHostLib
         /*!
             Drains the wire: rows into the roster's poses, letters into the roster's bodies, PING
             answered, the relay of other bodies noted. Never blocks. Returns true when a tick has
-            been told whole since the last call — the moment the minds may tick.
+            been told whole since the last call — the moment the Programs may tick.
             \throws std::runtime_error when Master Control is gone, said BYE, or refused a frame.
         */
         [[nodiscard]] bool poll();
@@ -74,7 +73,7 @@ namespace WorldHostLib
             Sends every creature's staged intent, the previous intent piggybacked, and flushes.
             Call after `RosterLib::Roster::tick`. Drains the wire first, so the intent is tagged
             for the tick the world will step next even when the world told another tick while the
-            mind was thinking; a tick made whole by that drain is handed over by the next poll().
+            Program was thinking; a tick made whole by that drain is handed over by the next poll().
         */
         void act();
 

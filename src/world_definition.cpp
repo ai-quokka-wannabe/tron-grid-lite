@@ -14,9 +14,7 @@
 */
 
 #include "world_definition.hpp"
-
 #include <math/vector.hpp>
-
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -35,8 +33,8 @@ namespace
         samples geometry analytically and has no depth buffer at all, so the tubes can be the slender
         lines the aesthetic actually wants.
 
-        The lift clears the steepest terrace gradient across the tube's half width; at 0.01 m the
-        outer edge of a strip dipped below the floor on riser cells.
+        The lift only has to clear coplanarity with the flat terrace top a tube lies on (see
+        `NeonTubeConfig::surface_offset`).
     */
     constexpr NeonTubeConfig NEON_TUBE_CONFIG{.half_width = 0.025f, .surface_offset = 0.02f};
 
@@ -121,8 +119,8 @@ namespace
         A few blocks standing off the floor.
 
         Their purpose is not decoration. A perfectly flat Grid has nothing to reflect: the tubes
-        lie a centimetre above the mirror, so their reflection sits a centimetre below and merges
-        with the tube itself. Geometry with height is what makes the second ray segment visible,
+        lie two centimetres above the mirror, so their reflection sits two centimetres below and
+        merges with the tube itself. Geometry with height is what makes the second ray segment visible,
         and it is the only way to see at a glance whether the mirror is working.
     */
     [[nodiscard]] std::vector<PlacedBox> pillarPlacements(const GridFloorConfig& floor_config)
@@ -185,7 +183,7 @@ namespace
         return mesh;
     }
 
-}
+} // namespace
 
 std::vector<Material> makeMaterials()
 {

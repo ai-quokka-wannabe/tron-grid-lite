@@ -14,6 +14,7 @@
 
 #include "world.hpp"
 #include "device.hpp"
+#include <stdexcept>
 #include <string>
 
 namespace
@@ -27,8 +28,7 @@ namespace
 
         The Grid is an instance like any other, and it goes through `makeInstance` and `flatten`
         rather than round the side of them. That is the point: the path a creature body takes is
-        the path the only body in the world took for every frame this renderer had drawn before
-        bodies existed, instead of a path a test promised worked.
+        the path every frame of the Grid takes, rather than a path only a test promises works.
 
         An identity placement also makes the two-level traversal free to verify: one instance at
         the identity must produce, to the bit, the picture that traversing the geometry directly
@@ -52,6 +52,10 @@ World::World(const Device& device, const BvhLib::Bvh& bvh, LoggingLib::Logger& l
 World::World(const Device& device, const BvhLib::FlatScene& flat, LoggingLib::Logger& logger) :
     m_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, BUFFER_BLOCK_BYTES)
 {
+    if (flat.instances.empty()) {
+        throw std::runtime_error{"The Grid needs at least one placement to upload; an empty Grid is still placed."};
+    }
+
     m_node_count = static_cast<uint32_t>(flat.nodes.size());
     m_triangle_count = static_cast<uint32_t>(flat.triangles.size());
     m_instance_count = static_cast<uint32_t>(flat.instances.size());

@@ -17,9 +17,7 @@
 
 #include "components.hpp"
 #include "world_client.hpp"
-
 #include <bvh/bvh.hpp>
-
 #include <cstdint>
 #include <unordered_map>
 #include <vector>

@@ -49,7 +49,6 @@
 #include "world_definition.hpp"
 #include "world_host.hpp"
 #include "world_stage.hpp"
-
 #include <lnk/lnk_protocol.h>
 #include "surface.hpp"
 #include "swapchain.hpp"
@@ -907,7 +906,7 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     ears, exactly as the sensor interface was built for. The roster rezzes the Program's bodies;
     the host rezzes them into the world; then, for as long as the world tells ticks (or for
     `ticks` of them, when bounded), each whole telling — the rows and every own body's letter —
-    is handed to the roster, the minds tick against senses answered by the very `radiance` the
+    is handed to the roster, the Programs tick against senses answered by the very `radiance` the
     User's window renders with, and every intent goes back over the wire for Master Control's
     physics to judge and act on. Poses advance only by the world's telling; this process moves
     nothing itself.
@@ -968,8 +967,8 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
         + std::to_string(host.welcome().client_id) + "; creature " + std::to_string(host.wireIdentity(0u)) + " rezzed from Program \"" + program_identifier + "\".");
 
     const uint64_t first_tick{host.toldTick()};
-    uint64_t minds_ticked{0u};
-    while ((ticks == 0u) || (minds_ticked < ticks)) {
+    uint64_t programs_ticked{0u};
+    while ((ticks == 0u) || (programs_ticked < ticks)) {
         if (!host.poll()) {
             // Nothing whole yet: the world is the clock, and a host that spins would buy nothing
             // but heat. A millisecond is a thirtieth of a tick.
@@ -996,11 +995,11 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
         stage.update(roster.creatures());
         roster.tick(*senses_source);
         host.act();
-        ++minds_ticked;
+        ++programs_ticked;
     }
 
     const RosterLib::Creature& creature{roster.creatures().front()};
-    logger.logInfo("Hosted for " + std::to_string(minds_ticked) + " world ticks (" + std::to_string(first_tick + 1u) + " to " + std::to_string(host.toldTick())
+    logger.logInfo("Hosted for " + std::to_string(programs_ticked) + " world ticks (" + std::to_string(first_tick + 1u) + " to " + std::to_string(host.toldTick())
         + "). Creature at (" + std::to_string(creature.pose.position.x) + ", " + std::to_string(creature.pose.position.y) + ", "
         + std::to_string(creature.pose.position.z) + "), facing " + std::to_string(creature.pose.yaw) + " rad, moving at " + std::to_string(creature.forward_speed)
         + " m/s, " + (creature.grounded ? "grounded" : "airborne") + ", " + std::to_string(creature.contacts.size()) + " contact(s). Leaving.");
@@ -1449,8 +1448,8 @@ int main(int argc, char** argv)
     LoggingLib::Logger logger;
 
     try {
-        // No phase number. It was two behind by the time anybody noticed, because nothing anywhere
-        // checks a number printed in a banner and the roadmap it names lives in another file.
+        // No phase number: nothing anywhere checks a number printed in a banner, and the roadmap
+        // it would name lives in another file.
         logger.logInfo("TronGrid Lite - the Grid, a world for Programs.");
 
         /*
@@ -1522,7 +1521,6 @@ int main(int argc, char** argv)
         //! Report every Program in the directory and whether each one loads, then exit.
         bool list_programs{false};
 
-        //! Ticks to run the named Program for. Zero checks it and stops without rezzing anything.
         uint32_t record_width{1280u};
         uint32_t record_height{720u};
         uint32_t record_frames{240u};
@@ -1535,13 +1533,18 @@ int main(int argc, char** argv)
                 which negates a leading minus into the unsigned result rather than failing, so
                 "--frames -1" would quietly become 4294967295 frames. Parsing straight into the
                 uint32_t makes a negative, a non-number and an out-of-range value the same error.
+                A flag whose value is missing is refused too, rather than quietly left at its
+                default.
             */
-            const auto value = [&](uint32_t fallback) -> uint32_t {
+            const auto text_after = [&]() -> const char* {
                 if ((index + 1) >= argc) {
-                    return fallback;
+                    throw std::runtime_error{argument + " needs a value after it."};
                 }
 
-                const char* const text{argv[++index]};
+                return argv[++index];
+            };
+            const auto value = [&]() -> uint32_t {
+                const char* const text{text_after()};
                 const char* const text_end{text + std::strlen(text)};
                 uint32_t parsed{0u};
                 const std::from_chars_result result{std::from_chars(text, text_end, parsed)};
@@ -1554,10 +1557,10 @@ int main(int argc, char** argv)
 
             if (argument == "--window") {
                 wants_window = true;
-            } else if ((argument == "--replay") && ((index + 1) < argc)) {
+            } else if (argument == "--replay") {
                 // Clu: a Disk instead of a world. A replay viewer is a spectator whose socket
                 // is a file, so it implies the window and needs no Master Control.
-                replay_disk = argv[++index];
+                replay_disk = text_after();
                 wants_window = true;
             } else if (argument == "--debug") {
                 wants_debug_view = true;
@@ -1578,27 +1581,31 @@ int main(int argc, char** argv)
             } else if (argument == "--benchmark") {
                 benchmarking = true;
             } else if (argument == "--gpu") {
-                preferred_gpu = value(preferred_gpu);
+                preferred_gpu = value();
             } else if (argument == "--list-gpus") {
                 list_gpus = true;
-            } else if ((argument == "--program") && ((index + 1) < argc)) {
-                program_identifier = argv[++index];
+            } else if (argument == "--program") {
+                program_identifier = text_after();
             } else if (argument == "--ticks") {
-                host_ticks = value(host_ticks);
+                host_ticks = value();
             } else if (argument == "--list-programs") {
                 list_programs = true;
             } else if (argument == "--width") {
-                record_width = value(record_width);
+                record_width = value();
             } else if (argument == "--height") {
-                record_height = value(record_height);
+                record_height = value();
             } else if (argument == "--frames") {
-                record_frames = value(record_frames);
-            } else if ((argument == "--output") && ((index + 1) < argc)) {
-                record_directory = argv[++index];
+                record_frames = value();
+            } else if (argument == "--output") {
+                record_directory = text_after();
             } else if (!argument.starts_with("--")) {
                 // The positional: where Master Control is. Where the world is comes first; what
                 // you are there comes second - and there is deliberately no flag for it.
                 master_control_address = argument;
+            } else {
+                // A misspelt flag is refused rather than ignored: ignored, "--verify-scnee" would
+                // answer "nothing to do" and exit successfully, which reads as a check that passed.
+                throw std::runtime_error{"Unknown option " + argument + ". Run with no arguments for the list of what this program does."};
             }
         }
 

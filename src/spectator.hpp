@@ -15,9 +15,9 @@
 #pragma once
 
 #include "camera.hpp"
+#include <window/window_event.hpp>
 #include <cstdint>
 #include <unordered_set>
-#include <window/window_event.hpp>
 
 /*!
     Input controller for the User's free-flight debug camera.

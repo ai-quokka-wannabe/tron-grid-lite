@@ -17,8 +17,7 @@
 //     irradiance directions arrive together in one flat ray buffer — the shader neither knows nor
 //     cares which is which, because both questions are the same question.
 //
-//     This is the promise trace.slang carried from its first line, kept: the User's window and a
-//     creature eye ask the identical `radiance` in `grid_optics`, so what a creature sees cannot
+//     The User's window and a creature eye ask the identical `radiance` in `grid_optics`, so what a creature sees cannot
 //     drift from what the User would see standing in the same place.
 //
 // Entry points:

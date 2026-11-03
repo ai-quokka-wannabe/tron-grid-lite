@@ -113,10 +113,12 @@ namespace WindowLib
             m_should_close = true;
         }
 
+        //! A function called with every event as it is pushed, and the user data it was registered with.
+        using EventCallback = void (*)(const WindowEvent& ev, void* user_data);
+
         //! Sets a callback that fires immediately when an event is pushed (from the platform thread).
         //! This is called in addition to the internal event queue, allowing the caller to react
         //! to events during modal operations (e.g., Win32 resize drag) when the main loop is blocked.
-        using EventCallback = void (*)(const WindowEvent& ev, void* user_data);
         void setEventCallback(EventCallback callback, void* user_data)
         {
             m_event_callback = callback;

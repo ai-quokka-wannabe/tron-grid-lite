@@ -15,7 +15,9 @@
 #include "../geometry.hpp"
 #include <testing/testing.hpp>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace
 {
@@ -29,7 +31,7 @@ namespace
     //! Largest disagreement tolerated between two float paths that should agree exactly.
     constexpr float EPSILON{1e-4f};
 
-}
+} // namespace
 
 TEST_CASE(relief_is_deterministic_across_calls)
 {
@@ -56,8 +58,8 @@ TEST_CASE(relief_stays_within_its_stated_amplitude)
             const float z{(static_cast<float>(vertex_z) * config.cell_size) - half_size};
             const float height{gridSurfaceHeight(x, z, config)};
 
-            TEST_CHECK(height >= config.height - EPSILON);
-            TEST_CHECK(height <= config.height + config.relief_amplitude + EPSILON);
+            TEST_CHECK(height >= (config.height - EPSILON));
+            TEST_CHECK(height <= (config.height + config.relief_amplitude + EPSILON));
         }
     }
 }
@@ -242,6 +244,49 @@ TEST_CASE(neon_tubes_lie_flat_on_the_lip_of_their_edges)
             TEST_CHECK(std::abs(p0.position[1] - (lip + tube_config.surface_offset)) < EPSILON);
         }
     }
+}
+
+/*
+    `gridTerraceLevels` promises the floor's flat planes as data: every level the relief can
+    quantise to, ascending, computed as `gridSurfaceHeight` computes it — so every cell of the drawn
+    floor stands at one of them exactly, not merely nearby. A smooth relief has none, a flat floor
+    has one.
+*/
+TEST_CASE(terrace_levels_name_every_level_the_drawn_floor_stands_at)
+{
+    const GridFloorConfig config{sceneConfig()};
+    const std::vector<float> levels{gridTerraceLevels(config)};
+
+    TEST_CHECK_EQUAL(levels.size(), config.relief_terraces + 1u);
+    for (std::size_t index{1u}; index < levels.size(); ++index) {
+        TEST_CHECK(levels[index - 1u] < levels[index]);
+    }
+
+    const float half_size{(static_cast<float>(config.cells) * config.cell_size) * 0.5f};
+    for (uint32_t cell_z{0u}; cell_z < config.cells; ++cell_z) {
+        for (uint32_t cell_x{0u}; cell_x < config.cells; ++cell_x) {
+            const float centre_x{((static_cast<float>(cell_x) + 0.5f) * config.cell_size) - half_size};
+            const float centre_z{((static_cast<float>(cell_z) + 0.5f) * config.cell_size) - half_size};
+            const float level{gridMeshHeight(centre_x, centre_z, config)};
+
+            bool named{false};
+            for (const float candidate : levels) {
+                named = named || (candidate == level);
+            }
+            TEST_CHECK(named);
+        }
+    }
+
+    GridFloorConfig smooth{sceneConfig()};
+    smooth.relief_terraces = 0u;
+    TEST_CHECK(gridTerraceLevels(smooth).empty());
+
+    GridFloorConfig flat{sceneConfig()};
+    flat.relief_amplitude = 0.0f;
+    flat.height = 3.5f;
+    const std::vector<float> flat_levels{gridTerraceLevels(flat)};
+    TEST_CHECK_EQUAL(flat_levels.size(), 1u);
+    TEST_CHECK(flat_levels.front() == 3.5f);
 }
 
 int main()

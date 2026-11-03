@@ -14,9 +14,7 @@
 
 #include "../orbs.hpp"
 #include "../senses.hpp"
-
 #include <testing/testing.hpp>
-
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -636,7 +634,7 @@ TEST_CASE(an_orb_shades_the_hum_and_its_pew_is_heard_as_a_call_from_where_it_sto
     source.beginTick(creatures);
     TglSenses shaded{};
     source.fill(creatures[0], shaded);
-    TEST_CHECK(totalEnergy(shaded.ears[0]) < open_total * 0.5f);
+    TEST_CHECK(totalEnergy(shaded.ears[0]) < (open_total * 0.5f));
 
     // Eaten to nothing: the orb leaves the telling, and goes with a pew from 3.6 m due east.
     source.tellFood({});

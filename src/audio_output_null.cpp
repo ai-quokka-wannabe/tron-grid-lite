@@ -21,7 +21,6 @@
 */
 
 #include "audio.hpp"
-
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -42,9 +41,9 @@ namespace AudioLib
     };
 
     Output::Output(Mixer& mixer) :
-        m_impl(new Impl{mixer})
+        m_impl(std::make_unique<Impl>(mixer))
     {
-        m_impl->thread = std::thread{[impl = m_impl]() {
+        m_impl->thread = std::thread{[impl = m_impl.get()]() {
             constexpr std::uint32_t FRAMES{480u};
             std::vector<float> sink(static_cast<std::size_t>(FRAMES) * 2u, 0.0f);
             const std::chrono::microseconds period{static_cast<std::int64_t>(FRAMES) * 1'000'000 / impl->mixer.sampleRate()};
@@ -59,7 +58,6 @@ namespace AudioLib
     {
         m_impl->stopping = true;
         m_impl->thread.join();
-        delete m_impl;
     }
 
     std::uint32_t Output::preferredSampleRate()

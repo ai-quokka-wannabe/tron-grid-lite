@@ -18,13 +18,10 @@
 #include "vulkan_helpers.hpp"
 #include <algorithm>
 #include <array>
-#include <fstream>
 #include <stdexcept>
 
 namespace
 {
-
-    using VulkanHelpers::findMemoryType;
 
     //! Workgroup size, matching [numthreads(8, 8, 1)] in both post-processing shaders.
     constexpr uint32_t WORKGROUP_SIZE{8u};
@@ -44,7 +41,7 @@ namespace
     /*!
         Block size for the image arena.
 
-        At 1280x720 the whole pyramid plus the output images comes to under 4 MiB, so the common case
+        At 1280x720 the whole pyramid plus the output images comes to about 12 MiB, so the common case
         is one allocation for the entire stage. A larger window gets a block sized to fit — the arena
         treats this as a granularity rather than a ceiling.
     */

@@ -24,7 +24,7 @@
 
 #include "../link_library.hpp"
 #include "../world_client.hpp"
-
+#include <testing/testing.hpp>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -32,15 +32,47 @@
 #include <filesystem>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
-
-#include <testing/testing.hpp>
 
 namespace
 {
 
     constexpr std::chrono::milliseconds PATIENCE{5000};
+
+    /*!
+        A file in the temporary directory that is removed when the test leaves its scope, by any
+        path - a failed check or an exception included - so no run leaves a Disk behind. Declared
+        before whatever reads the file, it outlives the reader and the file is closed when it goes.
+    */
+    class TemporaryFile {
+    public:
+        explicit TemporaryFile(const std::string& name) :
+            m_path(std::filesystem::temp_directory_path() / name)
+        {
+        }
+
+        ~TemporaryFile()
+        {
+            std::error_code ignored;
+            std::filesystem::remove(m_path, ignored);
+        }
+
+        TemporaryFile(const TemporaryFile&) = delete;
+        TemporaryFile& operator=(const TemporaryFile&) = delete;
+        TemporaryFile(TemporaryFile&&) = delete;
+        TemporaryFile& operator=(TemporaryFile&&) = delete;
+
+        //! The file's full path.
+        [[nodiscard]] const std::filesystem::path& path() const
+        {
+            return m_path;
+        }
+
+    private:
+        std::filesystem::path m_path; //!< Where the file lives.
+    };
 
     //! Master Control's part, scripted: a listening vtable and the will to answer one client.
     class RehearsalMasterControl {
@@ -273,8 +305,8 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
     LinkLib::Library library{LinkLib::Library::besideExecutable()};
     const LnkWorldDefinition definition{WorldClientLib::worldDefinition()};
     const std::uint64_t fingerprint{library.vtable().world_fingerprint(&definition)};
-    const std::filesystem::path disk{
-        std::filesystem::temp_directory_path() / ("tgl-clu-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".disk")};
+    const TemporaryFile disk_file{"tgl-clu-test-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + ".disk"};
+    const std::filesystem::path& disk{disk_file.path()};
     const std::string path{disk.string()};
 
     {
@@ -334,8 +366,6 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
     TEST_CHECK_CLOSE(clu.foods().front().quantity, 0.8f, 1e-6f);
     clu.poll(); // Polling a played-out Disk is a no-op, never a throw.
     TEST_CHECK_EQUAL(clu.creatureCount(), 1u);
-
-    std::filesystem::remove(disk);
 }
 
 TEST_CASE(the_world_is_told_interpolated_and_ended)

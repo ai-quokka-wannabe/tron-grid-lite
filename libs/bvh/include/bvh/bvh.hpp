@@ -28,7 +28,7 @@
     std430 declaration expects — the offsets are asserted in the implementation file rather than
     left to trust.
 
-    The same hierarchy is intended to serve acoustic rays later, which is why nothing here is
+    The same hierarchy serves the acoustic rays as well as the light, which is why nothing here is
     specific to light.
 */
 namespace BvhLib
@@ -51,7 +51,7 @@ namespace BvhLib
         |     44 |    4 | `padding1`  | `uint`            |
     */
     struct Triangle {
-        MathLib::Vec3 v0{}; //!< First vertex, in world space.
+        MathLib::Vec3 v0{}; //!< First vertex, in the geometry's own frame.
         uint32_t material{0u}; //!< Index into the scene's material table.
         MathLib::Vec3 edge1{}; //!< Second vertex minus the first.
         uint32_t padding0{0u}; //!< Unused; present so the layout matches std430 exactly.
@@ -239,7 +239,7 @@ namespace BvhLib
     /*!
         Traces one ray against a whole scene and returns the nearest hit across every instance.
 
-        The host-side twin of the two-level traversal the compute shader will perform, and the
+        The host-side twin of the two-level traversal the compute shader performs, and the
         specification it is checked against — the same relationship `intersect` has with the
         single-level shader path.
 
@@ -247,8 +247,7 @@ namespace BvhLib
         one or many, because two is what the Grid's senses actually need: a creature's own senses
         skip its own body, and a call's paths skip the caller's body and the listener's — a source
         inside its own hull would otherwise gag itself, and an ear inside its own hull would be
-        deaf. `NO_INSTANCE` skips nothing, which is every caller that predates creatures having
-        bodies.
+        deaf. `NO_INSTANCE` skips nothing.
 
         **The ray is transformed into instance space without normalising it**, and that is not an
         oversight. Leaving the transformed direction unnormalised means the ray parameter is identical
@@ -272,19 +271,20 @@ namespace BvhLib
         uint32_t skip_instance_a = NO_INSTANCE, uint32_t skip_instance_b = NO_INSTANCE);
 
     /*!
-        A run of consecutive instances, which is what one creature stands in since bodies became
-        chains: its head and every trailing segment, placed one after another. `NO_INSTANCE` with a
-        count of zero names nothing, which is every caller that predates creatures having bodies.
+        A run of consecutive instances, which is what one creature stands in: its head and every
+        trailing segment, placed one after another. `NO_INSTANCE` with a count of zero names nothing.
     */
     struct InstanceRange {
-        uint32_t first{NO_INSTANCE};
-        uint32_t count{0u};
+        uint32_t first{NO_INSTANCE}; //!< The run's first instance, or `NO_INSTANCE` for none.
+        uint32_t count{0u}; //!< Instances in the run.
 
+        //! Returns true when `index` lies inside the run.
         [[nodiscard]] bool contains(const uint32_t index) const noexcept
         {
-            return (first != NO_INSTANCE) && (index >= first) && (index - first < count);
+            return (first != NO_INSTANCE) && (index >= first) && ((index - first) < count);
         }
 
+        //! Returns true when the run names no instance.
         [[nodiscard]] bool empty() const noexcept
         {
             return (first == NO_INSTANCE) || (count == 0u);
@@ -292,7 +292,7 @@ namespace BvhLib
     };
 
     //! `intersectScene` with the two skips as runs rather than single instances: a chain's whole
-    //! body is transparent to its own senses, exactly as one rigid body was.
+    //! body is transparent to its own senses.
     [[nodiscard]] Hit intersectScene(const Scene& scene, const MathLib::Vec3& origin, const MathLib::Vec3& direction, float max_distance, InstanceRange skip_a,
         InstanceRange skip_b);
 

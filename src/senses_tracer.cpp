@@ -15,8 +15,8 @@
 #include "senses_tracer.hpp"
 #include "device.hpp"
 #include "spirv.hpp"
-
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <stdexcept>
 #include <string>
@@ -26,9 +26,9 @@ namespace
 
     //! Mirrors SensesPushConstants in senses.slang exactly.
     struct SensesPushConstants {
-        uint32_t ray_count;
-        uint32_t max_bounces;
-        uint32_t instance_count;
+        uint32_t ray_count{0u};
+        uint32_t max_bounces{0u};
+        uint32_t instance_count{0u};
     };
 
     static_assert(sizeof(SensesPushConstants) == 12u, "Push constants must match the Slang struct layout exactly.");
@@ -38,7 +38,7 @@ namespace
     //! Block size for the two host-visible buffers. Generous against any sane per-tick ray count.
     constexpr vk::DeviceSize HOST_BLOCK_BYTES{1u * 1024u * 1024u};
 
-    //! Block size for the device-local material table, which is six 32-byte rows.
+    //! Block size for the device-local material table, one 32-byte row per material slot.
     constexpr vk::DeviceSize DEVICE_BLOCK_BYTES{1u * 1024u * 1024u};
 
 } // namespace

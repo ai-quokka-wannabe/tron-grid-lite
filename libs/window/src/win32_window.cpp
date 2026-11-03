@@ -212,7 +212,7 @@ namespace WindowLib
 
         if (msg == WM_NCCREATE) {
             // Extract and store the this pointer
-            auto* create_struct{reinterpret_cast<CREATESTRUCTW*>(lparam)};
+            CREATESTRUCTW* create_struct{reinterpret_cast<CREATESTRUCTW*>(lparam)};
             self = static_cast<Win32Window*>(create_struct->lpCreateParams);
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(self));
         } else {
@@ -253,7 +253,7 @@ namespace WindowLib
         case WM_SIZE: {
             uint32_t w{LOWORD(lparam)};
             uint32_t h{HIWORD(lparam)};
-            if (w != m_width || h != m_height) {
+            if ((w != m_width) || (h != m_height)) {
                 m_width = w;
                 m_height = h;
                 WindowEvent ev{WindowEvent::Type::Resize};
@@ -314,7 +314,7 @@ namespace WindowLib
             int32_t dx{m_mouse_tracked ? (x - m_last_mouse_x) : 0};
             int32_t dy{m_mouse_tracked ? (y - m_last_mouse_y) : 0};
 
-            if (m_cursor_captured && (dx != 0 || dy != 0)) {
+            if (m_cursor_captured && ((dx != 0) || (dy != 0))) {
                 // Recentre cursor to prevent hitting screen edges
                 RECT rect{};
                 GetClientRect(hwnd, &rect);

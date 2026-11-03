@@ -38,7 +38,7 @@ namespace TestingLib
     };
 
     //! Returns the global list of registered test cases.
-    std::vector<TestCase>& registry();
+    [[nodiscard]] std::vector<TestCase>& registry();
 
     //! Registers a test case; called automatically by TEST_CASE macro.
     void registerTest(std::string_view name, std::function<void()> fn);
@@ -142,7 +142,7 @@ namespace TestingLib
     //! Checks that a callable throws any exception.
     template <typename Fn> void checkThrows(Fn&& fn, std::string_view expr, std::source_location loc = std::source_location::current())
     {
-        bool threw = false;
+        bool threw{false};
         try {
             fn();
         } catch (...) {

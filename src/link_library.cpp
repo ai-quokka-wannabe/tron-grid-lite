@@ -14,9 +14,7 @@
 */
 
 #include "link_library.hpp"
-
 #include "loader_os.hpp"
-
 #include <stdexcept>
 #include <string>
 

@@ -13,9 +13,7 @@
 */
 
 #include "../program_library.hpp"
-
 #include <testing/testing.hpp>
-
 #include <cstring>
 #include <filesystem>
 #include <fstream>

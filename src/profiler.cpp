@@ -31,7 +31,7 @@ namespace
     //! How often the summary line is emitted. Once per second is live enough for tuning without flooding the log.
     constexpr std::chrono::seconds LOG_INTERVAL{1};
 
-    //! Frame budget used to express headroom in the summary line. 16.67 ms is the 60 fps target.
+    //! Frame budget the summary line expresses the frame's cost as a share of. 16.67 ms is the 60 fps target.
     constexpr float FRAME_BUDGET_MS{1000.0f / 60.0f};
 
     /*!
@@ -55,7 +55,7 @@ namespace
         stream << std::fixed << std::setprecision(2) << milliseconds;
         return stream.str();
     }
-}
+} // namespace
 
 GpuProfiler::GpuProfiler(const Device& device, uint32_t frames_in_flight, LoggingLib::Logger& logger) :
     m_logger(logger),
@@ -225,8 +225,8 @@ void GpuProfiler::logSummary()
     /*
         The line is built to be scanned rather than parsed: the whole-frame cost and the
         equivalent frame rate come first because they answer the question this renderer exists
-        to answer, then the individual passes in execution order, then how much of a 60 fps
-        budget is left. A pass that recorded no timestamps reads 0.00.
+        to answer, then the individual passes in execution order, then what share of a 60 fps
+        budget the frame takes. A pass that recorded no timestamps reads 0.00.
     */
     const float frame_ms{averageMs(GpuPass::Frame)};
 

@@ -16,14 +16,14 @@
 /*!
     The creature host's half of a world, tested against the server's half of the same loaded
     Link: a rehearsal Master Control accepts the host, hears its REZ, tells a tick and the
-    owner's letter, and hears the mind's ACTIONS back. Deviceless throughout - the roster ticks
+    owner's letter, and hears the Program's ACTIONS back. Deviceless throughout - the roster ticks
     with no traced senses - which is exactly the part the wire host owns.
 */
 
 #include "../roster.hpp"
 #include "../world_client.hpp"
 #include "../world_host.hpp"
-
+#include <testing/testing.hpp>
 #include <array>
 #include <chrono>
 #include <cmath>
@@ -33,8 +33,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
-#include <testing/testing.hpp>
 
 namespace
 {
@@ -364,7 +362,7 @@ TEST_CASE(nobody_listening_is_the_ruled_loud_refusal)
     }
 }
 
-TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_intents)
+TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_programs_intents)
 {
     RehearsalMasterControl rehearsal{};
     RosterLib::Roster roster{fixtureDirectory(), "tgl_driver_steady", 1u, flatGround()};
@@ -388,7 +386,7 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     TEST_CHECK_EQUAL(rez.as.rez.rez.segment_count, 1u); // A bodiless creature is a chain of one.
     TEST_CHECK_EQUAL(rez.as.rez.rez.segment_spacing, 0.0f);
 
-    // A tick without its letter is not whole: the minds must not tick on half a telling.
+    // A tick without its letter is not whole: the Programs must not tick on half a telling.
     rehearsal.tellTick(101u, host.wireIdentity(0u), 5.0f, 0.0f, true, false);
     const std::chrono::steady_clock::time_point settle{std::chrono::steady_clock::now() + std::chrono::milliseconds{100}};
     bool ready{false};
@@ -405,7 +403,7 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     host.act();
     TEST_CHECK_EQUAL(rehearsal.awaitMessage(LNK_MSG_ACTIONS).as.actions.tick, 102u);
 
-    // The whole telling: rows, then the letter. Now the minds may tick.
+    // The whole telling: rows, then the letter. Now the Programs may tick.
     rehearsal.tellTick(102u, host.wireIdentity(0u), 4.5f, 0.25f, true);
     const std::chrono::steady_clock::time_point deadline{std::chrono::steady_clock::now() + PATIENCE};
     while (!host.poll()) {
@@ -434,7 +432,7 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     // 0.5 cos(0.25) forward.
     TEST_CHECK(near(creature.forward_speed, 0.5f * std::cos(0.25f)));
 
-    // The mind ticks with no traced senses, and its intent goes back tagged for the next tick.
+    // The Program ticks with no traced senses, and its intent goes back tagged for the next tick.
     RosterLib::NullSensesSource null_senses;
     roster.tick(null_senses);
     host.act();
@@ -456,7 +454,7 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_minds_inten
     TEST_CHECK_EQUAL(second.as.actions.tick, 104u);
     TEST_CHECK(near(second.as.actions.previous_forward_speed, 0.5f));
 
-    // A slow mind: the world told tick 104 whole while the Program was still thinking about 103.
+    // A slow Program: the world told tick 104 whole while the Program was still thinking about 103.
     // The intent is tagged for the tick the world will step next - 105, not 104 - so it is never
     // refused stale; and the tick told meanwhile is not lost: the very next poll hands it over.
     roster.tick(null_senses);
@@ -667,8 +665,8 @@ TEST_CASE(a_refused_body_is_said_out_loud_by_name_and_the_host_stops_waiting)
     }
 
     // The world refuses this host's own body: the host says why, by name, and stops - there
-    // is nothing to host, and until Link v8 it would have ticked a mind without a body for
-    // ever, learning nothing.
+    // is nothing to host, and ticking a Program without a body would go on for ever,
+    // learning nothing.
     rehearsal.refuse(100u, host.wireIdentity(0u), LNK_REFUSED_OWNED);
     std::string said;
     const std::chrono::steady_clock::time_point deadline{std::chrono::steady_clock::now() + std::chrono::milliseconds{2000}};

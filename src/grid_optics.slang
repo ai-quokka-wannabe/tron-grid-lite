@@ -15,8 +15,7 @@
 // Purpose:
 //     What light does on the Grid, shared by every consumer that asks for radiance.
 //
-//     `trace.slang` promised from the start that "the same kernel will serve creature sensors, at
-//     a far smaller resolution, once bodies exist", and this module is where that promise is kept:
+//     One kernel serves the User's window and the creature sensors, at a far smaller resolution:
 //     the User's window asks `radiance` once per pixel, and a creature eye asks the same function
 //     once per sample. One Whitted walk, so the two cannot drift.
 //
@@ -191,8 +190,8 @@ public float3 radiance(StructuredBuffer<Instance> instances, uint instance_count
             the rotation itself, so this is exact rather than approximate.
 
             **Under a non-uniform scale it would not be**, and the correct transform there is the
-            inverse-transpose, which this record does not carry. Nothing places a scaled instance
-            today. The moment something does, this is the line that is wrong, and `BvhLib::Hit` says
+            inverse-transpose, which this record does not carry. Nothing places a non-uniformly scaled
+            instance: an orb's scale is uniform, which the normalisation absorbs. The moment something does, this is the line that is wrong, and `BvhLib::Hit` says
             the same thing on the host side.
 
             The Grid sits at the identity, where every one of these products is exact — so the

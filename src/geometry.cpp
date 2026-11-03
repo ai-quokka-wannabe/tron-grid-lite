@@ -94,18 +94,7 @@ namespace
     }
 
     /*!
-        Emits the two triangles of one surface quad, per-face shaded.
-
-        The corners are named by their (x, z) grid position: p00 is the low corner in both axes,
-        p11 the high one. Winding is chosen so both face normals point upwards in a right-handed
-        Y-up world. The uv of each vertex is its grid position measured in cells from the centre.
-
-        Each triangle is emitted in the order (v0, v1, v2) for which the right-handed geometric
-        normal (v1 - v0) x (v2 - v0) is the stored face normal, so the stored normal and the
-        winding always agree and a front-face-anticlockwise pipeline never culls the surface.
-    */
-    /*!
-        Hashes an integer lattice point to a value in [-1, 1).
+        Hashes an integer lattice point to a value in [0, 1].
 
         An integer hash rather than a seeded generator, because the relief must be identical on
         every machine and every run: a recording that renders a different landscape each time it
@@ -182,6 +171,17 @@ namespace
         return (total_amplitude > 0.0f) ? (value / total_amplitude) : 0.0f;
     }
 
+    /*!
+        Emits the two triangles of one surface quad, per-face shaded.
+
+        The corners are named by their (x, z) grid position: p00 is the low corner in both axes,
+        p11 the high one. Winding is chosen so both face normals point upwards in a right-handed
+        Y-up world. The uv of each vertex is its grid position measured in cells from the centre.
+
+        Each triangle is emitted in the order (v0, v1, v2) for which the right-handed geometric
+        normal (v1 - v0) x (v2 - v0) is the stored face normal, so the stored normal and the
+        winding always agree and a front-face-anticlockwise pipeline never culls the surface.
+    */
     void emitSurfaceQuad(Mesh& mesh, const MathLib::Vec3& p00, const MathLib::Vec3& p10, const MathLib::Vec3& p01, const MathLib::Vec3& p11, float u0, float u1, float v0,
         float v1)
     {
@@ -192,7 +192,7 @@ namespace
         emitTriangle(mesh, p10, p01, p11, normal_b, {u1, v0}, {u0, v1}, {u1, v1});
     }
 
-}
+} // namespace
 
 void Mesh::append(const Mesh& other)
 {
@@ -265,7 +265,7 @@ namespace
         point that is unambiguously its own — every corner is shared with neighbours that may stand
         elsewhere. Everything about the drawn floor derives from this one function: the flat cell
         quads, the risers between them, the mesh-height query and the neon's lip heights, which is
-        what keeps five consumers from disagreeing about a landscape.
+        what keeps them from disagreeing about a landscape.
     */
     [[nodiscard]] float cellLevel(uint32_t cell_x, uint32_t cell_z, const GridFloorConfig& config)
     {
@@ -430,7 +430,7 @@ NeonGrid generateGridFloorNeon(const GridFloorConfig& floor_config, const NeonTu
 
     /*
         A tube lies on the lip: flat, at the higher of the two cell levels its edge borders. The
-        drawn floor is flat cells joined by vertical risers, so a lattice edge no longer has one
+        drawn floor is flat cells joined by vertical risers, so a lattice edge has no single
         height along it — it has a level on each side, and the tube takes the upper one, lighting
         the terrace edges while the walls below them stay dark cliffs. Same `cellLevel` the floor
         quads and the risers derive from, so a tube can neither float nor sink.
