@@ -33,7 +33,8 @@ tron-grid-lite/
 ├── LICENCE              ← GPL v3
 ├── README.md            ← public-facing project overview
 ├── TODO.md              ← roadmap and open etapes
-├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, CHEMORECEPTION, PERCEPTION, PROGRAM_INTERFACE, TOPOLOGY, RELATED_WORK, DEV_ENV_SETUP
+├── docs/                ← VISION, ARCHITECTURE, MATERIALS, ACOUSTICS, CHEMORECEPTION, PERCEPTION, PROGRAM_INTERFACE, TOPOLOGY, RELATED_WORK, DEV_ENV_SETUP,
+│                          RUNNING_THE_GRID, and research/ (the literature surveys)
 ├── external/link        ← the Link submodule — the wire of the Grid, built by cargo, loaded beside the executable like a Program
 ├── images/              ← the flyby clips the README embeds
 ├── libs/                ← bvh, logging, math, signals, testing, window — static libraries — and program-abi, the C contract Programs build against
@@ -189,7 +190,7 @@ measured. See [PROGRAM_INTERFACE.md](../docs/PROGRAM_INTERFACE.md) § Determinis
 The check that has **licensed** more structural rewrites here than any other: record a fixed clip and
 hash it. A change that is meant to preserve behaviour must not move a single byte.
 
-"Licensed" rather than "caught", deliberately. Fifteen commits cite byte-identity — recount with
+"Licensed" rather than "caught", deliberately. Nineteen commits cite byte-identity — recount with
 `git log --oneline --grep=byte-ident` — and every one of them
 is a rewrite *confirmed safe* — the traversal module extraction, the geometry hoist into `World`, the
 memory arena, both halves of the two-level hierarchy. **Not one records a catch.** That may only mean
@@ -304,7 +305,8 @@ satisfies everything this renderer asks for (Vulkan 1.3, dynamic rendering, sync
 graphics family that dispatches compute) and answers each comparison in about a second.
 
 CI quick-checks also run markdownlint and lychee offline over every markdown file (internal links
-and anchors; the external ones weekly in `links.yml`), and the stray-carriage-return check.
+and anchors; the external ones weekly in `links.yml`), the stray-carriage-return check, the
+clang-format gate and the Program ABI version check.
 
 That leaves `--benchmark` as the one still needing hardware, which is right: it measures a GPU, and a
 software implementation has nothing to say about that.
@@ -532,5 +534,5 @@ and post processing, and **Phase 5 — acoustic rays** is done too. **Phase 6 is
 plug in and perceive — ears, eyes, touch, their own voices — through the C ABI in
 `libs/program-abi`, and what remains of the phase is in TODO.md's open etapes.
 
-The phase table is canonical in [`TODO.md` § Roadmap](../TODO.md), which also holds the active
+The phase table is canonical in [`TODO.md` § Roadmap (phases)](../TODO.md), which also holds the active
 etapes. Read it there rather than duplicating it here.

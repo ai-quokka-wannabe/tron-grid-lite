@@ -1,7 +1,7 @@
 # Topology
 
 How the Grid becomes a world rather than a process: one authoritative server, thin clients in two
-roles today, creature brains as plugged-in libraries, and a User who so far only visits (where it
+roles today, creatures' Programs as plugged-in libraries, and a User who so far only visits (where it
 is all going is [VISION.md § The Long Arc](VISION.md#the-long-arc)). This document assigns every
 responsibility to a block and justifies each assignment with a named industry practice or a named
 disaster it avoids.
@@ -13,7 +13,7 @@ lineage from Core War through Screeps — archived as research briefs 11 to 15 i
 records for earlier research. This file carries the conclusions; the briefs carry the citations in
 full.
 
-Everything below is built, and the split this document planned has happened: the protocol
+Everything below is built unless it says otherwise, and the split this document planned has happened: the protocol
 library grew in its own repository (`link`), because the wire between two repositories should
 live in neither; Master Control moved to its own (`master-control`) and took the simulated world
 with it, the flagship deleting its copy in the same movement. This repository is the Grid as it
@@ -39,7 +39,7 @@ Three operating-system processes and one loaded library, all on one machine for 
     free-flight camera)         one Program DLL loaded)
                                         |
                                    rc-worm.dll
-                              (the brain; its own Qt 6
+                              (the Program; its own Qt 6
                                GUI for control and
                                senses telemetry)
 ```
@@ -49,7 +49,7 @@ Program and User are; `master-control` in lower case names only its repository. 
 redeemed by good engineering: it holds authority so that every Program's world is fair.
 
 The User floats through the Grid with a window and speakers and owes the world nothing. The
-creature host is a senses-and-brain terminal with no window at all. The server is the world. A
+creature host is a senses-and-Program terminal with no window at all. The server is the world. A
 Program's own GUI — the worm's Qt telemetry — belongs to the Program and shows only what the
 creature senses, which is exactly why the spectator exists: someone has to be able to see the worm
 crawl.
@@ -76,7 +76,9 @@ handing it one is the conscious act that pulls the trust stance's trigger — en
 identity and the rest become due at that moment, not before.
 
 The whole command line stays deliberately small, by the same ruling: the positional address,
-one role — `--window` or `--program <name>` — and the utilities a command-line citizen owes:
+one role — `--window` (or `--replay <disk>`, the same view of a recorded world, and `--mute` to
+silence its ears) or `--program <name>` (bounded by `--ticks N` when asked) — and the utilities a
+command-line citizen owes:
 `--version` (stating the Grid's version and the wire's protocol version side by side, because
 the pair is what compatibility means here), `--verbose` for a chattier log, `--list-gpus` and
 `--list-programs` to see what a machine offers, `--gpu <index>` to overrule device scoring, and
@@ -142,9 +144,9 @@ so the long-term lever is sending less, not hiding better.
 | The action log and the state log | Master Control | StarCraft/Factorio (input replay) and Overwatch/SourceTV (state-stream replay) — both, because inputs pin the binary while state survives version drift |
 | Tick pacing against the wall clock | Master Control | dt is sacred; the wall clock is the degree of freedom. On overrun, later ticks run late — simulation time never stretches (EVE dilates, Minecraft skips, Screeps floats; all chose "never bend dt") |
 | Session join/leave, rez-time model intake and re-validation | Master Control | `copyValidatedModel`'s logic runs where the roster-of-record lives; a model blob is the one variable-size client input — the Dark Souls III RCE shape — so its caps and index checks are server-side law |
-| GPU sense rendering (eyes, irradiance) | creature host | The hardware is there; senses are advisory input to the local brain, never reported upstream as fact |
+| GPU sense rendering (eyes, irradiance) | creature host | The hardware is there; senses are advisory input to the local Program, never reported upstream as fact |
 | Acoustic sense synthesis (ears, calls) | creature host | Host-side today by the same delegation — with the deviation honestly recorded below |
-| Calling `program_tick`; the DLL's whole lifecycle | creature host | One DLL per process (the existing `ProgramLib` guard becomes the process boundary); BWAPI's entire competitive history ran brains in-process on the operator's own machine |
+| Calling `program_tick`; the DLL's whole lifecycle | creature host | One DLL per process (the existing `ProgramLib` guard becomes the process boundary); BWAPI's entire competitive history ran its bots in-process on the operator's own machine |
 | The worm's control/telemetry GUI | the Program (Qt, its own thread) | A Program's window is its own business — the Grid provides nothing |
 | Rendering the world; the free-flight camera | spectator | Presentation is the canonical delegation; the camera never replicates |
 | Interpolation buffer (2–3 ticks) | spectator | Source's `cl_interp` canon scaled to 32 Hz; without it, 32 Hz state under a high-refresh renderer visibly steps |
@@ -164,10 +166,10 @@ accidentally network-shaped from the start:
    `SensesSource::beginTick` has delivered in-process since the calls landed: the roster physics
    has finished with.
 3. **The creature host** updates its stage, renders its creature's senses from authoritative
-   tick-N state (never interpolated — a brain fed fabricated poses is the divergence class the
+   tick-N state (never interpolated — a Program fed fabricated poses is the divergence class the
    audit warns about), calls `program_tick`, and sends `ACTIONS` tagged for the tick the world
-   will step next — N+1 when the mind kept pace, later when it did not: the host reads the wire
-   again before it speaks, so a slow mind's intent is never tagged for a tick already stepped.
+   will step next — N+1 when the Program kept pace, later when it did not: the host reads the wire
+   again before it speaks, so a slow Program's intent is never tagged for a tick already stepped.
 4. **Master Control** accepts actions through a published window: an `ACTIONS` tagged for tick T
    is accepted while `T ∈ [N, N+1)` relative to the tick N being stepped — stale intents lose to
    newer ones (latest wins, deduplicated by creature and tick), and an intent tagged for a far
@@ -204,7 +206,7 @@ silently picked a side):
 **Why this much rigour about loss** (the owner's word, 2026-08-21): this is an embodied-AI
 project, and repeatability is the product. A creature learns against the world's published
 rules, so every intent that reached the wire must either reach the world or be *refused on the
-record* — silent loss is a corrupted experience for a learning mind, and a replay that cannot
+record* — silent loss is a corrupted experience for a learning creature, and a replay that cannot
 say what happened to an action cannot explain the world it reproduces. Resend, repeat, and log
 the verdict; never merely drop.
 
@@ -451,12 +453,13 @@ interpolate buffered truth, hold the last pose on starvation, never invent.
 
 TronGrid Lite headless: no window, no swapchain, a GPU for eyes, the host acoustics for ears, and
 exactly one Program DLL — the existing one-library-per-process guard maturing into the topology's
-scaling law: more creatures, more host processes, one brain each.
+scaling law: more creatures, more host processes, one Program each.
 
 - Senses come from authoritative tick-N state only. The host never interpolates, extrapolates or
   predicts on the sense path.
-- The pipeline budget — receive, stage, render senses, run the brain, send actions — is
-  instrumented against the 31.25 ms tick, and the miss counter is surfaced per host. The
+- The pipeline budget — receive, stage, render senses, run the Program, send actions — is
+  to be instrumented against the 31.25 ms tick, with a miss counter surfaced per host (not built
+  yet: the host has no timing instrument today). The
   pass/fail line has a number: about 29 ms end to end, because a host that completes inside it
   is bitwise-indistinguishable in timing semantics from a local run. Misses fall under the
   silence rules above — the network repeats briefly, then the creature coasts; never stall the
@@ -466,7 +469,7 @@ scaling law: more creatures, more host processes, one brain each.
   90% of what process isolation ever buys here — since the accepted risk is the owner's own
   machine, per the Ardour precedent that in-process plugins are a defensible choice when you own
   the deadline. The supervisor's partner is a **watchdog timeout on the `program_tick` call
-  itself**, because a brain *hang* is likelier than a brain crash and is otherwise a host that
+  itself**, because a Program *hang* is likelier than a Program crash and is otherwise a host that
   stalls silently while the server coasts its creature forever; and when either fires, the
   crash report names the DLL as the author of the fault, not the host that carried it.
 - **The sense spec is fixed server-side, per species.** Sensor resolution, field of view, ray
@@ -493,7 +496,7 @@ one a mechanism behind a sentence this document already had, or a behaviour it h
   and `DEREZ` is the word for a *leave*, never for a crash. Screeps is the precedent: a broken
   script's empire persists, decays and remains attackable. The alternative — dropping the body
   on disconnect — makes crash-looping an escape hatch and a griefing verb at once.
-- **Intents are requests, and conflicts resolve server-side.** Every brain runs against the
+- **Intents are requests, and conflicts resolve server-side.** Every Program runs against the
   settled, immutable snapshot of tick N (the two-stage pipeline Screeps ships); when two intents
   contend for the same outcome, Master Control resolves the conflict deterministically and logs
   the resolution. Creature-creature contact exists now - the separating-axis pass in Master
@@ -541,8 +544,8 @@ one a mechanism behind a sentence this document already had, or a behaviour it h
   other scrape along a wall (and themselves: in their bins, never as an arrival - § The scrape)
   and spectators hear it Doppler-shifted. What is reported is also
   what is sensed: a contact is a **point on the body, a world normal, a depth and a slip
-  velocity**, which is the creature host's touch sense and extends the `TICK_STATE` debt
-  already named for it (specific force plus contacts) rather than adding a message; the scratch
+  velocity**, which is the creature host's touch sense and travels in the `PROPRIOCEPTION`
+  letter beside the specific force, to the owning host alone; the scratch
   is an `EVENT` kind beside the vocalisation. For a body of one segment the response stays
   kinematic — minimal-translation separation and velocity projection; a chain meets the floor and
   the risers inside its own solver (see [The undulation propels](#the-undulation-propels)).
@@ -582,7 +585,7 @@ pose broadcast in order to ray-trace its creature's senses locally; a modified h
 feed its DLL perfect information. This is accepted — the maphack class is structurally
 unpreventable with a GPL client holding world state, and there is nobody to cheat on a private
 Grid — until any of these fires: a ranked or prized event; a host operated outside the
-maintainers' circle of trust; credible suspicion of a brain acting on information it could not
+maintainers' circle of trust; credible suspicion of a Program acting on information it could not
 have perceived; a world economy where scouting confers advantage. When one fires, the ladder is
 climbed cheapest-first: per-host interest filtering in the already-filterable broadcast
 (Valorant's fog: the data never arrives); server-controlled staleness beside it (EVE's ESI ships
@@ -594,24 +597,24 @@ which the shipped blueprint is RoboCup's rcssserver — per-agent percepts compu
 a fixed cadence, with distance-degraded noise as a cheap integrity technique of its own.
 Attestation and client scanning are rejected permanently.
 
-**Brains as artefacts.** A native DLL is a malware distribution format the moment it is shared —
+**Programs as artefacts.** A native DLL is a malware distribution format the moment it is shared —
 the Minecraft fractureiser incident and the Cities: Skylines auto-updater sabotage are the
-ecosystem's scars. Policy from the first shared brain: brains publish as source; no auto-update
-mechanisms in brains, ever; where a binary is genuinely unavoidable, reproducible builds and
-published checksums are the fallback, never trust. When the grand vision needs strangers' brains
-running on strangers' hosts, the second brain format is WebAssembly — with **two budgets, not
+ecosystem's scars. Policy from the first shared Program: Programs publish as source; no auto-update
+mechanisms in Programs, ever; where a binary is genuinely unavoidable, reproducible builds and
+published checksums are the fallback, never trust. When the grand vision needs strangers' Programs
+running on strangers' hosts, the second Program format is WebAssembly — with **two budgets, not
 one**: fuel for deterministic instruction metering (Battlecode's property), and epoch
 interruption for wall-clock defence, because a fuel-only design still hangs on a spin fuel
 accounting has not yet caught up with. On exhaustion, Battlecode's answer beats killing: the
-brain *pauses and resumes exactly there* next tick. And the sandbox sits **inside** a process
+Program *pauses and resumes exactly there* next tick. And the sandbox sits **inside** a process
 boundary rather than replacing one — the language-level sandboxes rotted on their own vendors'
 word (isolated-vm's README disclaims safety, the Node `vm`/`vm2` CVE lineage, Microsoft's
-retirement of CAS). Should a hosted brain tier ever run on the authoritative machine, Halite's
+retirement of CAS). Should a hosted Program tier ever run on the authoritative machine, Halite's
 containment recipe applies with its most forgettable ingredient made explicit: CPU and memory
 limits, **and the network blocked**. Foreign native DLLs never execute on the server or
 auto-ship to other owners' machines — .NET Terrarium tried exactly that, and Microsoft's own
 retirement of its sandbox is the closing argument. If Master Control ever meters anything, the
-fair shape is Screeps' bucket: a banked budget with a burst cap, so a quiet brain earns the
+fair shape is Screeps' bucket: a banked budget with a burst cap, so a quiet Program earns the
 right to think hard occasionally.
 
 ## Determinism and replay, scoped
@@ -640,7 +643,7 @@ The claims survive networking and come out sharper, provided they are stated pre
   replay property, held by construction (`clippy.toml` bans the hidden-state sources, the random
   walk hashes twice) rather than by hope. (The distinction is the owner's, from
   another of the owner's projects.)
-- **The minds do not replay.** Actions were produced by brains fed GPU-rendered senses on
+- **The Programs do not replay.** Actions were produced by Programs fed GPU-rendered senses on
   whatever hardware the host had; the same seed run live again yields a different history. The
   log reproduces the world *given* the actions; it does not reproduce the creatures' decisions.
   Written here so the stronger claim is never accidentally made.
@@ -735,7 +738,7 @@ it for the look; nothing pushed against anything.
 | Spectator delay | Participants able to consume the spectator feed as a side channel |
 | Audio beyond parametric pings, scratches and Doppler (HRTF, spectator-side occlusion) | The spectator's ears caring, which is a taste decision, not a measurement. Doppler itself left this row on 2026-08-21 — the owner ruled it realism owed now — and the parametric ears landed on 2026-08-22 |
 | Rigid-body dynamics (constraint solver, stacking, friction cones, restitution) | **Triggered** (2026-08-28, the third ruling): the worm is an articulated body, and master-control's Etape 8 builds the solver movement by movement - see [The undulation propels](#the-undulation-propels). Stacking and restitution stay on their own triggers: objects resting on one another |
-| WebAssembly brain tier, out-of-process DLL runner | The first community brain from outside the circle of trust |
+| WebAssembly Program tier, out-of-process DLL runner | The first community Program from outside the circle of trust |
 
 ## The four repositories
 
@@ -746,9 +749,9 @@ rc-worm's panel; the table below gives neither to anyone.
 | Repository | Eventually owns | Today |
 |---|---|---|
 | **master-control** | The world: authoritative tick, roster-of-record, validation, broadcast, the logs. Deviceless forever | Built: the heartbeat, the roster of record, the validator and its adversarial suite, the physics (hulls, exact contacts, friction, scratches, and the articulated chain: XPBD, a servo at every joint, every segment meeting the floor and the risers in three dimensions), the Disk with rollover, the input log, and Clu |
-| **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Protocol v11, twelve messages, every one flowing its own way only; the Disk recorder and replayer |
+| **link** | Link — the wire of the Grid: the protocol library Master Control and every TronGrid Lite instance load as the same shared binary; Rust behind a plain C ABI, `std` only, zero third-party crates | Protocol v12, twelve messages, every one flowing its own way only; the Disk recorder and replayer |
 | **tron-grid-lite** | The client in today's two roles, the senses, the renderer, the shared world definition the server fingerprints | The Grid as perceived: `--window` watches and listens, `--program` hosts a creature, `--replay` plays a Disk; the physics left for Master Control |
-| **rc-worm** | The first brain: the DLL, its Qt panel (which the long arc counts as v0 of the human client, [VISION.md](VISION.md#the-long-arc)), eventually the Blender body | Living: the DLL, at Program ABI 11, rezzes an eight-segment worm that brings its own gait - a travelling wave of servo targets - and a User at its Qt panel sees what the worm senses and steers how hard the wave runs and which way it bends |
+| **rc-worm** | The first Program: the DLL, its Qt panel (which the long arc counts as v0 of the human client, [VISION.md](VISION.md#the-long-arc)), eventually the Blender body | Living: the DLL, at Program ABI 11, rezzes an eight-segment worm that brings its own gait - a travelling wave of servo targets - and a User at its Qt panel sees what the worm senses and steers how hard the wave runs and which way it bends |
 
 The protocol went to its own repository for three reasons with names. The parser is the attack
 surface — the Dark Souls III remote-code execution and the CS:GO pre-auth overflows were
@@ -773,12 +776,12 @@ forever: its consumers are the spectator and the creature host, rendering and se
 a GPU, and the server never renders. The **simulated world** — `stepBody`, `sanitiseAndClamp`
 and the intent they act on — followed its owner out at Master Control's Etape 2, **executed**:
 the port lives in `master-control` as the one implementation and the flagship's copies are
-deleted, the mind-tick (senses in, Program called, intent staged raw — the server's clamp is
+deleted, the Program's tick (senses in, Program called, intent staged raw — the server's clamp is
 the law) being all that remains of the roster's loop. "The server is the man" is a runtime
 doctrine, but source gravity following it keeps the authoritative code in the memory-safe
 language, under the build that pins the floating-point environment. The consequences arrived as
 accepted: the local `--program --ticks` mode retired outright — and returned as the wire host
-(`--program` now dials Master Control, rezzes the Program's body and ticks its mind on the
+(`--program` now dials Master Control, rezzes the Program's body and ticks the Program on the
 world's telling, 2026-08-22) — and the per-tick hash guards the real thing in the server's
 suite. The ground function resolved its two-consumer life as a **contract function**: the C++
 copy stays (the floor mesh is generated from it), the Rust port steps physics against it, and
@@ -794,7 +797,7 @@ tool was a second implementation of Master Control's part, licensed only by the 
 absence — and it retired the day the heartbeat landed in `master-control`, exactly as ruled;
 the in-test `RehearsalMasterControl` class stays, being a test double for the client. And the Program ABI
 (`libs/program-abi`) is, by this document's own lives-with-neither reasoning, eventually
-misplaced: its two parties are the Grid and the brains, and the brains live in other
+misplaced: its two parties are the Grid and the Programs, and the Programs live in other
 repositories. It extracts into its own contract repository when `rc-worm` unpauses — the trigger
 is the second party becoming real, and not before, because an extraction with one consumer is
 ceremony. A note beside that ruling (2026-10-10): `rc-worm` has since unpaused and builds
@@ -834,7 +837,7 @@ is open (see [Deferred, with triggers](#deferred-with-triggers)).
 The owner's standing goal for the organisation (2026-08-22): once the Grid can host a stranger's
 creature — the creature-host wire mode, the roster of record, a spectator that draws real bodies
 — **reach out to the OpenWorm community, and to the other groups simulating AI animals, and
-invite their creatures to live in the Grid.** The whole topology is built so that a brain
+invite their creatures to live in the Grid.** The whole topology is built so that a Program
 written elsewhere needs only the Program ABI and a host process: Master Control owns the world,
 the wire is one shared binary, the sense spec is fixed per species, and a host that crashes
 leaves its creature embodied. Those are the properties a visiting lab needs before it lends a

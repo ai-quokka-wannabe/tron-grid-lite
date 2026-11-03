@@ -133,8 +133,8 @@ discrete device.
 
 ```text
 Vulkan devices on this machine: 2.
-  [0] Intel(R) RaptorLake-S Mobile Graphics Controller — integrated, Vulkan 1.4.323 — USABLE, score 1000. Run with --gpu 0.
-  [1] NVIDIA GeForce RTX 4090 Laptop GPU — discrete, Vulkan 1.4.341 — USABLE, score 10000. Run with --gpu 1.
+  [0] Intel(R) RaptorLake-S Mobile Graphics Controller - integrated, Vulkan 1.4.323 - USABLE, score 1000. Run with --gpu 0.
+  [1] NVIDIA GeForce RTX 4090 Laptop GPU - discrete, Vulkan 1.4.341 - USABLE, score 10000. Run with --gpu 1.
 ```
 
 Both of those are exercised on every change worth the name. **Pixels are bit-identical on one
@@ -360,11 +360,13 @@ tracing, 1980 edition, running in compute.
 | [docs/MATERIALS.md](docs/MATERIALS.md) | The material model, the Fresnel and refraction maths, and the HDR path |
 | [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
 | [docs/ACOUSTICS.md](docs/ACOUSTICS.md) | How hearing works on the Grid, and the decisions behind it |
+| [docs/CHEMORECEPTION.md](docs/CHEMORECEPTION.md) | Food, taking it in, and smell on the Grid, and the decisions behind them |
 | [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md) | The plugin contract between the Grid and a Program |
 | [docs/TOPOLOGY.md](docs/TOPOLOGY.md) | How the Grid becomes a world: the four repositories, the three processes and the wire, on audited MMO practice |
 | [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | What research labs build in this area, and what is genuinely unusual here |
 | [docs/research/](docs/research/) | Literature surveys and citations that design decisions rest on |
 | [docs/DEV_ENV_SETUP.md](docs/DEV_ENV_SETUP.md) | Setting up a development environment |
+| [docs/RUNNING_THE_GRID.md](docs/RUNNING_THE_GRID.md) | Standing the world, the Grid's window and the first Program up on one machine |
 | [tools/README.md](tools/README.md) | Scripts that operate on the renderer, including the flyby recorder |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [STYLE.md](STYLE.md) | Code style conventions |

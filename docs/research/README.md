@@ -5,7 +5,7 @@ Literature surveys, and the citations that the design documents one level up res
 These are kept separate for one reason: a design document should be readable as a design document.
 When the evidence and the decision live in the same file, the file grows until nobody reads either —
 `ACOUSTICS.md` reached three and a half times the length of `ARCHITECTURE.md`, which describes the
-entire renderer, while describing a single phase that does not exist yet.
+entire renderer, while describing a single phase that had not yet been built.
 
 So the split is by role rather than by topic. A document up there says what is being built and why.
 A document down here says how we know, and is where a reader goes when they want to check the claim

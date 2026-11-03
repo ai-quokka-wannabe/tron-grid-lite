@@ -85,7 +85,7 @@ Two existing details in that traversal turn out to matter more acoustically than
 - **Back faces are accepted** on both sides, with the comment that "a creature inside a closed shape
   should see its inner surface rather than nothing at all". A creature standing in a terrace hollow
   must hear its walls, so this is now load-bearing rather than defensive.
-- **Zero direction components are replaced with `1e-30`** in both `bvh.cpp` and `trace.slang`,
+- **Zero direction components are replaced with `1e-30`** in both `bvh.cpp` and `grid_bvh.slang`,
   because `0 * inf = NaN` poisons the min/max reduction. The terraced floor is made of horizontal
   patches, so acoustic rays fired straight up or straight down at a grid coordinate are *more* common
   than in the visual pass, not less. The fix is already in place on both sides.
@@ -143,12 +143,12 @@ every grid line of the floor** — a sparse lattice, but one of enormous solid a
 above it, which a gathered ray cannot miss. (Note that the six pillars are `makeEmissive` too and the
 glowing column is `makeGlowingGlass`, so 16,724 triangles in this scene carry optical emission. That
 is a second reason the acoustic source term must be authored separately rather than read off
-`emission`.) Meanwhile a source-driven cast would have to iterate all 16,640 tubes. So the decision
+`emission`.) Meanwhile a source-driven cast would have to iterate all 8,320 tubes. So the decision
 the research argued against is precisely the decision that makes the implementation cheap, and the
 reason is already sitting in the shader:
 
 ```hlsl
-accumulated += current.throughput * material.emission;   // trace.slang
+accumulated += current.throughput * material.emission;   // grid_optics.slang
 ```
 
 Replace `accumulated` with a histogram bin chosen by accumulated delay, and `material.emission` with
@@ -336,7 +336,7 @@ all but the nearby before any validation ray is spent, and about half a million 
 image-source enumeration stops at first order. What runs is a hybrid: enumerate the **terrace
 levels** (treating each as an infinite horizontal plane, reflecting the source in it, and
 accepting the candidate only when a validation ray confirms the reflection point lies on a triangle at
-that level) and the **fifty box faces**; gather everything else.
+that level), the **riser walls** and the **fifty box faces**; gather everything else.
 
 **Defended: there is still no reverberation.** The relief adds surface, not enclosure. There is no
 ceiling, the sky is still infinite and black, and no facet of the floor can turn an upward-going ray
@@ -642,7 +642,7 @@ property that used to sit beside them is gone. The implementation is `Acoustics:
 by six `static_assert`s in `components.hpp` and re-asserted independently in `tracer.cpp`. Because it
 is 16-byte aligned, adding even one float costs a whole row: 32 to 48 bytes, a 50 % increase, plus
 edits to four declarations that must all move in one commit — the struct, its asserts, the Slang mirror
-in `trace.slang`, and the cross-check in `tracer.cpp`.
+in `grid_optics.slang`, and the cross-check in `tracer.cpp`.
 
 The failure mode if one is missed is **asymmetric, and only one direction is caught.** The July 2026
 bug was the shader declaring a *wider* `Material` than the host, which strides past the end of the
@@ -652,7 +652,7 @@ Nothing in the repository guards that direction.
 
 **Recommendation: put the acoustic source strength in a separate `StructuredBuffer<float>` indexed by
 the same material index, bound only by the acoustic pass.** `Material` stays 32 bytes, its asserts stay
-untouched, `trace.slang` is not modified at all, the visual pass never binds the acoustic table, and
+untouched, `grid_optics.slang` is not modified at all, the visual pass never binds the acoustic table, and
 the buffer is six floats. The silent-failure window never opens.
 
 This does brush against design principle 5 as README.md currently words it — "surfaces carry optical
@@ -663,6 +663,12 @@ implementation detail, and coupling them by index rather than by row is the hone
 exactly, what the de-bloating pass concluded when it deleted these fields the first time.
 
 ### What a sounding creature costs this table
+
+**As built, a body costs this table nothing that sings.** A stage appends each body's slots after
+the Grid's six with an acoustic strength of zero — a hull reflects and does not sing — and a scrape
+reaches the ears as a point source instead: the world's `SCRATCH` events are delivered through
+`Acoustics::deliverCall` from the scraping body, exactly as a call is. What follows is the
+table-driven alternative and what it would cost, kept because the trade is still a real one.
 
 The gather already takes source strengths as a per-call argument and is linear in them, so **writing
 this tick's scrape value into a body's slot is itself the envelope multiplication described above** —
@@ -860,7 +866,7 @@ axis**, because the gather casts a full spherical set from it and every surface 
 acoustic mirror, so there is no directivity term for an axis to feed. And **the reference level —
 defined normatively in the header at `TglEarView::energy` as the primary neon tube, 1.0 by
 definition — cannot be the emitting source's own energy**, because a bin holds the sum of
-everything that arrived within it and a sum over 16,640 tubes has no single source to be relative
+everything that arrived within it and a sum over 8,320 tubes has no single source to be relative
 to. This is the derivation of that definition, not a second statement of it.
 
 An `ear_count` of zero is a legitimate body, and is the correct specification for all three insect
@@ -960,8 +966,8 @@ an omnidirectional line source. The objection's "the tube is a sixty-ninth of a 
 argument applies to the tube as an obstacle, not to the tube as an emitter, and the distinction is the
 reconciliation the decision needs.
 
-**The tube and its floor image merge.** The tube sits 1 cm above the floor, so tube and image are 2 cm
-apart — 0.175 wavelengths at 3 kHz. The pair is effectively coincident, and the hum therefore radiates
+**The tube and its floor image merge.** The tube sits 2 cm above the floor, so tube and image are 4 cm
+apart — 0.35 wavelengths at 3 kHz. The pair is well inside half a wavelength, and the hum therefore radiates
 from the floor surface into a half space rather than from a suspended strip into a full one. That is a
 real gain of up to 6 dB in pressure at the source and it means the acoustic emitter is, correctly, the
 ground.
@@ -970,7 +976,7 @@ ground.
 tracer and free for a listener-driven one.** A spatially dense, statistically uniform, continuously-on
 source lattice produces a nearly static field, and a time-domain histogram tracer is a tool for
 transients. Shooting from 16,640 triangles is not merely expensive, it is the wrong algorithm.
-**Gathering finds them by hitting them**, which is exactly what `trace.slang` already does with
+**Gathering finds them by hitting them**, which is exactly what `grid_optics.slang` already does with
 `material.emission`, and the cost is completely independent of how many tubes there are.
 
 Air absorption barely touches the fundamental. ISO 9613-2's 20 °C / 70 % row gives 9.0 dB/km at 2 kHz
@@ -1168,8 +1174,8 @@ already left this list the way an entry should: point sources were deferred here
   after one or two bounces and there is almost nothing for it to smooth.
 - **A hand-authored diffracting-edge list.** The correct edge list for the Grid is not derivable from
   the triangle soup, but it *is* knowable a priori, because the Grid is generated procedurally: the ten
-  boxes' forty vertical edges could be emitted by `generateBox` in about twenty lines, and if the risers
-  ever become vertical they are known to the generator too. Feed those to a single-edge Maekawa
+  boxes' forty vertical edges could be emitted by `generateBox` in about twenty lines, and the vertical
+  risers are known to the generator too, as `gridRiserWalls`. Feed those to a single-edge Maekawa
   attenuation applied only in shadow regions. **Trigger: a creature demonstrably failing a task because
   a terrace or pillar shadow is a hard zero** — not a wish for realism.
 - **Coherent summation of the direct-plus-floor pair.** Summing energy rather than pressure costs at
@@ -1200,13 +1206,12 @@ already left this list the way an entry should: point sources were deferred here
 
 ### Data
 
-- **BVH.** Bind the same `nodes` and `triangles` buffers, unchanged. The three buffer handles are
-  currently private members of `Tracer` with no accessor; the acoustic pass is the concrete second use
-  case the repository's own rule demands before a small extraction, so either add three accessors or
-  hoist buffer ownership into a small `World` holder.
+- **BVH.** Bind the same `nodes` and `triangles` buffers, unchanged. The acoustic pass was the
+  concrete second use case the repository's own rule demands before a small extraction, and buffer
+  ownership lives in `World` (`src/world.hpp`), whose accessors every tracer binds from.
 - **Acoustic source strengths.** A new `StructuredBuffer<float>` of six source strengths, indexed by
   the same material index, bound only by the acoustic pipeline. There is no absorption term and no
-  acoustic material table: every surface is a perfect mirror. `Material`, `trace.slang` and all six
+  acoustic material table: every surface is a perfect mirror. `Material`, `grid_optics.slang` and all six
   `static_assert`s are untouched. Implemented as `Acoustics::makeAcousticSourceStrengths`.
 - **The hum spectrum.** One `float4` per solve, the Grid's 3 kHz fundamental and its harmonics resolved
   into the listening ear's four bands. It is a push constant, not a material field, because every
@@ -1248,20 +1253,21 @@ scenes.
    fraction scales the arrival. **It is not diffraction and must never be described as
    diffraction** — it removes the discontinuity, and the discontinuity is the artefact that would
    actually break a creature's behaviour.
-2. **Enumerated image sources — built.** For point sources only: the terrace levels plus about fifty
-   outward-facing box faces, each reflected by mirror arithmetic and then validated with rays — one
-   proving the reflection point stands on real geometry lying *in the mirror's own plane* with the
-   source's leg clear, one proving the leg to the ear. Roughly 57 candidates per source-listener
-   pair, first order only. Note that no pre-filter decides which levels are plausible for a given
+2. **Enumerated image sources — built.** For point sources only: the terrace levels, the 655 riser
+   walls and about fifty outward-facing box faces, each reflected by mirror arithmetic and then
+   validated with rays — one proving the reflection point stands on real geometry lying *in the
+   mirror's own plane* with the source's leg clear, one proving the leg to the ear. Some 700
+   candidates per source-listener pair, first order only, of which the range cap prunes all but the
+   nearby before any validation ray is spent. Note that no pre-filter decides which levels are plausible for a given
    listener: the candidate count is small enough that the validation ray *is* the plausibility
    test, which is why the listener's own terrace level never has to be determined and no
    height-lookup machinery is needed — `gridTerraceLevels` even lists the top level the
    quantisation can only reach where the noise is exactly one, and on this landscape that candidate
    simply never validates.
-3. **Deterministic gather**, for the hum bed and for everything the enumeration cannot reach — the
-   risers, oblique paths, second order. Cast N directions from the ear, accumulate path length, and on
+3. **Deterministic gather**, for the hum bed and for everything the enumeration cannot reach — oblique
+   multi-bounce paths and second order. Cast N directions from the ear, accumulate path length, and on
    every hit whose material has a non-zero `acoustic_source_strength`, deposit that strength times the
-   hum spectrum into the bin the accumulated delay selects, exactly as `trace.slang` deposits radiance.
+   hum spectrum into the bin the accumulated delay selects, exactly as `grid_optics.slang` deposits radiance.
    **The directions come from a spherical Fibonacci set indexed by the ray id, never from an RNG.**
    There is no random number generator on any shipping path — the only one in the tree seeds test
    geometry under `libs/bvh/tests` — PROGRAM_INTERFACE.md publishes bit-identical replay as a
@@ -1293,8 +1299,8 @@ Conventions that must be chosen once and written down:
   double-counts spreading. Detection spheres exist to make a stochastic ray count converge in a closed
   room; the Grid is an open plane with a point receiver it can afford. The failure mode of getting
   this wrong is a silent 6 dB per doubling that looks like a material problem.
-- **Range cap of 20 m of total accumulated path**, replacing the hardcoded `10000.0` in `trace.slang`
-  with a parameter. Justified three ways: air absorption at 30 kHz costs 14 dB over 20 m and 90 dB over
+- **Range cap of 20 m of total accumulated path**, a parameter where the visual pass hands its
+  traversal a hardcoded `10000.0` in `grid_optics.slang`. Justified three ways: air absorption at 30 kHz costs 14 dB over 20 m and 90 dB over
   128 m, so the Grid has a physical acoustic horizon; Schnitzler and Kalko bound useful echolocation at
   10.5 m; and a distance cap bounds traversal cost predictably. Lawrence and Simmons' figures make the
   point sharply — beyond about 7 m a 100 kHz call loses more to the air than to the inverse square law,
@@ -1362,7 +1368,7 @@ Three caveats keep the budget honest:
    cheap, but it has not been measured and deserves a microbenchmark before the layout is fixed.
 2. **Register pressure is the measured cost driver here, and an acoustic thread is fatter.** Every
    thread already allocates `uint stack[30]` for traversal plus `RayTask stack[3]`. The sweep table in
-   `trace.slang` shows the task stack alone costing 15.24 ms against 19.00 ms at depth six, with the two
+   `grid_optics.slang` shows the task stack alone costing 15.24 ms against 19.00 ms at depth six, with the two
    axes multiplying rather than adding. A thread carrying a delay accumulator per outstanding task pays
    this again. Budget for it rather than discovering it.
 3. **Everything contends for one GPU.** Valve's own documentation warns about exactly this for Radeon
@@ -1371,7 +1377,7 @@ Three caveats keep the budget honest:
    creature's solve phase so roughly one creature in six solves on any given frame, and never dispatch
    the whole round at once.
 
-**Realistic bottom line: 0.24 to 0.36 ms per frame for twenty two-eared listeners**, which is under 3 %
+**Realistic bottom line: 0.24 to 0.36 ms per frame for twenty two-eared listeners**, which is under a tenth
 of the current frame and about the cost of the post-processing chain, with an order of magnitude of
 headroom before the number becomes interesting. The binding constraint is **listener count, not ray
 count** — the opposite of the intuition one brings from room acoustics. Note also that the User's
@@ -1381,17 +1387,16 @@ that frame, so a headless creature-only run frees essentially the whole budget.
 ### Hazards recorded before they bite
 
 - **Profiler.** Adding an `Acoustic` enumerator to `GpuPass` **requires a matching string in
-  `PASS_NAMES`**. That array is sized from `GpuPass::Count` and value-initialises the new slot to
-  `nullptr`; `logSummary()` then constructs a `std::string` from a null pointer once per second. Nothing
-  guards the pairing, so add a `static_assert`. Separately, an every-Nth-frame pass is **under-reported
+  `PASS_NAMES`**, and a `static_assert` in `profiler.cpp` holds the array's size to `GpuPass::Count`,
+  so a missing name fails the build. Separately, an every-Nth-frame pass is **under-reported
   by its own duty cycle**: on frames where it records nothing the availability check contributes a zero
   and the EMA blends it in, so a 12 ms solve every eighth frame reports as roughly 1.5 ms. Either gate
   the EMA on availability or report cost per solve, and say which.
-- **Shared Slang modules will not trigger rebuilds.** `add_slang_shader` sets `DEPENDS` on the single
-  source file only. Factoring the traversal into a shared `.slang` module imported by both shaders means
-  edits to it rebuild neither `.spv` and the build runs stale SPIR-V. Extend the CMake function with an
-  explicit extra-dependency argument; do **not** copy 150 lines of traversal, which is exactly the drift
-  the repository's asserts exist to prevent.
+- **Shared Slang modules must be listed to trigger rebuilds.** The traversal lives in shared modules
+  (`grid_bvh.slang`, `grid_optics.slang`) imported by several shaders, and `add_slang_shader` makes
+  every `.spv` depend on the `SLANG_SHARED_MODULES` list in `src/CMakeLists.txt`. A new shared module
+  left off that list rebuilds nothing when edited, and the build runs stale SPIR-V; do **not** copy the
+  traversal instead, which is exactly the drift the repository's asserts exist to prevent.
 - **Push constants.** The acoustic pass wants a different block entirely — listener and ear frames,
   direction count, band count, bin count and width, the hum spectrum, speed of sound, range cap, order
   cap, node count — so it is a new push struct and a new pipeline, not a variant. The tracer uses 80 of

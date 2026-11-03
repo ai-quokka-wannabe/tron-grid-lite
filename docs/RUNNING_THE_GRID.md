@@ -121,8 +121,8 @@ for, and what would be a finding worth reporting.
 
 More hosts are more creatures: start another `--program` instance (the same Program or another)
 and the world seats it too. A host that tries to wear an identity another host wears is
-refused, by name, on its own connection — `REFUSED: another host wears that identity` — and
-stops, because there is nothing for it to host.
+refused, by name, on its own connection — `Master Control refused the body of creature N at
+tick T: another host wears that identity` — and stops, because there is nothing for it to host.
 
 ### Ending a life properly
 
@@ -204,7 +204,7 @@ These answer a question rather than draw a picture, and none needs Master Contro
   Programs) is a later tier, ruled in
   [TOPOLOGY.md](TOPOLOGY.md) § Trust, in writing.
 - Every mismatch is refused **at the handshake, in words**: a client whose Link protocol differs
-  (`this end speaks 8, the peer 7`), a client from another world (the world fingerprint), a
+  (`you speak protocol version 11, this end speaks version 12`), a client from another world (the world fingerprint), a
   Program built against another ABI. Nothing negotiates; everything says which two versions
   disagreed, so the fix is always "rebuild that one".
 
@@ -218,7 +218,7 @@ These answer a question rather than draw a picture, and none needs Master Contro
 | The handshake is refused naming two protocol versions | One side was built against another Link. Rebuild the older one; both consumers build Link from their submodules, so `git submodule update --init` and a rebuild is the whole fix |
 | `--list-programs` says a Program is `UNUSABLE ... built against ABI version N and this Grid speaks M` | Rebuild the Program against the Grid's current `tgl_program_abi.h` (rc-worm re-vendors it: `python tools/check_abi_vendor.py check --flagship ../tron-grid-lite`) |
 | The host starts, the panel never opens | The worm was built with the panel but its Qt is not beside it: deploy with `cmake --install` and copy `programs/*` whole, plugins included, then `tools/check_deploy.py` the directory. On Linux, Qt must be findable (the kit's `lib` on the loader path or beside the library) and a display must exist |
-| `Master Control refused the body of creature N: another host wears that identity` | Another host already rezzed that creature id. Give this host a different identity, or stop the other |
+| `Master Control refused the body of creature N at tick T: another host wears that identity` | Another host already rezzed that creature id. Give this host a different identity, or stop the other |
 | Clu: `the log has no end line - the world did not stop on request` | The world was killed rather than asked to stop. Everything up to the last tick is still valid; next time end it with Ctrl+C in its window |
 | Clu refuses the log: another world, or another protocol | The log was made by a different world definition or Link version than this Master Control. Re-simulate with the build that made it |
 | The window is black | The Grid is mostly black mirror; fly until neon comes into view. If there is nothing at all, read the log for validation errors |

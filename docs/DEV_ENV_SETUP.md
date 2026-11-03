@@ -326,13 +326,13 @@ an LLVM on the path, and use it:
 
 ```text
 python -m pip install --user "clang-format~=23.1"
-python -m clang_format --version          # 22.1.x
+python -m clang_format --version          # 23.1.x
 python -m clang_format -i src/foo.cpp src/foo.hpp
 ```
 
 Run it on every changed `.cpp` and `.hpp` file. The repository's `.clang-format` enforces
 Allman braces, 4-space indent and a 170-column limit. An LLVM `clang-format` of another major
-will disagree with the gate on some line, so do not use the one on your `PATH` unless it is 22.
+will disagree with the gate on some line, so do not use the one on your `PATH` unless it is 23.
 
 **Never** pass `.slang` files to `clang-format` — it mangles Slang attributes and semantics into
 invalid syntax. Format shaders by hand according to `STYLE.md`.
