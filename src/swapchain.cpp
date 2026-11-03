@@ -70,7 +70,7 @@ namespace
         extent.height = std::clamp(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
         return extent;
     }
-}
+} // namespace
 
 Swapchain::Swapchain(const Device& device, VkSurfaceKHR surface, uint32_t width, uint32_t height, LoggingLib::Logger& logger) :
     m_logger(&logger),
@@ -118,7 +118,7 @@ void Swapchain::recreate(uint32_t width, uint32_t height)
     // sufficient — they only track command buffer completion, not present.
     m_device->get().waitIdle();
 
-    // Clear old views first (they reference old images).
+    // Forget the old images first: they belong to the swapchain about to be retired.
     m_images.clear();
 
     // Rebuild with old swapchain for smoother transition.
@@ -129,7 +129,7 @@ void Swapchain::build(uint32_t width, uint32_t height)
 {
     // Guard against zero-extent (minimised window) — Vulkan requires imageExtent > 0.
     // Set m_extent to zero so callers that check swapchain.extent() skip rendering;
-    // keeping a stale non-zero m_extent with empty m_images and m_views would silently
+    // keeping a stale non-zero m_extent with an empty m_images would silently
     // break acquireNextImage on the next iteration.
     if ((width == 0) || (height == 0)) {
         m_extent = vk::Extent2D{0, 0};
@@ -187,7 +187,22 @@ void Swapchain::build(uint32_t width, uint32_t height)
     }
 
     create_info.preTransform = capabilities.currentTransform;
+    /*
+        Opaque wherever the surface offers it, which is nearly everywhere. A surface that does not
+        is given the first mode it does support rather than an invalid one
+        (VUID-VkSwapchainCreateInfoKHR-compositeAlpha-01280): the picture is opaque either way,
+        since every pixel the post-process writes has alpha one.
+    */
     create_info.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    if (!(capabilities.supportedCompositeAlpha & vk::CompositeAlphaFlagBitsKHR::eOpaque)) {
+        for (const vk::CompositeAlphaFlagBitsKHR mode :
+            {vk::CompositeAlphaFlagBitsKHR::eInherit, vk::CompositeAlphaFlagBitsKHR::ePreMultiplied, vk::CompositeAlphaFlagBitsKHR::ePostMultiplied}) {
+            if (capabilities.supportedCompositeAlpha & mode) {
+                create_info.compositeAlpha = mode;
+                break;
+            }
+        }
+    }
     create_info.presentMode = m_present_mode;
     create_info.clipped = vk::True;
 

@@ -14,7 +14,6 @@
 */
 
 #include "audio.hpp"
-
 #include <algorithm>
 #include <cmath>
 #include <numbers>
@@ -45,7 +44,7 @@ namespace AudioLib
         //! footsteps from a crowd will reach and nobody will hear.
         constexpr std::size_t MAX_VOICES{64u};
 
-    }
+    } // namespace
 
     float pitchOf(const std::uint32_t creature_id) noexcept
     {
@@ -108,7 +107,7 @@ namespace AudioLib
         */
         const MathLib::Vec3 offset{sound.position - listener.position};
         const float distance{offset.length()};
-        const MathLib::Vec3 direction{distance > 1e-4f ? offset * (1.0f / distance) : listener.forward};
+        const MathLib::Vec3 direction{(distance > 1e-4f) ? offset * (1.0f / distance) : listener.forward};
 
         const float side{std::clamp(direction.dot(listener.right), -1.0f, 1.0f)};
         const float pan{(side + 1.0f) * 0.5f}; // 0 left, 1 right
@@ -173,7 +172,7 @@ namespace AudioLib
                     const float sample{std::sin(voice.phase) * voice.envelope};
                     voice.phase += 2.0f * std::numbers::pi_v<float> * voice.frequency / rate;
                     voice.frequency *= voice.glide;
-                    if (voice.phase > 2.0f * std::numbers::pi_v<float>) {
+                    if (voice.phase > (2.0f * std::numbers::pi_v<float>)) {
                         voice.phase -= 2.0f * std::numbers::pi_v<float>;
                     }
                     voice.envelope *= voice.decay;
@@ -204,12 +203,12 @@ namespace AudioLib
         });
 
         // A soft ceiling: many voices at once must never clip into the speakers.
-        for (std::uint32_t sample{0u}; sample < frames * 2u; ++sample) {
+        for (std::uint32_t sample{0u}; sample < (frames * 2u); ++sample) {
             out[sample] = std::tanh(out[sample]);
         }
     }
 
-    std::size_t Mixer::liveVoices()
+    std::size_t Mixer::liveVoices() const
     {
         const std::lock_guard<std::mutex> lock{m_mutex};
         return m_voices.size();

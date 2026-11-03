@@ -14,7 +14,6 @@
 */
 
 #include "loader_os.hpp"
-
 #include <stdexcept>
 #include <vector>
 

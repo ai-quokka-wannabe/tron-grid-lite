@@ -134,7 +134,7 @@ TEST_CASE(messages_from_one_thread_arrive_in_order)
     const std::size_t first{out.find("first")};
     const std::size_t second{out.find("second")};
     const std::size_t third{out.find("third")};
-    TEST_CHECK(first != std::string::npos && second != std::string::npos && third != std::string::npos);
+    TEST_CHECK((first != std::string::npos) && (second != std::string::npos) && (third != std::string::npos));
     TEST_CHECK(first < second);
     TEST_CHECK(second < third);
 }

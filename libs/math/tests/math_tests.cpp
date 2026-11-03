@@ -96,7 +96,7 @@ TEST_CASE(vec3_normalised_zero)
 {
     MathLib::Vec3 v{0.0f, 0.0f, 0.0f};
     MathLib::Vec3 n{v.normalised()};
-    TEST_CHECK(n.x == 0.0f && n.y == 0.0f && n.z == 0.0f);
+    TEST_CHECK((n.x == 0.0f) && (n.y == 0.0f) && (n.z == 0.0f));
 }
 
 TEST_CASE(vec3_arithmetic)

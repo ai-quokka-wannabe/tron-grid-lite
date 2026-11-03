@@ -37,8 +37,8 @@ class Device; // forward declaration
 
     There is no ray-tracing hardware in play. The hierarchy, the triangles and the materials live
     in ordinary storage buffers, and `grid_bvh.slang` traverses them with a fixed-size stack. Because
-    every surface in the Grid is perfectly smooth, each intersection spawns exactly one reflected
-    ray, so the whole thing is deterministic: no sampling, no variance, no denoiser.
+    every surface in the Grid is perfectly smooth, each intersection spawns at most one reflected
+    and one refracted ray, so the whole thing is deterministic: no sampling, no variance, no denoiser.
 
     Each frame in flight owns its own output image, because the host records the next frame while
     the GPU may still be reading the previous one. What it writes is linear radiance rather than a

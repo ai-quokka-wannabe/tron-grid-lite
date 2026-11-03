@@ -21,11 +21,9 @@
 /*!
     The surface description the compute shaders read.
 
-    One struct, because one is all the renderer uses. This header once carried an
-    entity/component scene layout — Transform, Bounds, Geometry, MaterialIndex, stored as parallel
-    arrays inside a Scene class — and none of it was ever instantiated: the Grid is built
-    directly in main.cpp as triangle soup and handed to the hierarchy builder. It has been removed
-    rather than left as a promise, along with scene.hpp itself.
+    One struct, because one is all the renderer uses: the Grid is triangle soup
+    (`world_definition.cpp`) handed straight to the hierarchy builder, with no entity/component
+    scene layer between them.
 */
 
 /*!
@@ -57,8 +55,7 @@
     |     16 |   12 | `emission`             | `float3`          |
     |     28 |    4 | `transmission`         | `float`           |
 
-    Acoustic properties are deliberately **not** here, and that is now a decision rather than a
-    deferral. They live in their own parallel table in `acoustics.hpp`, indexed by the same
+    Acoustic properties are deliberately **not** here. They live in their own parallel table in `acoustics.hpp`, indexed by the same
     `MaterialSlot`, because the two senses disagree about what a surface is: an optically emissive
     pillar is acoustically silent, and keying a gather on `emission` would find 16,724 triangles
     where the design calls for 16,640. Two tables that disagree are the point, not an accident.
@@ -102,7 +99,7 @@ enum MaterialSlot : uint32_t {
     MATERIAL_PILLAR = 3u, //!< Standing blocks, bright enough to light the floor around them.
     MATERIAL_GLASS = 4u, //!< Clear slabs that refract what is behind them.
     MATERIAL_GLOWING_GLASS = 5u, //!< A tube that emits and transmits at once.
-    MATERIAL_SLOT_COUNT = 6u //!< Number of slots, and therefore the length of both material tables.
+    MATERIAL_SLOT_COUNT = 6u //!< Number of the Grid's own slots. A stage appends body and orb slots after them, in both tables.
 };
 
 /*
@@ -138,8 +135,8 @@ enum MaterialSlot : uint32_t {
 }
 
 /*!
-    A glowing translucent surface — the case the old three-type material model could not express,
-    and precisely the one a neon tube with a glass envelope wants.
+    A glowing translucent surface — no single mirror, neon or glass type expresses it, and it is
+    precisely the one a neon tube with a glass envelope wants.
 */
 [[nodiscard]] constexpr Material makeGlowingGlass(const MathLib::Vec3& colour, const MathLib::Vec3& emission, float index_of_refraction, float transmission)
 {

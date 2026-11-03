@@ -14,8 +14,8 @@
 
 #include <bvh/bvh.hpp>
 #include <algorithm>
-#include <cmath>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 
@@ -288,11 +288,12 @@ namespace BvhLib
                 return;
             }
 
-            const auto middle = std::partition((*triangles).begin() + first, (*triangles).begin() + first + count, [&](const Triangle& triangle) {
+            const std::vector<Triangle>::iterator range_begin{(*triangles).begin() + first};
+            const std::vector<Triangle>::iterator middle = std::partition(range_begin, range_begin + count, [&](const Triangle& triangle) {
                 return binOf(triangle) <= best_bin;
             });
 
-            uint32_t left_size{static_cast<uint32_t>(std::distance((*triangles).begin() + first, middle))};
+            uint32_t left_size{static_cast<uint32_t>(std::distance(range_begin, middle))};
 
             if ((left_size == 0u) || (left_size == count)) {
                 // The chosen plane failed to separate anything, which the sweep above should have

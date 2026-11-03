@@ -113,7 +113,7 @@ namespace
         return Acoustics::BIN_COUNT;
     }
 
-}
+} // namespace
 
 TEST_CASE(the_gather_is_bit_identical_between_runs)
 {
@@ -687,8 +687,7 @@ TEST_CASE(an_ear_sealed_in_anothers_hull_is_deaf_until_the_hull_is_its_own)
         A closed tetrahedron around the ear, over a singing floor. Sealed in somebody else's hull
         the ear is deaf — every gather ray dies inside a silent shell — and that is honest
         occlusion. Sealed in its *own* hull it must hear the world anyway, because ears sit on
-        bodies, and a body that deafened its own ears would end hearing the moment bodies became
-        real. The skip is the difference, and this is the test that keeps it one.
+        bodies, and a body that deafened its own ears would hear nothing at all. The skip is the difference, and this is the test that keeps it one.
     */
     std::vector<BvhLib::Triangle> floor_triangles;
     appendHorizontalQuad(floor_triangles, 0.0f, 200.0f, MATERIAL_NEON_PRIMARY);
@@ -854,9 +853,9 @@ TEST_CASE(outward_box_faces_face_outward_and_omit_the_bottom)
 
         // Every corner of every face lies on the box's surface.
         for (const MathLib::Vec3& corner : {face.origin, face.origin + face.edge_u, face.origin + face.edge_v, face.origin + face.edge_u + face.edge_v}) {
-            TEST_CHECK(std::fabs(corner.x - centre.x) <= half_extents.x + 1e-6f);
-            TEST_CHECK(std::fabs(corner.y - centre.y) <= half_extents.y + 1e-6f);
-            TEST_CHECK(std::fabs(corner.z - centre.z) <= half_extents.z + 1e-6f);
+            TEST_CHECK(std::fabs(corner.x - centre.x) <= (half_extents.x + 1e-6f));
+            TEST_CHECK(std::fabs(corner.y - centre.y) <= (half_extents.y + 1e-6f));
+            TEST_CHECK(std::fabs(corner.z - centre.z) <= (half_extents.z + 1e-6f));
         }
     }
 

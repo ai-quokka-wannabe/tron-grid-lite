@@ -28,7 +28,6 @@
 */
 
 #include <tgl/tgl_program_abi.h>
-
 #include <testing/testing.hpp>
 
 namespace
@@ -58,7 +57,7 @@ namespace
     }
 
     const TglProgramVTable g_vtable = {TGL_PROGRAM_VTABLE_HEADER, libraryInit, programRez, programTick, programDerez, libraryShutdown};
-}
+} // namespace
 
 //! The two header members are filled by a macro, so nothing about writing them is checked by the
 //! compiler. A vtable claiming the wrong size is precisely the failure struct_size exists to

@@ -23,16 +23,13 @@
 #include "../roster.hpp"
 #include "../stage.hpp"
 #include "../world_stage.hpp"
-
 #include <bvh/bvh.hpp>
 #include <math/vector.hpp>
-
+#include <testing/testing.hpp>
 #include <cstdint>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
-
-#include <testing/testing.hpp>
 
 namespace
 {

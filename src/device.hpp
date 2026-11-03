@@ -79,7 +79,8 @@ public:
         logical device and leaves nothing behind.
 
         \param instance Vulkan instance to enumerate from.
-        \param surface Surface presentability is tested against.
+        \param surface Surface presentability is tested against, or `VK_NULL_HANDLE` to test for a
+               headless device.
         \param logger Logger to report through.
         \return How many devices can run the renderer.
     */

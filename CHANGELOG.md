@@ -1262,6 +1262,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   which `main` reports as news (`[INFO] ... Shutting down cleanly.`) with a successful exit; every other exception
   out of the wire is still an error.
 
+- **The deep sweep: warnings, edge cases and every fact that drifted from the tree.** The owner's ask: "fix all issues,
+  even minor and even cosmetic ones", and mind the warnings every executable logs. A misspelt flag is refused rather
+  than ignored - `--verify-scnee` used to answer "nothing to do" and exit 0, which reads as a passed check - and so is
+  a flag whose value is missing. A Debug run's validation warnings are all real: three messages that describe the
+  deliberate configuration (GPU-assisted validation beside the core checks, the features it forces on, a buffer alone
+  in its arena or a transient staging buffer) go to the debug channel. The Clu test removes its Disk on every path,
+  so a failed run no longer leaves a `tgl-clu-test-*.disk` in the temporary directory. The swapchain asks for opaque
+  composition only where the surface offers it; Win32 audio checks the two calls it ignored; misuse of the world,
+  the tracer's instance slots and the senses solver is refused by name; `--list-gpus` speaks the same " - " and
+  `UNUSABLE` as `--list-programs`. Code follows STYLE.md: `auto` spelt out, `[[nodiscard]]`, brace member
+  initialisers, explicit parentheses, flush include blocks, `std::ranges`, `Output`'s implementation held by a
+  `unique_ptr`, dead `using`s and includes gone, and the retired "mind" replaced by Program. A new geometry test holds
+  the terrace levels to the drawn floor. Comments and documents now agree with the code: tube and triangle counts,
+  the tube lift, image sizes, file locations of the optics, the shutdown order, Link protocol 12, the 216-byte
+  `TglSenses`, the clang-format 23 pin, the CI checks, missing documents in the README and CLAUDE.md, stale section
+  citations, and built-versus-planned statements in ACOUSTICS, CHEMORECEPTION, TOPOLOGY and ARCHITECTURE. Nothing
+  rendered or sensed moves, and the Program ABI and the wire are untouched.
+
 - **Source comments follow the current world model.** The camera, spectator, and tick-rate comments now state what
   is true today and point to `docs/VISION.md` for the long arc. This is documentation only.
 

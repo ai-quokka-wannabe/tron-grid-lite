@@ -41,7 +41,7 @@ class Device; // forward declaration
     upsamples tent-filter back up while adding into the mip below. What arrives back at mip 0 is a
     wide, soft glow that no single blur pass of a sensible radius could produce.
 
-    Creature sensors will skip all of this. A 64x64 sensor gains nothing from a mip pyramid, and a
+    Creature sensors skip all of this. A creature eye gains nothing from a mip pyramid, and a
     vignette on a sensor would be a synthetic gradient a Program could learn from rather than a
     property of the Grid — which is why both are parameters rather than fixtures.
 */
@@ -113,8 +113,8 @@ private:
         of it at once on resize.
     */
     struct OwnedImage {
-        vk::raii::Image image{nullptr};
-        vk::raii::ImageView view{nullptr};
+        vk::raii::Image image{nullptr}; //!< The image, bound into `m_image_arena`.
+        vk::raii::ImageView view{nullptr}; //!< A storage view of the whole image.
     };
 
     //! Creates one storage image of the given size and format, bound to the arena.
@@ -137,8 +137,8 @@ private:
     /*!
         One block of memory behind every image this stage owns, rather than one allocation each.
 
-        The bloom pyramid alone is ten images at the default two frames in flight, every one of them
-        far below the megabyte at which the validation layer stops objecting. They are built together
+        The bloom pyramid alone is twelve images at 1280x720 and the default two frames in flight,
+        most of them far below the megabyte at which the validation layer stops objecting. They are built together
         and thrown away together on resize, which is exactly the shape a bump allocator wants.
     */
     MemoryArena m_image_arena;

@@ -13,9 +13,7 @@
 */
 
 #include "roster.hpp"
-
 #include "acoustics.hpp"
-
 #include <array>
 #include <cmath>
 #include <numbers>
@@ -355,7 +353,7 @@ namespace RosterLib
             // forbids: a Program touches its state in program_derez, never after library_shutdown.
             // Every creature this constructor rezzed is derezzed here, in reverse, before the
             // refusal leaves.
-            for (auto creature{m_creatures.rbegin()}; creature != m_creatures.rend(); ++creature) {
+            for (std::vector<Creature>::reverse_iterator creature{m_creatures.rbegin()}; creature != m_creatures.rend(); ++creature) {
                 m_library.vtable().program_derez(creature->program);
             }
             m_creatures.clear();
@@ -388,10 +386,9 @@ namespace RosterLib
     void Roster::tick(SensesSource& senses_source)
     {
         /*
-            The mind's half of the lifecycle, which is all that lives here since the physics
-            followed its owner to Master Control: the world's telling advances the bodies, and
-            this loop advances the minds - senses in, program called, intent staged. The voice
-            actuator is applied from the staged intent so every ear still hears one consistent
+            The Program's half of the lifecycle, which is all that lives here, the physics being
+            Master Control's: the world's telling advances the bodies, and this loop advances
+            the Programs - senses in, Program called, intent staged. The voice actuator is applied from the staged intent so every ear still hears one consistent
             tick; over the wire it is the server's physics that applies it, from the very same
             staged value this host sends.
         */

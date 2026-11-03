@@ -218,8 +218,8 @@ rest.
 - **One version number, checked once, and it moves whenever the header does.**
   `TGL_ABI_VERSION` catches a stale library; it does not express compatibility. A constant
   that never moves catches nothing, because the stale library carries the identical constant — see
-  [Versioning](#versioning), which holds the mechanism that keeps the number honest. There are no
-  per-struct size fields and no compatibility shims.
+  [Versioning](#versioning), which holds the mechanism that keeps the number honest. No struct but
+  the vtable carries a size field, and there are no compatibility shims.
 - **Fixed-width types only.** `uint32_t`, `int32_t`, `float`, `uint64_t`. No `int`, no `long`, no
   `size_t`, no `bool`, no enums with unspecified underlying type, no bitfields.
 - **Standard layout, and no padding anywhere.** Every struct here is a plain C standard-layout
@@ -279,10 +279,10 @@ arrive dressed as a convenience.
 **It is one number spelled one way, and that is a decision rather than an oversight.** There is no
 `tick_rate_hz` beside it, tempting as the convenience is: an integer hertz cannot represent every
 reciprocal `dt`, so the two spellings would disagree in the last bits and then drift. The number
-still spans a C ABI — `TglLibraryInfo::nominal_dt_seconds`, `TglSenses::dt_seconds`, and the
-Grid-side constant the physics step integrates against — and those are held together by a
-`static_assert` against the header's literal, because a comment saying "must equal" is not a
-mechanism.
+still spans a C ABI — `TglLibraryInfo::nominal_dt_seconds` and `TglSenses::dt_seconds` — and both
+are filled from one Grid-side constant, `RosterLib::TICK_SECONDS`, the only place the number lives
+on the Grid's side, which a `static_assert` holds to its integer twin `TICKS_PER_SECOND`, because a
+comment saying "must equal" is not a mechanism.
 
 Note the direction of control: the **Grid** decides how many eyes a body has, how many samples each
 one takes, in which directions and in how many channels, and hands the lot to the Program. A Program
@@ -535,7 +535,7 @@ hears its own spikes drag along the floor, and hears another worm's, and can tel
 and roughly how loudly — and cannot range either, which is the honest physics, not a gap. A
 Program that wants to know where its own body is dragging has its contacts from every segment,
 in the head's frame, and its ears besides — proprioception by sound, and exactly the kind of
-thing a mind is for.
+thing a Program is for.
 
 One scope caution, because it is easy to violate by accident. The ABI delivers **energy per band per
 time bin per ear, plus the arrivals' onsets, radial velocities and energies, and stops.** Anything that names a source, separates streams, reports "a wall is
@@ -999,8 +999,8 @@ for a picture.
 `TGL_ABI_VERSION` is a build stamp rather than a compatibility statement. This interface
 changes whenever it needs to — structs gain fields, functions change signature, semantics get
 corrected — and none of that buys anyone backward compatibility, because nobody is owed it by a
-project that has not reached its first release. Every Program that exists is built from this
-repository, at whatever commit the Grid is built from. When the ABI changes, both sides rebuild and
+project that has not reached its first release. Every Program that exists is built against this
+repository's header, at whatever commit the Grid is built from. When the ABI changes, both sides rebuild and
 the number moves with them. That is the whole story.
 
 The constant is kept for the one job it can still do honestly: catching a **stale library**. A
@@ -1032,7 +1032,7 @@ record ceremony rather than compatibility, which is a different job from the sta
 above and must not be confused with it: one says "these two builds agree", the other says only
 "these two builds are the same build".
 
-There is deliberately nothing else — no per-struct size fields, no reserved members held back for
+There is deliberately nothing else — no size field on any struct but the vtable, no reserved members held back for
 future growth, no negotiation. Those exist to let mismatched builds keep working, and while the
 interface has no users that is machinery bought at the price of clutter in every struct. Whatever
 policy replaces this at 1.0.0 can be designed then, against a real interface rather than a guess.
@@ -1048,7 +1048,7 @@ Practical advice while the interface is pre-1.0: rebuild your Program whenever t
    `<stdint.h>` and `<stddef.h>`.
 2. Implement the five vtable functions and export `tglGetProgramVTable`.
 3. Build a shared library named `<name>.dll` on Windows or `lib<name>.so` on Linux.
-4. Drop it in `programs/` beside the Grid's executable and check it with `--program <name>`.
+4. Drop it in `programs/` beside the Grid's executable and check it with `--list-programs`.
 
 Nothing else is required, and nothing else is offered.
 
@@ -1068,7 +1068,7 @@ in.
 | Go | `-buildmode=c-shared` | `//export tglGetProgramVTable` | the manifest |
 | D, Nim, Odin, Ada, Fortran, Swift, Haskell, OCaml, … | whatever the toolchain calls a shared library | that language's C export | the manifest |
 
-**The manifest is the point of that last column.** C and C++ get sixty-odd `static_assert`s that fail
+**The manifest is the point of that last column.** C and C++ get over a hundred `static_assert`s that fail
 the build the moment the header drifts; Zig inherits them through `@cImport`; Rust gets equivalent
 tests out of `bindgen`. Every other binding declares the structs a second time with nothing holding
 the copies together, and one wrong offset compiles perfectly and arrives as nonsense in a sensor
@@ -1083,7 +1083,7 @@ in this repository regenerates it and fails if it no longer describes the header
 stale silently.
 
 ```text
-struct TglSenses 88 8
+struct TglSenses 216 8
 member TglSenses tick 0 8
 member TglSenses eyes 8 8
 ...
@@ -1106,7 +1106,7 @@ member TglSenses eyes 8 8
 ### Two more rules for a language with a garbage collector
 
 - **The vtable must have static storage duration and must never move.** The Grid holds the pointer
-  for the whole run and reads it after `library_shutdown` has been called. In Go this means the table
+  for the whole run, until `library_shutdown` returns. In Go this means the table
   lives in C memory rather than Go memory, because cgo forbids storing a Go pointer where C can keep
   it.
 - **Borrowed pointers must be copied, never retained.** Every pointer in `TglSenses` is valid for the

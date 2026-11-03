@@ -59,18 +59,23 @@ The exact Fresnel equations require complex arithmetic per wavelength. Schlick's
 approximation replaces them with a single power:
 
 ```hlsl
-float3 fresnelSchlick(float cos_theta, float3 f0)
+float fresnelSchlick(float cosine, float index_of_refraction)
 {
-    float m = clamp(1.0 - cos_theta, 0.0, 1.0);
-    float m2 = m * m;
-    return f0 + (1.0 - f0) * (m2 * m2 * m);   // m^5, no pow() call
+    const float f0_root = (index_of_refraction - 1.0) / (index_of_refraction + 1.0);
+    const float f0 = f0_root * f0_root;
+    const float one_minus_cosine = saturate(1.0 - cosine);
+    const float squared = one_minus_cosine * one_minus_cosine;
+    return f0 + ((1.0 - f0) * squared * squared * one_minus_cosine);   // m^5, no pow() call
 }
 ```
+
+That is the shader's own function, in `../src/grid_optics.slang`: it takes the index of refraction
+and derives `F0` from it, as the next section explains.
 
 Average error is below 1 % for dielectrics in the IOR range 1.0–2.2, and it is roughly 32× cheaper
 than the exact form. For a real-time renderer this is not a compromise worth agonising over.
 
-Writing `m^5` as `m2 * m2 * m` avoids a transcendental `pow()` in the innermost loop of the trace.
+Writing `m^5` as `squared * squared * one_minus_cosine` avoids a transcendental `pow()` in the innermost loop of the trace.
 
 ### Deriving F0 from the Index of Refraction
 
@@ -82,7 +87,7 @@ boundary between air and a medium of index `n`, it follows directly from the Fre
 F0 = ((n - 1) / (n + 1))^2
 ```
 
-This should be computed from the material's IOR rather than authored as a separate number.
+It is computed from the material's IOR rather than authored as a separate number.
 Storing both invites them to disagree, and a mirror whose `F0` does not match its `IOR` refracts
 along one physical boundary while reflecting along another.
 
@@ -104,7 +109,7 @@ produces most of the look of the world:
 |--------|-----|--------------|-------|
 | Vacuum / air | 1.000 | — | The medium rays travel through by default |
 | Water | 1.333 | 0.020 | |
-| Common glass | 1.500 | 0.040 | The default for the glass material |
+| Common glass | 1.500 | 0.040 | Ordinary glass; the shipped slabs use 1.52 and the glowing column 1.46 |
 | Volcanic glass (obsidian) | 1.486 | 0.038 | A real dark-glass reference, quoted for comparison only |
 | Acrylic | 1.490 | 0.039 | |
 | Sapphire | 1.770 | 0.077 | Noticeably brighter reflection |
@@ -117,7 +122,7 @@ neon world wants.
 The shipped mirror floor is one of those: it uses **2.4**, for `F0 ≈ 0.17`. The IOR is the only
 reflectivity knob this material model has, and the honest 4 % of a real dark glass is far too dim
 for a surface meant to read as a mirror. The reasoning is recorded beside the value, in
-`makeMaterials()` in `../src/main.cpp`.
+`makeMaterials()` in `../src/world_definition.cpp`.
 
 ---
 
@@ -221,7 +226,7 @@ immediately hit that object's own back face unless the traversal skips the origi
 Carry the source primitive index down the ray and reject it during traversal, or offset the ray
 origin off the surface by a small epsilon. The self-hit is the single most common bug in a
 hand-written refraction path. This renderer takes the second option and nothing else —
-`SURFACE_EPSILON` in `../src/trace.slang`.
+`SURFACE_EPSILON` in `../src/grid_optics.slang`.
 
 ---
 
@@ -368,8 +373,8 @@ hierarchy. See `isMajorGridLine()` in `../src/geometry.cpp`.
 
 An edge is an accent edge when *either* of its axes lies on a major line, so that the crossings of
 a major row and a major column stay a single unbroken accent lattice instead of breaking at every
-junction. With the shipped `major_interval` of 8 that puts roughly 23 % of the edges on the accent
-colour.
+junction. With the shipped `major_interval` of 8 that puts 2,048 of the 8,320 edges, roughly 25 %,
+on the accent colour.
 
 Deciding this once on the host is what keeps reflections correct, at no cost in the shader: the
 material index rides on the triangle, so a reflected or refracted hit reads exactly the index a
@@ -391,7 +396,7 @@ black pixel, a white pixel, or a NaN that poisons everything downstream.
 | Minimum ray distance | `1e-8` | Rejects the degenerate zero-distance hit during traversal; the surface offset above is what actually cures acne |
 | Inverse ray direction | `1e-30` in place of a zero component | An axis-aligned ray gives `1 / 0` in the BVH slab test, and an origin lying on that slab's plane then computes `0 * inf` = NaN, which turns a box the ray does pass through into a miss. The shader and the host BVH substitute the same tiny magnitude |
 | Pre-encode clamp | `clamp(colour, 0, 1)` | Guarantees `linearToSrgb()` never sees a negative input |
-| Normalise after interpolation | Always | Interpolated normals are not unit length; an unnormalised `N` silently corrupts both `reflect()` and `refract()` |
+| Normalise the face normal | Always | `cross(edge1, edge2)`, carried through the instance transform, is not unit length; an unnormalised `N` silently corrupts both `reflect()` and `refract()` |
 
 Two further notes:
 

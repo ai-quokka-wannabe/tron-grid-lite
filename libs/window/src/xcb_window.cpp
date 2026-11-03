@@ -311,7 +311,7 @@ namespace WindowLib
 
         switch (event_type) {
         case XCB_CLIENT_MESSAGE: {
-            auto* cm{reinterpret_cast<xcb_client_message_event_t*>(event)};
+            xcb_client_message_event_t* cm{reinterpret_cast<xcb_client_message_event_t*>(event)};
             if (cm->data.data32[0] == m_wm_delete_window) {
                 WindowEvent ev{WindowEvent::Type::Close};
                 pushEvent(ev);
@@ -327,8 +327,8 @@ namespace WindowLib
         }
 
         case XCB_CONFIGURE_NOTIFY: {
-            auto* cfg{reinterpret_cast<xcb_configure_notify_event_t*>(event)};
-            if (cfg->width != m_width || cfg->height != m_height) {
+            xcb_configure_notify_event_t* cfg{reinterpret_cast<xcb_configure_notify_event_t*>(event)};
+            if ((cfg->width != m_width) || (cfg->height != m_height)) {
                 m_width = cfg->width;
                 m_height = cfg->height;
                 WindowEvent ev{WindowEvent::Type::Resize};
@@ -340,7 +340,7 @@ namespace WindowLib
         }
 
         case XCB_KEY_PRESS: {
-            auto* kp{reinterpret_cast<xcb_key_press_event_t*>(event)};
+            xcb_key_press_event_t* kp{reinterpret_cast<xcb_key_press_event_t*>(event)};
             WindowEvent ev{WindowEvent::Type::KeyDown};
             ev.key.keycode = kp->detail; // X11 keycode (not keysym)
             ev.key.repeat = false; // X11 doesn't distinguish easily
@@ -349,7 +349,7 @@ namespace WindowLib
         }
 
         case XCB_KEY_RELEASE: {
-            auto* kr{reinterpret_cast<xcb_key_release_event_t*>(event)};
+            xcb_key_release_event_t* kr{reinterpret_cast<xcb_key_release_event_t*>(event)};
             WindowEvent ev{WindowEvent::Type::KeyUp};
             ev.key.keycode = kr->detail;
             ev.key.repeat = false;
@@ -383,7 +383,7 @@ namespace WindowLib
             int32_t dx{m_mouse_tracked ? (x - m_last_mouse_x) : 0};
             int32_t dy{m_mouse_tracked ? (y - m_last_mouse_y) : 0};
 
-            if (m_cursor_captured && (dx != 0 || dy != 0)) {
+            if (m_cursor_captured && ((dx != 0) || (dy != 0))) {
                 // Recentre cursor to prevent hitting screen edges
                 int16_t cx{static_cast<int16_t>(m_width / 2)};
                 int16_t cy{static_cast<int16_t>(m_height / 2)};
@@ -411,9 +411,9 @@ namespace WindowLib
         }
 
         case XCB_BUTTON_PRESS: {
-            auto* bp{reinterpret_cast<xcb_button_press_event_t*>(event)};
+            xcb_button_press_event_t* bp{reinterpret_cast<xcb_button_press_event_t*>(event)};
             // X11: 1=left, 2=middle, 3=right, 4/5=scroll
-            if (bp->detail >= 1 && bp->detail <= 3) {
+            if ((bp->detail >= 1) && (bp->detail <= 3)) {
                 WindowEvent ev{WindowEvent::Type::MouseButtonDown};
                 ev.mouse_button.button = (bp->detail == 1) ? 0 : (bp->detail == 3) ? 1 : 2;
                 ev.mouse_button.x = bp->event_x;
@@ -424,8 +424,8 @@ namespace WindowLib
         }
 
         case XCB_BUTTON_RELEASE: {
-            auto* br{reinterpret_cast<xcb_button_release_event_t*>(event)};
-            if (br->detail >= 1 && br->detail <= 3) {
+            xcb_button_release_event_t* br{reinterpret_cast<xcb_button_release_event_t*>(event)};
+            if ((br->detail >= 1) && (br->detail <= 3)) {
                 WindowEvent ev{WindowEvent::Type::MouseButtonUp};
                 ev.mouse_button.button = (br->detail == 1) ? 0 : (br->detail == 3) ? 1 : 2;
                 ev.mouse_button.x = br->event_x;

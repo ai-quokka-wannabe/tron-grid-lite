@@ -75,9 +75,9 @@ namespace WindowLib
         /*!
             Default constructor; initialises to Type::None with a zeroed union.
 
-            The largest member is initialised deliberately. Initialising a smaller one leaves the
+            The largest member is initialised deliberately. Initialising a smaller one would leave the
             remaining bytes indeterminate, so reading `mouse_move` from a default-constructed event
-            would have read rubbish — and the comment claiming a zeroed union would have been false.
+            would read rubbish and the union would not be zeroed at all.
         */
         WindowEvent() :
             type(Type::None),

@@ -60,8 +60,8 @@ Everything whose definition contains the word *enclosure*:
   Mehra and Manocha note that in outdoor scenes most rays escape after the fourth or fifth bounce;
   the Grid is more extreme than any outdoor benchmark in the literature.
 - **Receiver spheres.** They exist to make a stochastic ray count converge in a closed room. A 0.5 m
-  sphere smears arrival times by 1.5 ms, which is larger than the histogram bin this document
-  proposes, and this scene is sparse enough to afford a point receiver.
+  sphere smears arrival times by 1.5 ms, which is larger than the histogram bin ACOUSTICS.md
+  uses, and this scene is sparse enough to afford a point receiver.
 - **Every wave method**, for reasons given under [What Phase 5 Rejects](../ACOUSTICS.md#what-phase-5-rejects).
 
 ### The wavelength ledger
@@ -73,7 +73,7 @@ is doing honest work.
 
 | Feature | Size | One wavelength at |
 |---------|------|-------------------|
-| Neon tube lift above the floor | 0.01 m | 34.3 kHz |
+| Neon tube lift above the floor | 0.02 m | 17.2 kHz |
 | Neon tube width | 0.05 m | 6.86 kHz |
 | Glass slab thickness | 0.7 m | 490 Hz |
 | **Terrace step height** | **0.833 m** | **412 Hz** |
@@ -89,7 +89,7 @@ every audible frequency** and are the only surfaces of which that is true — an
 a statement about six stepped planes rather than about one 128 m sheet, because the relief means
 there is no single floor plane any more. The **terrace steps, pillars, slabs and column are valid
 above roughly 500 Hz to 1 kHz** and progressively fictitious below it. The **neon tubes are
-acoustically nothing below about 7 kHz**: a 5 cm ribbon lying 1 cm above a hard plane is not a
+acoustically nothing below about 7 kHz**: a 5 cm ribbon lying 2 cm above a hard plane is not a
 scatterer, it is a paint job on the floor.
 
 The honest summary for anyone reading this later: **geometrical acoustics is sound in this scene
@@ -124,7 +124,7 @@ Run it against a pillar of half-width 0.45 m:
 | 85.5 kHz (mouse ceiling) | 4.0 mm | 224 | 705 |
 
 A human attending to a 100 Hz component sees a quarter-wavelength obstacle: it is not there. A
-mouse-class creature sees the same pillar as 6 to 224 wavelengths across across its entire hearing
+mouse-class creature sees the same pillar as 6 to 224 wavelengths across over its entire hearing
 range. That is the geometric-optics regime by any standard, and it is what makes "no diffraction in
 Phase 5" a physics decision rather than a budget one.
 
@@ -134,8 +134,6 @@ Second, the insect presets are not pressure receivers and a pressure-energy hist
 quantity their ears do not measure — see [the roster](#the-creature-roster). Third, all of it is
 conditional on the sources being high-frequency, which is exactly what
 [the hum decision](../ACOUSTICS.md#the-humming-neon) is about.
-
----
 
 ---
 

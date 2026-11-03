@@ -252,7 +252,7 @@ renderer.
   octave bands — over a full sphere that is about 2.9° between rays. Published room-acoustics
   studies commonly use 5,000–30,000. Audio-rate accuracy would need hundreds of thousands, but
   **accepting millisecond bins instead of microsecond ones cuts the requirement by at least 40×**.
-- **Update rate.** A moving-source auralization matched offline quality at an **8.6 Hz average
+- **Update rate.** A moving-source auralisation matched offline quality at an **8.6 Hz average
   solve rate**, provided propagation delay was interpolated between solves — the expensive solve
   runs at ~9 Hz while the output stream stays at audio rate. Interactive engines update a full
   sound field in 7–14 ms on desktop. Against 60–90 Hz visuals, the acoustic solve can run once
@@ -308,15 +308,16 @@ quantity rather than a clean "down" vector, so a creature is fooled in the same 
 That matters more here than in most worlds. **Every surface is a perfect mirror**, so the reflected
 floor is geometrically indistinguishable from real space below it. A creature navigating on vision
 alone has no way to know which of the two halves it can fall through. Animals resolve exactly this
-ambiguity with inertial sensing, and the numbers are already sitting in the motion integrator.
+ambiguity with inertial sensing, and the world's physics step already computes the numbers.
 
-**Thermoreception is one unresolved radiance sample, and that is biologically defensible rather
+**Thermoreception is one unresolved radiance figure, and that is biologically defensible rather
 than a shortcut.** The pit organs of crotaline snakes are pinhole structures with no lens, so the
 image falling on the membrane is severely blurred; the animal's much sharper behavioural
 performance is attributed to neural reconstruction rather than to the optics. Coarse radiance
 sensing is a real modality in real animals. No specific angular figure is quoted here, in keeping
-with the rest of this document — the point stands qualitatively, and it costs a single ray per
-creature because the tracer already computes incoming radiance for a living.
+with the rest of this document — the point stands qualitatively, and it costs only the body's
+declared `irradiance_sample_count` rays, a fixed Fibonacci quadrature over the sphere, because the
+tracer already computes incoming radiance for a living.
 
 It also gives the smallest presets something to do. A creature with two scalar photoreceptors and a
 warmth sense can perform genuine taxis long before it can resolve an edge, which is the correct

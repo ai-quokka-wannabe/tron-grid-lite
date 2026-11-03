@@ -23,6 +23,25 @@
 // Storage for the vulkan-hpp dynamic dispatcher (exactly one translation unit).
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
+/*!
+    Validation messages that describe this renderer's deliberate configuration rather than a
+    condition worth a warning, demoted to the debug channel so a Debug run's warnings are all real:
+
+    - `VALIDATION-SETTINGS`: GPU-assisted validation runs beside the core checks, which
+      the layer calls slow. Both are enabled on purpose (STYLE.md § Vulkan Validation).
+    - `WARNING-Setting-Limit-Adjusted`: GPU-assisted validation enabling the device features its
+      own instrumentation needs, which it reports each time a device is created.
+    - `BestPractices-vkBindBufferMemory-small-dedicated-allocation`: a buffer alone in its memory,
+      which here is either a `MemoryArena` sized to the one table it holds - the arenas are the
+      sub-allocation the hint asks for - or an upload's transient staging buffer, freed as soon
+      as its copy completes.
+*/
+static constexpr std::array<std::string_view, 3> EXPECTED_VALIDATION_MESSAGES{
+    "VALIDATION-SETTINGS",
+    "WARNING-Setting-Limit-Adjusted",
+    "BestPractices-vkBindBufferMemory-small-dedicated-allocation",
+};
+
 //! Vulkan validation debug callback; routes messages through the Logger via pUserData.
 static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity, vk::DebugUtilsMessageTypeFlagsEXT /*type*/,
     const vk::DebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data)
@@ -32,8 +51,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(vk::DebugUtilsMessageS
         return vk::False;
     }
 
+    const std::string_view message_id{(callback_data->pMessageIdName != nullptr) ? callback_data->pMessageIdName : ""};
     std::string message{std::string("[Vulkan] ") + callback_data->pMessage};
-    if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
+    if (std::ranges::find(EXPECTED_VALIDATION_MESSAGES, message_id) != EXPECTED_VALIDATION_MESSAGES.end()) {
+        logger->logDebug(message);
+    } else if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
         logger->logError(message);
     } else if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
         logger->logWarning(message);

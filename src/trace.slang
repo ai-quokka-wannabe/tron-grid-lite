@@ -15,8 +15,8 @@
 // Purpose:
 //     The renderer. Traces the Grid by walking a hand-built bounding volume hierarchy in an
 //     ordinary compute shader, with no ray-tracing hardware of any kind. Every surface is
-//     perfectly smooth, so each intersection spawns exactly one reflected ray: the ray tree is
-//     deterministic and shallow, there is no Monte Carlo integration, no variance and therefore
+//     perfectly smooth, so each intersection spawns at most one reflected and one refracted ray:
+//     the ray tree is deterministic and shallow, there is no Monte Carlo integration, no variance and therefore
 //     no denoiser anywhere in this project.
 //
 // Entry points:

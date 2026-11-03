@@ -96,7 +96,7 @@ jobs:
             - name: Formatting must be canonical
               shell: bash
               run: |
-                git ls-files -z -- '*.cpp' '*.hpp' '*.c' '*.h' ':!external/**'                     | xargs -0 clang-format --dry-run --Werror
+                git ls-files -z -- '*.cpp' '*.hpp' '*.c' '*.h' ':!external/**' | xargs -0 clang-format --dry-run --Werror
 
             # TGL_ABI_VERSION stops the Grid loading a Program built against a different layout, and
             # nothing enforces it by itself. A forgotten bump leaves both sides agreeing on the number

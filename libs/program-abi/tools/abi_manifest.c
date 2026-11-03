@@ -35,7 +35,6 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
-
 #include <tgl/tgl_program_abi.h>
 
 #if defined(__cplusplus)

@@ -51,13 +51,13 @@
 
     This is a stronger licence than the renderer has. The debug view has to compare the camera state
     it drew from, because floating-point integration of a held key can wander by a bit and produce a
-    genuinely different frame; a gather cannot wander, so its cache key is exact. Whatever eventually
-    drives solves must key on the Grid's generation, the ear's position and the config — and
+    genuinely different frame; a gather cannot wander, so its cache key is exact. Whatever drives
+    solves must key on the Grid's generation, the ear's position and the config — and
     `src/tests/acoustics_tests.cpp` pins that every one of those three can change the answer, which
     is what makes them the key rather than an arbitrary choice.
 
     This header is the specification. `acoustics.slang` mirrors it on the GPU, exactly as
-    `trace.slang` mirrors `libs/bvh`, and `src/tests/acoustics_tests.cpp` holds this side to its own
+    `grid_bvh.slang` mirrors `libs/bvh`, and `src/tests/acoustics_tests.cpp` holds this side to its own
     arithmetic. The design and its citations live in `docs/ACOUSTICS.md`.
 */
 namespace Acoustics
@@ -119,7 +119,7 @@ namespace Acoustics
     //! Reflections a ray may make before it is abandoned. Rays escape after one or two here; four is generous.
     inline constexpr uint32_t MAX_ORDER{4u};
 
-    //! Distance to nudge a reflected ray off the surface it left, in metres. Matches trace.slang.
+    //! Distance to nudge a reflected ray off the surface it left, in metres. Matches grid_optics.slang and acoustics.slang.
     inline constexpr float SURFACE_EPSILON{1e-3f};
 
     /*!
@@ -139,7 +139,7 @@ namespace Acoustics
     */
     inline constexpr float GOLDEN_TURN_FRACTION{0.38196601125010515f};
 
-    /*!
+    /*
         Every surface on the Grid is a perfect acoustic mirror.
 
         No absorption, no transmission, no scattering and no frequency dependence: a surface returns
@@ -195,6 +195,23 @@ namespace Acoustics
     */
     [[nodiscard]] std::vector<float> makeAcousticSourceStrengths();
 
+    //! The most discrete arrivals one delivery keeps: the direct path and the loudest images.
+    inline constexpr uint32_t ARRIVALS_MAX{16u};
+
+    /*!
+        One discrete arrival of a call at one ear, beyond its place in the histogram: the exact
+        onset (the path over the speed of sound - sub-bin, which is the interaural time structure
+        a millisecond histogram destroys), the radial velocity of the source along the path
+        (positive receding, negative approaching; what a Program reads Doppler from), and the
+        energy it deposited per band. The ambient hum records none: a sustained, sourceless bed
+        has no onset to time and no bearing worth naming.
+    */
+    struct Arrival {
+        float onset_seconds{0.0f};
+        float radial_velocity{0.0f};
+        std::array<float, BAND_COUNT> energy{};
+    };
+
     /*!
         An impulse response: energy per band per time bin, at one ear.
 
@@ -216,29 +233,12 @@ namespace Acoustics
 
         The reason the rule exists is perceptual rather than computational. **A continuous tone
         carries almost no delay information**: every arrival overlaps every other and the listener
-        receives a steady level with nothing to measure, which would make the millimetre-scale
+        receives a steady level with nothing to measure, which would make the millisecond-scale
         ambitions of `BIN_SECONDS` describe something no creature could extract. Onsets are what make
         a delay measurable, which is exactly why bats pulse instead of humming. It also yields the
         right asymmetry for nothing: a scraping worm is easy to detect and hard to range, because a
         sustained noisy source has no sharp onset to range from.
     */
-    //! The most discrete arrivals one delivery keeps: the direct path and the loudest images.
-    inline constexpr uint32_t ARRIVALS_MAX{16u};
-
-    /*!
-        One discrete arrival of a call at one ear, beyond its place in the histogram: the exact
-        onset (the path over the speed of sound - sub-bin, which is the interaural time structure
-        a millisecond histogram destroys), the radial velocity of the source along the path
-        (positive receding, negative approaching; what a Program reads Doppler from), and the
-        energy it deposited per band. The ambient hum records none: a sustained, sourceless bed
-        has no onset to time and no bearing worth naming.
-    */
-    struct Arrival {
-        float onset_seconds{0.0f};
-        float radial_velocity{0.0f};
-        std::array<float, BAND_COUNT> energy{};
-    };
-
     struct ImpulseResponse {
         //! Band-major: `bins[(band * BIN_COUNT) + bin]`.
         std::array<float, BAND_COUNT * BIN_COUNT> bins{};
@@ -246,7 +246,7 @@ namespace Acoustics
         //! The discrete arrivals, in delivery order, at most ARRIVALS_MAX - a louder latecomer
         //! displaces the faintest. Only calls make them; the hum never does.
         std::array<Arrival, ARRIVALS_MAX> arrivals{};
-        uint32_t arrival_count{0u};
+        uint32_t arrival_count{0u}; //!< How many of `arrivals` are filled.
 
         //! Returns the energy in one bin of one band.
         [[nodiscard]] float at(uint32_t band, uint32_t bin) const
@@ -348,7 +348,7 @@ namespace Acoustics
         reason is that one cannot backward-trace to a known arrival time, because arrival time is
         what is being computed. That reasoning does not apply to a deterministic specular path:
         path length is symmetric, so a gathered ray that accumulates distance as it goes knows its
-        own delay when it lands. And the Grid's sound comes from 16,640 neon tubes, so a
+        own delay when it lands. And the Grid's sound comes from 8,320 neon tubes, so a
         source-driven cast would have to iterate all of them; a gather casts a fixed budget from the
         one place that matters.
 
@@ -431,17 +431,17 @@ namespace Acoustics
         the noise is exactly one, and on a landscape that never reaches it the candidate simply
         never validates.
 
-        First order only. The Grid's own arithmetic rules out going further: six levels and fifty
-        faces are fifty-six candidates, and their second order is over three thousand, almost all of
-        them geometrically impossible. What first order misses — riser paths, oblique multi-bounce —
-        is exactly what the gather already covers for extended sources, and a call's late energy is
+        First order only. The Grid's own arithmetic rules out going further: second order over its
+        candidates — seven levels, fifty box faces and every riser of the drawn floor — is the square
+        of their count, almost all of it geometrically impossible. What first order misses — oblique
+        multi-bounce — is exactly what the gather already covers for extended sources, and a call's late energy is
         below the air and spreading floors regardless.
     */
     struct Reflectors {
         //! Heights of horizontal mirror planes: the floor's terrace levels.
         std::vector<float> level_heights;
 
-        //! Rectangular mirror faces: the outward faces of everything standing on the floor.
+        //! Rectangular mirror faces: the floor's own risers and the outward faces of everything standing on it.
         std::vector<RectFace> faces;
     };
 
@@ -512,8 +512,7 @@ namespace Acoustics
 
             The caller's body and the listener's body — the call leaves from inside the caller's
             hull and arrives at an ear on or in the listener's, so a delivery that let either hull
-            block its own rays would gag every voice and deafen every ear the moment bodies became
-            real. Everyone else's body occludes honestly, which is most of what a body is for.
+            block its own rays would gag every voice and deafen every ear. Everyone else's body occludes honestly, which is most of what a body is for.
         */
         BvhLib::InstanceRange caller_instance{};
         BvhLib::InstanceRange listener_instance{};

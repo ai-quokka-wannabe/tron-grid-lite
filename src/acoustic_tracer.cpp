@@ -17,14 +17,13 @@
 #include "device.hpp"
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <stdexcept>
 #include <string>
 
 namespace
 {
-
-    using VulkanHelpers::findMemoryType;
 
     //! Fixed-point scale. Must equal FIXED_POINT_SCALE in acoustics.slang.
     constexpr float FIXED_POINT_SCALE{262144.0f};
@@ -36,13 +35,13 @@ namespace
         rules a push constant block follows require of a `float4`.
     */
     struct AcousticPushConstants {
-        MathLib::Vec4 hum_spectrum;
-        MathLib::Vec4 air_absorption_db_per_km;
-        uint32_t direction_count;
-        uint32_t max_order;
-        uint32_t instance_count;
-        uint32_t material_count;
-        float range_metres;
+        MathLib::Vec4 hum_spectrum{};
+        MathLib::Vec4 air_absorption_db_per_km{};
+        uint32_t direction_count{0u};
+        uint32_t max_order{0u};
+        uint32_t instance_count{0u};
+        uint32_t material_count{0u};
+        float range_metres{0.0f};
     };
 
     static_assert(sizeof(AcousticPushConstants) == 52u, "Push constants must match the Slang struct layout exactly.");
@@ -79,7 +78,7 @@ namespace
     static_assert(Acoustics::GOLDEN_TURN_FRACTION == 0.38196601125010515f, "acoustics.slang declares GOLDEN_TURN_FRACTION as 0.38196601125010515.");
 
     //! Creates a storage buffer and binds it into an arena, returning its mapped address if any.
-    void* createArenaBuffer(const Device& device, MemoryArena& arena, vk::DeviceSize bytes, vk::raii::Buffer& buffer)
+    [[nodiscard]] void* createArenaBuffer(const Device& device, MemoryArena& arena, vk::DeviceSize bytes, vk::raii::Buffer& buffer)
     {
         buffer = vk::raii::Buffer{
             device.get(), vk::BufferCreateInfo{.size = bytes, .usage = vk::BufferUsageFlagBits::eStorageBuffer, .sharingMode = vk::SharingMode::eExclusive}};
@@ -101,7 +100,7 @@ AcousticTracer::AcousticTracer(const Device& device, const World& world, const s
     m_logger(&logger),
     m_max_ears(max_ears),
     m_material_count(static_cast<uint32_t>(source_strengths.size())),
-    m_loudest_source(source_strengths.empty() ? 0.0f : *std::max_element(source_strengths.begin(), source_strengths.end())),
+    m_loudest_source(source_strengths.empty() ? 0.0f : *std::ranges::max_element(source_strengths)),
     m_device_arena(device, vk::MemoryPropertyFlagBits::eDeviceLocal, DEVICE_BLOCK_BYTES),
     m_host_arena(device, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, HOST_BLOCK_BYTES)
 {

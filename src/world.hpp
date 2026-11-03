@@ -35,8 +35,8 @@ class Device; // forward declaration
     members would be right only if the renderer were the only thing that traced anything; the
     acoustic pass walks the very same hierarchy, and making sound reach through vision to find the
     Grid would be exactly backwards. `libs/bvh/include/bvh/bvh.hpp` states that "the same hierarchy
-    is intended to serve acoustic rays later, which is why nothing here is specific to light" — this
-    class is where that claim is kept on the host side, as `grid_bvh.slang` keeps it on the device
+    serves the acoustic rays as well as the light, which is why nothing here is specific to light" —
+    this class is where that claim is kept on the host side, as `grid_bvh.slang` keeps it on the device
     side.
 
     Immutable once built, and **it stays that way even though creatures move**. A body does not join
@@ -82,6 +82,7 @@ public:
         \param flat The scene, already flattened. Node and triangle arrays may be empty for an
                empty Grid; the instance array must not be, because an empty Grid is still placed.
         \param logger Logger for the upload summary.
+        \throws std::runtime_error when the instance array is empty.
     */
     World(const Device& device, const BvhLib::FlatScene& flat, LoggingLib::Logger& logger);
 
@@ -106,8 +107,8 @@ public:
     /*!
         Returns the instance buffer, 144 bytes per placement.
 
-        The top level. Today it holds exactly one entry — the Grid, at the identity — and a creature
-        body will be another. See `BvhLib::InstanceRecord`.
+        The top level: one entry per placement in the uploaded scene, the Grid at the identity among
+        them. See `BvhLib::InstanceRecord`.
     */
     [[nodiscard]] vk::Buffer instances() const
     {

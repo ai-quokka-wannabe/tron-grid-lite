@@ -15,10 +15,8 @@
 #pragma once
 
 #include "program_library.hpp"
-
 #include <math/vector.hpp>
 #include <tgl/tgl_program_abi.h>
-
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -63,25 +61,25 @@ namespace RosterLib
         Height of the ground under a point, in world metres.
 
         A function rather than geometry, because the Grid's floor is an analytic surface before it
-        is triangles — `gridMeshHeight` is the ground truth the floor mesh was generated from, and
-        physics collides against the truth rather than against its tessellation. The run mode binds
+        is triangles — `gridMeshHeight` is the ground truth the floor mesh was generated from, and a
+        body is rezzed standing on the truth rather than on its tessellation. The run mode binds
         the Grid's own surface; tests bind whatever terrain the case needs. The roster promises to
         call it only with finite coordinates, and expects the same value for the same input every
         time — replay stands on that.
     */
     using GroundFunction = std::function<float(float x, float z)>;
 
-    static_assert(TICK_SECONDS * static_cast<float>(TICKS_PER_SECOND) == 1.0f,
+    static_assert((TICK_SECONDS * static_cast<float>(TICKS_PER_SECOND)) == 1.0f,
         "The tick length and the tick rate are two spellings of one number and have drifted apart. Both must be exact in binary32.");
 
-    static_assert(TICK_SECONDS / 4.0f * 4.0f == TICK_SECONDS, "A four-substep tick must divide exactly, or a physics step will not land on the tick boundary.");
+    static_assert(((TICK_SECONDS / 4.0f) * 4.0f) == TICK_SECONDS, "A four-substep tick must divide exactly, or a physics step will not land on the tick boundary.");
 
     /*!
         Where a body is and which way it faces.
 
-        Position and a single yaw, because the first body turns and moves and does nothing else. A
-        quaternion arrives with the solver that can produce a pitch worth storing; carrying one now
-        would be three unused components and a normalisation nobody performs.
+        Position, a yaw and a pitch, because a body turns, moves and tilts nose up or down as it
+        meets the floor, and never rolls. A quaternion would carry a roll nothing produces and a
+        normalisation nobody performs.
     */
     struct Pose {
         MathLib::Vec3 position{};
@@ -287,8 +285,8 @@ namespace RosterLib
         Roster& operator=(Roster&&) = delete;
 
         /*!
-            One tick of the mind's half of the lifecycle — all that lives here since the physics
-            followed its owner to Master Control.
+            One tick of the Program's half of the lifecycle — all that lives here, the physics being
+            Master Control's.
 
             The voice actuator is applied from last tick's staged intent first, so the calls
             sounding this tick are a fact about everyone before anyone listens; the senses source

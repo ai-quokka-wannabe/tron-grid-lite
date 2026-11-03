@@ -18,8 +18,8 @@
 //     layout, one pipeline layout and one push-constant block; the host dispatches them in the order extract, downsample (per mip, descending),
 //     upsample (per mip, ascending), then hands mip 0 to the post-process pass.
 //
-//     The chain runs on the HDR image of the User's window. Creature sensors are tiny (typically 64x64 to 256x256), so a mip chain buys them
-//     nothing; the host is expected to skip bloom for sensor renders and pass bloom_strength 0 to the post-process shader instead.
+//     The chain runs on the HDR image of the User's window and nothing else. Creature sensors are solved by their own senses pass and never
+//     come here: a mip chain would buy a handful of samples nothing.
 //
 // Entry points:
 //     bloomExtractMain    — [shader("compute")], [numthreads(8, 8, 1)] — thresholds the HDR image and writes it at half resolution with a Karis

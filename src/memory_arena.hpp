@@ -39,9 +39,6 @@ class Device; // forward declaration
     ignored is validation that has stopped working. Two remain, both transient staging buffers inside
     `VulkanHelpers::uploadStorageBuffer`, where the advice is simply wrong.
 
-    The memory argument arrives later, in Phase 6, when creature sensors multiply the count: many
-    creatures, two eyes each, each eye a small render target far below the threshold.
-
     **A bump allocator, deliberately.** There is no free list and no per-resource release: an arena
     hands out offsets in order and reclaims everything at once when it is reset or destroyed. That is
     not a simplification of a real allocator, it is the right shape for what this renderer does —

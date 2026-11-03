@@ -107,7 +107,6 @@ namespace LoggingLib
         //! Push a message onto the queue and wake the worker.
         void enqueue(Severity severity, std::string_view message);
 
-        //! Worker thread entry point — drains the queue until stop is requested.
         /*!
             The worker thread's entry point, and nothing more than a catch-all around the drain.
 

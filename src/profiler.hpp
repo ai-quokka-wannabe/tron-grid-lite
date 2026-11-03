@@ -33,16 +33,16 @@ class Device; // forward declaration
     the shared query pool; the difference is that pass's GPU duration. The order is purely
     cosmetic and chosen so the summary line reads in execution order.
 
-    Passes belonging to phases that are not implemented yet simply record nothing. Their
-    queries stay unwritten, the readback reports them as unavailable, and they are shown as
+    A pass that is not recorded in a frame writes no timestamps. Its queries stay unwritten,
+    the readback reports them as unavailable, and they are shown as
     zero — no special-casing is required at the call site, and enabling a pass later needs
     only a matching begin() / end() pair.
 */
 enum class GpuPass : uint32_t {
     Frame = 0, //!< Wraps the whole frame — a sanity check against the sum of the individual passes.
-    Trace, //!< Compute ray traversal against the BVH in storage buffers (Phase 2 onwards).
-    Sensors, //!< Creature sensor renders — many tiny images per frame (Phase 6).
-    Post, //!< Post-processing compute: tonemap and bloom (Phase 4).
+    Trace, //!< Compute ray traversal against the BVH in storage buffers.
+    Sensors, //!< Creature sensor work inside the frame. The senses solve in submissions of their own (`SensesTracer`), so it reads zero.
+    Post, //!< Post-processing compute: tonemap and bloom.
     Present, //!< Blit or copy into the acquired swapchain image, plus any layout transitions.
     Count //!< Sentinel — the number of distinct passes profiled per frame. Adding one? `PASS_NAMES` in profiler.cpp will say so.
 };

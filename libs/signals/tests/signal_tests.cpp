@@ -199,7 +199,7 @@ TEST_CASE(fifo_per_producer_with_concurrent_producers)
     std::thread consumer([&] {
         int next_expected[2]{0, 0};
         int consumed{0};
-        while (consumed < 2 * count) {
+        while (consumed < (2 * count)) {
             Tagged value{};
             if (sig.consume(value)) {
                 if (value.sequence != next_expected[value.producer]) {

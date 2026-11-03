@@ -262,9 +262,9 @@ are decisions waiting on the owner, not conclusions.
     the Grid, rebuilding the hierarchy and flying the camera back. If derez-all, unload, reload,
     rez-all works behind a keypress it is probably the highest-value ergonomic feature in Phase 6; if
     it cannot, that deserves to be a stated conclusion rather than a one-line *Not supported*.
-13. **Two names, cheap now and expensive later.** `spectator` is retired vocabulary and
-    `SpectatorController` still carries it; any restructuring commit is the cheapest moment that
-    rename will ever cost. And if a type ever owns the tracer and the post-process together, is
+13. **Two names, cheap now and expensive later.** `spectator` came back with the wire as the name of
+    the `--window` role, so `SpectatorController` (the free-flight camera) no longer carries retired
+    vocabulary. And if a type ever owns the tracer and the post-process together, is
     `Renderer` too grand for something that owns no device, no swapchain and no camera?
 
 More were settled while the header was still unwritten, which is the cheapest they will ever be:

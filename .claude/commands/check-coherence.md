@@ -31,8 +31,8 @@ built; a limitation stated as current that a CHANGELOG entry lifted.
 
 ## 5. Stale "today" sections
 
-`.claude/CLAUDE.md` § CI today, `README.md` § What Lives Here Today and any paragraph shaped
-like a handoff, against the workflows and the tree as they are now.
+`.claude/CLAUDE.md` § Rules (its CI bullet) and § Target Hardware, `README.md` § Status and any
+paragraph shaped like a handoff, against the workflows and the tree as they are now.
 
 ## 6. References lychee cannot judge
 

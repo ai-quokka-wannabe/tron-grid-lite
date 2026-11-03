@@ -95,10 +95,10 @@ public:
     /*!
         Records one dispatch: one workgroup per ear placed by the last `setEars`.
 
-        **The ear count is not a parameter, and that is the point.** It was one, and every caller
-        passed the same number it had already given the constructor and then given `setEars` — the
-        same fact in three places, held together by two runtime checks that existed only because it
-        could disagree with itself. A dispatch gathers for the ears that are actually there.
+        **The ear count is not a parameter, and that is the point.** As one, every caller would pass
+        the number it had already given the constructor and then given `setEars` — the same fact in
+        three places, held together by runtime checks that would exist only because it could
+        disagree with itself. A dispatch gathers for the ears that are actually there.
 
         \param command_buffer Command buffer to record into.
         \param config Spectrum, air absorption, ray budget and caps.

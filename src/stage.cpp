@@ -13,10 +13,8 @@
 */
 
 #include "stage.hpp"
-
 #include "acoustics.hpp"
 #include "orbs.hpp"
-
 #include <algorithm>
 #include <stdexcept>
 #include <string>

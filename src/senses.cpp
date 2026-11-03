@@ -13,9 +13,7 @@
 */
 
 #include "senses.hpp"
-
 #include "orbs.hpp"
-
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -36,9 +34,8 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
 {
     /*
         Bodies first, because everything after depends on where they stand. A tick on which any
-        body moved stales every traced-sense cache: the caches key on the listener's own pose
-        because that used to be everything a solve read, and a body standing in the scene is read
-        too. The comparison is exact, like the cache keys it guards.
+        body moved stales every traced-sense cache: the caches key on the listener's own pose, but
+        a solve reads every body standing in the scene as well. The comparison is exact, like the cache keys it guards.
     */
     m_bodies_moved = false;
     if (m_stage != nullptr) {
@@ -83,7 +80,7 @@ void GridSensesSource::beginTick(const std::vector<RosterLib::Creature>& creatur
             return (a.position[0] == b.position[0]) && (a.position[1] == b.position[1]) && (a.position[2] == b.position[2]) && (a.radius == b.radius)
                 && (OrbLib::glowLevel(a.quantity) == OrbLib::glowLevel(b.quantity));
         };
-        if (!std::equal(m_foods.begin(), m_foods.end(), m_last_foods.begin(), m_last_foods.end(), same_orb)) {
+        if (!std::ranges::equal(m_foods, m_last_foods, same_orb)) {
             m_bodies_moved = true;
         }
         m_last_foods = m_foods;
@@ -199,7 +196,7 @@ void GridSensesSource::fill(const RosterLib::Creature& creature, TglSenses& sens
 {
     const TglCreatureDesc& body{creature.body};
 
-    if ((body.eye_count != 0u || body.irradiance_sample_count != 0u) && (m_radiance_solver == nullptr)) {
+    if (((body.eye_count != 0u) || (body.irradiance_sample_count != 0u)) && (m_radiance_solver == nullptr)) {
         // Refused loudly rather than silently unseeing: a Program would receive zeroed vision and
         // have no way to tell a dark Grid from an unbuilt sense.
         throw std::runtime_error{"This body declares eyes or irradiance and no radiance solver is attached."};
@@ -434,6 +431,10 @@ void GridSensesSource::fillVision(const RosterLib::Creature& creature, TglSenses
         }
 
         const std::vector<MathLib::Vec4> radiance{m_radiance_solver->solve(rays, SENSES_MAX_BOUNCES)};
+        if (radiance.size() != ray_total) {
+            // Read below one answer per ray; a short batch would be read past its end.
+            throw std::runtime_error{"The radiance solver answered " + std::to_string(radiance.size()) + " of " + std::to_string(ray_total) + " rays."};
+        }
 
         size_t next{0u};
         for (uint32_t eye{0u}; eye < body.eye_count; ++eye) {

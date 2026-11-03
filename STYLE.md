@@ -27,12 +27,12 @@ Avoid duplicating information across files. Each piece of information should hav
 | Information | Canonical Source |
 |-------------|-----------------|
 | Build commands | `README.md` § Building |
-| Formatting rules | `.clang-format`, `.editorconfig` (enforced in CI under clang-format 22.x) |
+| Formatting rules | `.clang-format`, `.editorconfig` (enforced in CI under clang-format 23.x) |
 | Security policy | `SECURITY.md` |
-| Roadmap & phases | `TODO.md` § Roadmap |
+| Roadmap & phases | `TODO.md` § Roadmap (phases) |
 | The long arc: where the Grid and the organisation are going | `docs/VISION.md` § The Long Arc, one of five verbatim copies (each repository's `docs/VISION.md` and the organisation's profile page); no copy is the master, and all five change together |
 | Creature sensor resolutions | `docs/PERCEPTION.md` |
-| Who owns what across the four repositories, and the wire's design | `docs/TOPOLOGY.md` § The four repositories, § One tick across the wire |
+| Who owns what across the four repositories, and the wire's design | `docs/TOPOLOGY.md` § The four repositories, § One tick, across the wire |
 | The determinism and replay claims, precisely scoped | `docs/TOPOLOGY.md` § Determinism and replay, scoped |
 | The Program ABI, every layout | `libs/program-abi/include/tgl/tgl_program_abi.h` (the flagship's to move; rc-worm vendors it) |
 | What a Program senses and does | `docs/PROGRAM_INTERFACE.md` |
@@ -40,7 +40,7 @@ Avoid duplicating information across files. Each piece of information should hav
 | Materials | `docs/MATERIALS.md` |
 | The threads and the shutdown order | `docs/ARCHITECTURE.md` § The threads, and the order they stop |
 | Tron vocabulary | this file § Tron Naming; `README.md` § A note on the vocabulary |
-| CI shape and the actions policy | `.github/workflows/`, `.claude/CLAUDE.md` § Process |
+| CI shape and the actions policy | `.github/workflows/`, `.claude/CLAUDE.md` § Rules (the CI bullet), this file § YAML (GitHub Actions) |
 | Hard-won rules for anyone editing on this machine | `.claude/CLAUDE.md` § Hard-won rules |
 
 **Guidelines:**
@@ -56,8 +56,8 @@ Avoid duplicating information across files. Each piece of information should hav
 
 ### Formatting
 
-Use `.clang-format` (LLVM-based). CI enforces it: quick-checks installs clang-format 22.x
-(`pip install "clang-format~=22.1"`) and refuses a tree that is not canonical under it, so run the
+Use `.clang-format` (LLVM-based). CI enforces it: quick-checks installs clang-format 23.x
+(`pip install "clang-format~=23.1"`) and refuses a tree that is not canonical under it, so run the
 same major on the desk - an older or newer clang-format formats a few constructs differently, and
 the gate will say so.
 
@@ -230,7 +230,7 @@ Prefer `std::string_view` for read-only string parameters and comparisons — av
 unnecessary heap allocations.
 
 Fill vulkan-hpp structs at the point of construction, with designated initialisers. The build defines
-`VULKAN_HPP_NO_STRUCT_CONSTRUCTORS` (see `src/CMakeLists.txt`) precisely so this is possible: the
+`VULKAN_HPP_NO_STRUCT_CONSTRUCTORS` (see the top-level `CMakeLists.txt`) precisely so this is possible: the
 structs become aggregates, `sType` keeps its default, and a temporary can be passed straight into a call.
 
 ```cpp
@@ -676,8 +676,7 @@ cmake --build build/linux-x11-clang --config Debug
 ```
 
 It is **off by default** because it roughly doubles build time, and it is **not yet a CI gate** —
-which is worth saying plainly, because this section previously implied it was enforced when nothing
-executed it at all. `src/` currently passes with zero errors, so promoting it to a gate is a small
+nothing in CI executes it. `src/` currently passes with zero errors, so promoting it to a gate is a small
 change rather than a cleanup project; it has simply not been done.
 
 `clangd` in VS Code also reads the same configuration, which is where the advisory checks surface
@@ -726,4 +725,4 @@ Enabled automatically in debug builds via `VkValidationFeaturesEXT`:
 
 ---
 
-*Last updated: 2026-08-01*
+*Last updated: 2026-11-03*

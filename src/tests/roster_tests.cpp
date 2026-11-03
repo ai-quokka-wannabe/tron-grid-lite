@@ -13,9 +13,7 @@
 */
 
 #include "../roster.hpp"
-
 #include <testing/testing.hpp>
-
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -180,7 +178,7 @@ TEST_CASE(every_creature_in_a_roster_gets_its_own_turn_and_its_own_seed)
     TEST_CHECK_EQUAL(creatures.size(), static_cast<size_t>(3u));
 
     for (const RosterLib::Creature& creature : creatures) {
-        // The mind's half is what lives here now: each Program was called on its own body and
+        // The Program's half is what lives here: each Program was called on its own body and
         // its ask was staged raw - applying it is the world's physics, which is Master Control's.
         TEST_CHECK(near(creature.staged.desired_forward_speed, 0.5f));
     }

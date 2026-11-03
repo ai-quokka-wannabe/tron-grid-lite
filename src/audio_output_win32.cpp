@@ -23,7 +23,6 @@
 */
 
 #include "audio.hpp"
-
 #include <atomic>
 #include <cstdio>
 #include <cstring>
@@ -31,7 +30,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-
 #include <audioclient.h>
 #include <mmdeviceapi.h>
 #include <windows.h>
@@ -83,25 +81,25 @@ namespace AudioLib
 
         [[nodiscard]] SampleShape shapeOf(const WAVEFORMATEX& format)
         {
-            if (format.wFormatTag == WAVE_FORMAT_IEEE_FLOAT && format.wBitsPerSample == 32) {
+            if ((format.wFormatTag == WAVE_FORMAT_IEEE_FLOAT) && (format.wBitsPerSample == 32)) {
                 return SampleShape::Float32;
             }
-            if (format.wFormatTag == WAVE_FORMAT_PCM && format.wBitsPerSample == 16) {
+            if ((format.wFormatTag == WAVE_FORMAT_PCM) && (format.wBitsPerSample == 16)) {
                 return SampleShape::Pcm16;
             }
             if (format.wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
-                const auto& extensible{reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(format)};
-                if (sameGuid(extensible.SubFormat, SUBTYPE_IEEE_FLOAT) && format.wBitsPerSample == 32) {
+                const WAVEFORMATEXTENSIBLE& extensible{reinterpret_cast<const WAVEFORMATEXTENSIBLE&>(format)};
+                if (sameGuid(extensible.SubFormat, SUBTYPE_IEEE_FLOAT) && (format.wBitsPerSample == 32)) {
                     return SampleShape::Float32;
                 }
-                if (sameGuid(extensible.SubFormat, SUBTYPE_PCM) && format.wBitsPerSample == 16) {
+                if (sameGuid(extensible.SubFormat, SUBTYPE_PCM) && (format.wBitsPerSample == 16)) {
                     return SampleShape::Pcm16;
                 }
             }
             throw std::runtime_error{"the audio endpoint's mix format is neither 32-bit float nor 16-bit PCM; the spectator stays mute"};
         }
 
-    }
+    } // namespace
 
     struct Output::Impl {
         Mixer& mixer;
@@ -120,7 +118,7 @@ namespace AudioLib
             // COM, the enumerator, the endpoint, the client, the render client: all on this
             // thread, released in reverse when it ends.
             const HRESULT com{CoInitializeEx(nullptr, COINIT_MULTITHREADED)};
-            if (FAILED(com) && com != RPC_E_CHANGED_MODE) {
+            if (FAILED(com) && (com != RPC_E_CHANGED_MODE)) {
                 refusal = hresultWords("CoInitializeEx", com);
                 ready = true;
                 return;
@@ -157,7 +155,7 @@ namespace AudioLib
 
             WAVEFORMATEX* format{nullptr};
             result = client.pointer->GetMixFormat(&format);
-            if (FAILED(result) || format == nullptr) {
+            if (FAILED(result) || (format == nullptr)) {
                 throw std::runtime_error{hresultWords("GetMixFormat", result)};
             }
             SampleShape shape{};
@@ -171,7 +169,7 @@ namespace AudioLib
             const std::uint32_t rate{format->nSamplesPerSec};
             if (rate != mixer.sampleRate()) {
                 CoTaskMemFree(format);
-                throw std::runtime_error{"the audio endpoint runs at " + std::to_string(rate) + " Hz but the mixer was built at " + std::to_string(mixer.sampleRate())};
+                throw std::runtime_error{"the audio endpoint runs at " + std::to_string(rate) + " Hz, the mixer at " + std::to_string(mixer.sampleRate()) + " Hz"};
             }
 
             const HANDLE event{CreateEventW(nullptr, FALSE, FALSE, nullptr)};
@@ -185,10 +183,18 @@ namespace AudioLib
                 CloseHandle(event);
                 throw std::runtime_error{hresultWords("IAudioClient::Initialize", result)};
             }
-            client.pointer->SetEventHandle(event);
+            result = client.pointer->SetEventHandle(event);
+            if (FAILED(result)) {
+                CloseHandle(event);
+                throw std::runtime_error{hresultWords("IAudioClient::SetEventHandle", result)};
+            }
 
             UINT32 buffer_frames{0u};
-            client.pointer->GetBufferSize(&buffer_frames);
+            result = client.pointer->GetBufferSize(&buffer_frames);
+            if (FAILED(result) || (buffer_frames == 0u)) {
+                CloseHandle(event);
+                throw std::runtime_error{hresultWords("IAudioClient::GetBufferSize", result)};
+            }
             Com<IAudioRenderClient> render;
             result = client.pointer->GetService(__uuidof(IAudioRenderClient), reinterpret_cast<void**>(&render.pointer));
             if (FAILED(result)) {
@@ -205,7 +211,7 @@ namespace AudioLib
                     continue;
                 }
                 UINT32 padding{0u};
-                if (FAILED(client.pointer->GetCurrentPadding(&padding)) || padding > buffer_frames) {
+                if (FAILED(client.pointer->GetCurrentPadding(&padding)) || (padding > buffer_frames)) {
                     continue;
                 }
                 const UINT32 frames{buffer_frames - padding};
@@ -213,13 +219,13 @@ namespace AudioLib
                     continue;
                 }
                 BYTE* data{nullptr};
-                if (FAILED(render.pointer->GetBuffer(frames, &data)) || data == nullptr) {
+                if (FAILED(render.pointer->GetBuffer(frames, &data)) || (data == nullptr)) {
                     continue;
                 }
                 mixer.render(stereo.data(), frames);
                 switch (shape) {
                 case SampleShape::Float32: {
-                    auto* const samples{reinterpret_cast<float*>(data)};
+                    float* const samples{reinterpret_cast<float*>(data)};
                     for (UINT32 frame{0u}; frame < frames; ++frame) {
                         for (std::uint32_t channel{0u}; channel < channels; ++channel) {
                             samples[(frame * channels) + channel] = (channel < 2u) ? stereo[(frame * 2u) + channel] : 0.0f;
@@ -228,7 +234,7 @@ namespace AudioLib
                     break;
                 }
                 case SampleShape::Pcm16: {
-                    auto* const samples{reinterpret_cast<std::int16_t*>(data)};
+                    std::int16_t* const samples{reinterpret_cast<std::int16_t*>(data)};
                     for (UINT32 frame{0u}; frame < frames; ++frame) {
                         for (std::uint32_t channel{0u}; channel < channels; ++channel) {
                             const float value{(channel < 2u) ? stereo[(frame * 2u) + channel] : 0.0f};
@@ -246,31 +252,26 @@ namespace AudioLib
     };
 
     Output::Output(Mixer& mixer) :
-        m_impl(new Impl{mixer})
+        m_impl(std::make_unique<Impl>(mixer))
     {
-        m_impl->thread = std::thread{[impl = m_impl]() {
+        m_impl->thread = std::thread{[impl = m_impl.get()]() {
             impl->run();
         }};
         while (!m_impl->ready.load()) {
             std::this_thread::yield();
         }
         if (!m_impl->refusal.empty()) {
-            const std::string words{m_impl->refusal};
+            // Joined first, so the thread is gone before the Impl is released as the exception leaves.
             m_impl->stopping = true;
             m_impl->thread.join();
-            delete m_impl;
-            m_impl = nullptr;
-            throw std::runtime_error{words};
+            throw std::runtime_error{m_impl->refusal};
         }
     }
 
     Output::~Output()
     {
-        if (m_impl != nullptr) {
-            m_impl->stopping = true;
-            m_impl->thread.join();
-            delete m_impl;
-        }
+        m_impl->stopping = true;
+        m_impl->thread.join();
     }
 
     std::uint32_t Output::preferredSampleRate()
@@ -287,7 +288,7 @@ namespace AudioLib
                     Com<IAudioClient> client;
                     if (SUCCEEDED(device.pointer->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(&client.pointer)))) {
                         WAVEFORMATEX* format{nullptr};
-                        if (SUCCEEDED(client.pointer->GetMixFormat(&format)) && format != nullptr) {
+                        if (SUCCEEDED(client.pointer->GetMixFormat(&format)) && (format != nullptr)) {
                             rate = format->nSamplesPerSec;
                             CoTaskMemFree(format);
                         }

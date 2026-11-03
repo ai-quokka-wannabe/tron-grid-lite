@@ -17,10 +17,10 @@
 //     ACES fitted RRT+ODT tone curve, encodes to sRGB and optionally darkens the corners with a subtle vignette. The result is written straight
 //     into the destination storage image.
 //
-//     The pass is used for two different destinations. For the User's window the destination is the swapchain image and the vignette is usually
-//     enabled, because it reads as photographic to the User. For a creature sensor the destination is the small sensor image and the vignette
-//     must be disabled (strength 0), because a synthetic radial brightness gradient would be an artefact the Program could learn from rather
-//     than a property of the Grid.
+//     The pass serves the User's window: the destination is the post-process stage's own output image, which the host then blits to the
+//     swapchain or copies out for a recording, and the vignette is usually enabled because it reads as photographic to the User. Creature
+//     sensors never come here; were one to, its vignette would have to be disabled (strength 0), because a synthetic radial brightness
+//     gradient would be an artefact the Program could learn from rather than a property of the Grid.
 //
 //     Deliberately absent, in contrast to the renderer this code was adapted from: no chromatic aberration, no colour grade, no scan lines and no
 //     volumetric fog composite. The output is meant to be an honest tone mapping of the radiance the tracer computed.
@@ -39,7 +39,7 @@
 //
 // Push-constant layout (stage compute, total 12 bytes):
 //     offset 0, size 4 : float bloom_strength    — linear multiplier on the bloom contribution. 0 disables bloom.
-//     offset 4, size 4 : float vignette_strength — radial darkening amount. 0 disables the vignette (use this for creature sensors).
+//     offset 4, size 4 : float vignette_strength — radial darkening amount. 0 disables the vignette.
 //     offset 8, size 4 : float exposure          — linear scale applied to the radiance before the tone curve.
 
 [[vk::binding(0, 0)]]

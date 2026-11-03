@@ -13,9 +13,7 @@
 */
 
 #include "program_library.hpp"
-
 #include "loader_os.hpp"
-
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>

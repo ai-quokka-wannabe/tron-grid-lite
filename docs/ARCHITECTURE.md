@@ -91,8 +91,12 @@ libs/
 ├── logging/    # LoggingLib::Logger — background logging thread
 ├── math/       # MathLib — Vec2/3/4, Mat4, Quat, projection helpers (header-only)
 ├── bvh/        # BvhLib — binned-SAH builder and the flattened Node/Triangle arrays the GPU reads
-└── window/     # WindowLib::Window — platform windowing (Win32 / XCB)
+├── window/     # WindowLib::Window — platform windowing (Win32 / XCB)
+└── program-abi/ # the Program ABI — tgl/tgl_program_abi.h, the C contract Programs build against
 ```
+
+`program-abi` is the contract rather than a brick: a C header published as `tgl/`, an `INTERFACE`
+target named `program_abi`. The rules below are the six bricks'.
 
 Rules:
 
@@ -115,34 +119,17 @@ both halves, and amending the criterion to let it in would leave `libs/` meaning
 compiled separately" — which would hand `libs/gltf` a tier with no admission test at the moment it
 arrives.
 
-**If `src/` is ever split, the cut is at the Vulkan boundary and nowhere else.** The GPU-free unit
-tests link only `math`, `bvh` and `testing`, and need neither the Vulkan SDK nor XCB; linking them
-against a target that also contains `volk.cpp`, `device.cpp` and `tracer.cpp` would put Vulkan and
-XCB include directories and preprocessor definitions onto the compile line of the only GPU-free tests
-in the repository. That rules out a single whole-of-`src` target as firmly as the criterion above
-rules out `libs/render`.
-
-The split, when a trigger fires, is two plain lowercase targets **in `src/`** — `render` and `sim` —
-with no `Lib` namespace suffix, the absence of the suffix being the deliberate signal that these are
-not extractable. Three preconditions are hard rather than stylistic:
-`VULKAN_HPP_NO_STRUCT_CONSTRUCTORS`, `VK_NO_PROTOTYPES` and `VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1`
-must become `PUBLIC` on the Vulkan target — leaving them `PRIVATE` is the ODR hazard
-`src/CMakeLists.txt` already names — the source directory must become `PUBLIC` on both, and the Slang
-rules must stay on the executable, because `main.cpp` resolves `.spv` paths against the executable's
-own directory.
-
-Three names are disqualified rather than merely unattractive. **`grid`** is spent twice over:
-`world.cpp` is the Grid's geometry and would land in the other target, and `geometry.hpp` already
-spends the word on the floor mesh. **`TronGridEngineLib`** asserts a lineage this project is only
-permitted to describe as "reuses code from", in every `#include` and every qualified name, and it is
-the one naming mistake here that is genuinely hard to walk back. **`TronGridLiteEngineLib`** fails
-three ways: no `libs/` entry carries the project name, "engine" is already spent one layer up where
-this document uses it to mean the renderer as a whole, and twenty-one characters stands against a
-convention of three to seven.
-
-The open include-subdirectory question above should be settled in the same commit as any split — the
-published subdirectory matches the target name, with `signal/` and `log/` grandfathered — because
-`libs/gltf` inherits whatever precedent is standing when it lands.
+**`src/` is split at the Vulkan boundary and nowhere else.** It holds two targets: `grid`, a static
+library of the Grid's deviceless core (the world definition, geometry, acoustics, the OS loader and
+the Program and Link loaders on it, the roster, the stage, the senses, the world client and host,
+the live view's stage, the orbs and the audio mixer), and the
+executable, which holds everything that needs a device (`volk.cpp`, `device.cpp`, the tracers,
+post-processing, `main.cpp`) and the Slang rules, because `main.cpp` resolves `.spv` paths against
+the executable's own directory. Nothing in `grid` may mention Vulkan. The deviceless unit tests link
+`grid` and `testing` and need neither the Vulkan SDK nor XCB; linking them against a target that
+also contained the device half would put Vulkan and XCB include directories and preprocessor
+definitions onto the compile line of the only GPU-free tests in the repository. That rules out a
+single whole-of-`src` target as firmly as the criterion above rules out `libs/render`.
 
 ### Signal-Based Communication
 
@@ -225,9 +212,9 @@ it. And the deterministic entry points construct no channel and start no thread;
 in an entry point's signature is worth more than a comment saying it.
 
 The Grid's own boundary is the same rule seen from the other side. The senses-to-Program-to-actions
-path is a direct call and can never be a Signal: the plugin boundary is C99 and `Signal<T>` is a C++
+path is a direct call and can never be a Signal: the plugin boundary is C17 and `Signal<T>` is a C++
 template holding a `std::mutex`. GPU-to-host readback completion is signalled by a Vulkan fence,
-which is what the recording path already does and what Phase 6 will copy. And creature actions never
+which is what the recording path and the senses readback both do. And creature actions never
 flow back into physics through a queue — each call writes its own `TglActions` slot in an array
 indexed by creature id, the Grid joins, and actions apply in roster order.
 
@@ -248,7 +235,7 @@ StringWiggler, whose ARCHITECTURE carries the same two sections for the same rea
 | **Render** | `main` in `--window`/`--debug`/`--replay`, one `std::thread` | everything Vulkan: device, swapchain, world, tracers, post-process; the world rebuild under `world_mutex` | reads the `RenderChannel`; publishes the camera to the mixer | `RenderThreadGuard` sends `Stop` and joins - on every exit path, error paths included |
 | **Audio output** | `AudioLib::Output` (WASAPI on Windows, a silent drain elsewhere), one `std::thread` | the endpoint; nothing else | pulls from the mixer under its lock, event-driven | `~Output` sets `stopping` and joins |
 | **Logger** | `LoggingLib::Logger`, one `std::jthread` | the sink | the log `Signal` | the stop token, joined in `~Logger` |
-| **The Program's own** | the Program library, if it chooses (rc-worm's panel will) | its own affairs | nothing of the Grid's: `program_tick` runs on the event thread and must never block | the Program's business, before `library_shutdown` returns |
+| **The Program's own** | the Program library, if it chooses (rc-worm's panel does) | its own affairs | nothing of the Grid's: `program_tick` runs on the event thread and must never block | the Program's business, before `library_shutdown` returns |
 
 Three rules the table enforces:
 
@@ -259,18 +246,22 @@ Three rules the table enforces:
   under `world_mutex` with the device idle: a REZ or DEREZ replaces the `World` and its tracers
   whole, never edits them in place.
 - **The tick never waits for a window.** In `--program` mode there is no render thread at all;
-  the host loop polls the wire, ticks the mind, and sends - a mind that thinks slowly delays
+  the host loop polls the wire, ticks the Program, and sends - a Program that thinks slowly delays
   its own intent (`Host::act` tags for the tick the world will step next), never the world.
 
 **Shutdown, in order**, which is reverse construction and always join-before-destroy:
 
 1. The loop ends (close, `--ticks`, or an exception unwinding through `main`).
 2. `RenderThreadGuard`: detach the window callback (so a close arriving now calls nothing),
-   send `Stop`, join the render thread. Inside a catch-all, because it runs on every path.
-3. The device waits idle; the Vulkan objects are destroyed in reverse order by `vk::raii`.
-4. `Host`/`Client` close the wire: BYE first, then the farewell drain, so a leave is a leave.
-5. `~Output` stops and joins the audio thread; `~Mixer` follows.
-6. `~Logger` last - everything above may still log while it stops - via the stop token.
+   send `Stop`, join the render thread, whose `DeviceIdleGuard` has waited the device idle on
+   its way out. Inside a catch-all, because it runs on every path.
+3. Where the ears were opened, `~Output` stops and joins the audio thread; `~Mixer` follows.
+4. In `--program` mode, `~Host` closes the wire - BYE first, then the farewell drain, so a leave
+   is a leave - because the host dialled after the device's objects were built.
+5. The Vulkan objects are destroyed in reverse order by `vk::raii`, then the window.
+6. In the window modes, `~Client` closes the wire the same way: it dialled before any window or
+   device existed, so it is the last of them to go.
+7. `~Logger` last - everything above may still log while it stops - via the stop token.
 
 Each step is idempotent and each destructor is `noexcept` in fact, not only in signature: the
 one place a failure to stop cleanly could be reported is the handler at the bottom of `main`,
@@ -1078,6 +1069,7 @@ tron-grid-lite/
 ├── .claude/          ← project instructions for AI assistants
 ├── .github/          ← CI workflows, Vulkan SDK setup actions
 ├── docs/             ← extended documentation (you are here)
+├── external/link     ← the Link submodule, built by cargo through CMake
 ├── images/           ← recorded animations the README embeds
 ├── libs/             ← internal libraries
 ├── src/              ← application and renderer sources, Slang shaders
