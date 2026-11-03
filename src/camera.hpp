@@ -20,11 +20,14 @@
 /*!
     Free-flight debug camera with quaternion orientation.
 
-    This is the camera the User looks through in the debug window, and during development to
-    inspect the Grid. It is not a player camera: the Grid is inhabited exclusively by creatures
-    driven by Programs, and the User never controls an inhabitant. The camera exists purely so
-    that a developer can fly around, watch what the creatures do, and verify that the renderer
-    behaves.
+    This is the camera the User looks through in the window: the live view of the shared world
+    (`--window`, or a Disk played back with `--replay`) and the serverless stage inspection
+    (`--debug`). It is not a player camera. Today the Grid is inhabited by creatures driven by
+    Programs alone, and this camera inhabits no body and steers none; where a User does more than
+    watch today, it is from a Program's own panel, which to the Grid is one more Program. Human
+    Users entering with avatars are the long arc of docs/VISION.md, and nothing here guesses at
+    what an avatar would need. The camera exists so that the User can fly around, watch what the
+    creatures do, and verify that the renderer behaves.
 
     Supports WASD + mouse look. Movement is in local camera space (forward/right relative to where
     the camera is looking), with vertical movement along the world up axis. Rotation is
