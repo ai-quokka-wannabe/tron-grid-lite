@@ -1,15 +1,16 @@
 /*
-    Copyright (C) 2026 The AiQuokkaWannabe Authors https://github.com/ai-quokka-wannabe/tron-grid-lite
+    Copyright (C) 2026 The AiQuokkaWannabe Authors <https://github.com/ai-quokka-wannabe/tron-grid-lite>
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+    This program is free software: you can redistribute it and/or modify it under the terms of
+    the GNU General Public License as published by the Free Software Foundation, either version
+    3 of the License, or (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-    GNU General Public License for more details.
+    This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+    without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along with this program.
+    If not, see <https://www.gnu.org/licenses/>.
 */
 
 #include "../program_library.hpp"
@@ -413,6 +414,19 @@ TEST_CASE(listing_finds_every_program_and_says_which_ones_load)
     if (broken != nullptr) {
         TEST_CHECK(!broken->refusal.empty());
         TEST_CHECK(broken->refusal.find("smaller than the") != std::string::npos);
+        TEST_CHECK(broken->program);
+    }
+
+    // A library with no entry point at all is listed too, but as no Program rather than a broken
+    // one: in a Program directory that is a dependency deployed beside a Program, such as Qt.
+    const ProgramLib::Listing* const not_a_program{find("tgl_broken_no_symbol")};
+    TEST_CHECK(not_a_program != nullptr);
+    if (not_a_program != nullptr) {
+        TEST_CHECK(!not_a_program->program);
+        TEST_CHECK(not_a_program->refusal.find("exports no tglGetProgramVTable") != std::string::npos);
+    }
+    if (good != nullptr) {
+        TEST_CHECK(good->program);
     }
 
     // Ordered, so that two runs over one folder agree and a reader can compare them.

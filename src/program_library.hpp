@@ -1,15 +1,16 @@
 /*
-    Copyright (C) 2026 The AiQuokkaWannabe Authors https://github.com/ai-quokka-wannabe/tron-grid-lite
+    Copyright (C) 2026 The AiQuokkaWannabe Authors <https://github.com/ai-quokka-wannabe/tron-grid-lite>
 
-    This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
+    This program is free software: you can redistribute it and/or modify it under the terms of
+    the GNU General Public License as published by the Free Software Foundation, either version
+    3 of the License, or (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-    GNU General Public License for more details.
+    This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+    without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+    See the GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along with this program.
+    If not, see <https://www.gnu.org/licenses/>.
 */
 
 #pragma once
@@ -18,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -116,6 +118,17 @@ namespace ProgramLib
     */
     [[nodiscard]] Inspection inspect(const std::filesystem::path& directory, std::string_view identifier);
 
+    /*!
+        Thrown when a library exports no `tglGetProgramVTable` at all: not a broken Program but no
+        Program, which in a Program directory is usually a library one depends on - Qt beside a
+        panel, say. A `std::runtime_error` like every other refusal, so a caller that only wants to
+        know whether a Program loads needs no new handler.
+    */
+    class NotAProgram : public std::runtime_error {
+    public:
+        using std::runtime_error::runtime_error;
+    };
+
     //! One candidate Program found in a directory, and what came of asking about it.
     struct Listing {
         std::string identifier;
@@ -125,6 +138,10 @@ namespace ProgramLib
 
         //! Why the Grid would decline it, or empty when it would not.
         std::string refusal;
+
+        //! False when the library exports no entry point at all (`NotAProgram`): listed, never
+        //! hidden, but said to be something other than a Program rather than a broken one.
+        bool program{true};
     };
 
     /*!
