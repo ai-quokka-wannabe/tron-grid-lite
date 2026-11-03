@@ -99,7 +99,7 @@ jobs:
             - name: Formatting must be canonical
               shell: bash
               run: |
-                git ls-files -z -- '*.cpp' '*.hpp' '*.c' '*.h' ':!external/**'                     | xargs -0 clang-format --dry-run --Werror
+                git ls-files -z -- '*.cpp' '*.hpp' '*.c' '*.h' ':!external/**' | xargs -0 clang-format --dry-run --Werror
 
             # TGL_ABI_VERSION stops the Grid loading a Program built against a different layout, and
             # nothing enforces it by itself. A forgotten bump leaves both sides agreeing on the number
@@ -361,9 +361,7 @@ jobs:
                 script: |
                     // This step and the manual cleanup workflow must behave
                     // identically, so both run the same module (the checkout
-                    // step above makes the require resolvable). A previous
-                    // inline copy had drifted from it — no pagination, no
-                    // dry-run, no error accounting — and silently missed the
-                    // accumulating CodeQL cache family.
+                    // step above makes the require resolvable) rather than an
+                    // inline copy that could drift from it.
                     const cleanupScript = require('./.github/scripts/cleanup-caches.js');
                     await cleanupScript({ github, context, core });
