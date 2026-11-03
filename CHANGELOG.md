@@ -1256,6 +1256,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A Program directory's dependencies are named for what they are, one licence notice, one version promise.**
+  `--list-programs` called every library without a `tglGetProgramVTable` export "UNUSABLE" - so Qt's DLLs, deployed
+  beside rc-worm, read as three broken Programs. A library with no entry point now throws its own
+  `ProgramLib::NotAProgram` (still a `std::runtime_error`), the listing marks it, and it is shown as "not a Program
+  ... (a library a Program depends on, perhaps)": still listed, never hidden. Every file's GPL notice is now the full
+  three-paragraph FSF form the rest of the organisation uses (110 files had the short one). `PROGRAM_INTERFACE.md`'s
+  Versioning section said no versioning "until 0.1.0" - the Grid is already 0.1.0 - while the document's opening and
+  close say 1.0.0; it now says 1.0.0. `.gitattributes` gains `*.sh text eol=lf`, as the other repositories carry.
+
 - **The world ending is not a fatal error.** When Master Control stopped on request and sent BYE, the creature host
   and the window threw it as an ordinary exception, so `main` logged `[FATAL] Fatal error: Master Control ended the
   world (BYE).` and exited with failure - on every clean stop. BYE now has its own type, `WorldClientLib::WorldEnded`,

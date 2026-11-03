@@ -994,7 +994,7 @@ for a picture.
 
 ## Versioning
 
-**There is none, and that is deliberate until 0.1.0.**
+**There is none, and that is deliberate until 1.0.0.**
 
 `TGL_ABI_VERSION` is a build stamp rather than a compatibility statement. This interface
 changes whenever it needs to — structs gain fields, functions change signature, semantics get
