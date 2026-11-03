@@ -2103,6 +2103,18 @@ int main(int argc, char** argv)
         }
 
         logger.logInfo("Shutting down cleanly.");
+    } catch (const WorldClientLib::WorldEnded& ended) {
+        // The world stopping is the run's natural end, for a host and a window alike: said as
+        // news, and a success to whoever started this process.
+        try {
+            logger.logInfo(std::string{ended.what()} + " Shutting down cleanly.");
+        }
+        // NOLINTNEXTLINE(bugprone-empty-catch) — the exit code below is the whole report now.
+        catch (...) {
+            // Deliberately swallowed: there is nothing left that could report anything.
+        }
+
+        return EXIT_SUCCESS;
     } catch (const std::exception& error) {
         /*
             The report is itself allowed to fail. Building the message allocates, and the likeliest

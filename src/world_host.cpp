@@ -253,7 +253,7 @@ namespace WorldHostLib
                 m_placed_guests.erase(view.as.derez.creature_id);
                 break;
             case LNK_MSG_BYE:
-                throw std::runtime_error{"Master Control ended the world (BYE)."};
+                throw WorldClientLib::WorldEnded{};
             case LNK_MSG_REFUSED: {
                 /*
                     The world's word on a REZ it did not honour (Link v8). Until now a host

@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -35,6 +36,19 @@
 */
 namespace WorldClientLib
 {
+
+    /*!
+        Master Control's BYE: the world ending on request - the tick in hand finished, the log
+        closed - which a client meets as the end of its run, not as a failure. Its own type so
+        `main` can tell the two apart: every other exception out of the wire is an error.
+    */
+    class WorldEnded : public std::runtime_error {
+    public:
+        WorldEnded() :
+            std::runtime_error{"Master Control ended the world (BYE)."}
+        {
+        }
+    };
 
     /*!
         A creature's body as REZ told it: the bounds and the render model the host offered and
