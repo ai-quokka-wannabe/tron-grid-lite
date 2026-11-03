@@ -1256,6 +1256,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The shared skills learn the day's lessons.** `windows-build` says how to catch a stale CMake cache that turns
+  Release into an unoptimised validation build, `org-pr-flow` how parallel PRs, self-filed dismissals and
+  `temp_dir()` in tests go wrong, and `live-world` (where present) how to measure a life's timing - mirrored
+  verbatim across the repositories.
+
 - **A Program directory's dependencies are named for what they are, one licence notice, one version promise.**
   `--list-programs` called every library without a `tglGetProgramVTable` export "UNUSABLE" - so Qt's DLLs, deployed
   beside rc-worm, read as three broken Programs. A library with no entry point now throws its own
