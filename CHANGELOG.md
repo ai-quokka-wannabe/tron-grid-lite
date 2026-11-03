@@ -1256,6 +1256,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The world ending is not a fatal error.** When Master Control stopped on request and sent BYE, the creature host
+  and the window threw it as an ordinary exception, so `main` logged `[FATAL] Fatal error: Master Control ended the
+  world (BYE).` and exited with failure - on every clean stop. BYE now has its own type, `WorldClientLib::WorldEnded`,
+  which `main` reports as news (`[INFO] ... Shutting down cleanly.`) with a successful exit; every other exception
+  out of the wire is still an error.
+
 - **Source comments follow the current world model.** The camera, spectator, and tick-rate comments now state what
   is true today and point to `docs/VISION.md` for the long arc. This is documentation only.
 
