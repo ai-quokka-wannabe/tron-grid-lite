@@ -291,7 +291,7 @@ TEST_CASE(a_call_sounds_on_the_tick_after_it_is_staged)
 
     roster.tick(nullSenses());
     TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.0f);
-    roster.tellPose(0u, roster.creatures().front().pose, {}, 0.0f, 0.5f);
+    roster.tellPose(0u, roster.creatures().front().pose, {}, 0.5f);
     TEST_CHECK_EQUAL(roster.creatures().front().vocalisation, 0.5f);
 }
 int main()

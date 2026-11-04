@@ -421,7 +421,10 @@ namespace RosterLib
             senses.specific_force[1] = creature.specific_force.y;
             senses.specific_force[2] = creature.specific_force.z;
 
-            senses.angular_velocity[1] = creature.turn_rate;
+            // The canals, as the world's letter said them: all three axes, nothing derived here.
+            senses.angular_velocity[0] = creature.angular_velocity.x;
+            senses.angular_velocity[1] = creature.angular_velocity.y;
+            senses.angular_velocity[2] = creature.angular_velocity.z;
 
             if (!creature.contacts.empty()) {
                 senses.contacts = creature.contacts.data();
@@ -442,12 +445,11 @@ namespace RosterLib
         ++m_tick;
     }
 
-    void Roster::tellPose(const uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, const float yaw_rate, const float vocalisation)
+    void Roster::tellPose(const uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, const float vocalisation)
     {
         Creature& creature{m_creatures.at(index)};
         creature.pose = pose;
         creature.velocity = velocity;
-        creature.turn_rate = yaw_rate;
         creature.vocalisation = vocalisation;
         const MathLib::Vec3 forward{forwardFor(pose.yaw)};
         creature.forward_speed = (velocity.x * forward.x) + (velocity.z * forward.z);
@@ -458,13 +460,14 @@ namespace RosterLib
         m_creatures.at(index).trail = std::move(trail);
     }
 
-    void Roster::tellFeel(const uint32_t index, const bool grounded, const MathLib::Vec3& specific_force, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles,
-        const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts, const float intake,
-        const std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS>& odour)
+    void Roster::tellFeel(const uint32_t index, const bool grounded, const MathLib::Vec3& specific_force, const MathLib::Vec3& angular_velocity,
+        const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts,
+        const float intake, const std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS>& odour)
     {
         Creature& creature{m_creatures.at(index)};
         creature.grounded = grounded;
         creature.specific_force = specific_force;
+        creature.angular_velocity = angular_velocity;
         creature.joint_angles = joint_angles;
         creature.joint_torques = joint_torques;
         creature.contacts = std::move(contacts);

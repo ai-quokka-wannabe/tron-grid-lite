@@ -370,7 +370,7 @@ joints, and the Grid copies them as it copies the joints.
 |-------|-------|----------------------|--------|
 | Vision | `eyes` | Rays traced from each eye through the shared BVH | Phase 6 |
 | Proprioception | `joint_angles`, `joint_torques` | Every servo's own reading since ABI v9, its load since v10. The body's speeds over the ground (`body_forward_speed`, `body_vertical_speed`, `body_turn_rate`) were removed at ABI 12: no animal feels its speed across the world, and they were filled from the world's own velocity (#189) | Phase 6 |
-| Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has | Phase 6 |
+| Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has, composed by Master Control at the head in the body frame and carried in the owner's letter (the rotation since protocol v14); the Grid copies both and derives nothing | Phase 6 |
 | Touch | `contacts`, `contact_count` | Where the body was struck this tick, and how hard | Phase 6 |
 | Thermoreception | `irradiance` | A fixed quadrature over the whole sphere, undirected | Phase 6 |
 | Hearing | `ears` | Acoustic rays through the same BVH, delivered as an impulse response per ear | Phase 6 |

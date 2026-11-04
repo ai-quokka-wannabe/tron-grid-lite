@@ -213,10 +213,10 @@ namespace RosterLib
         //! moves the body only while this is true.
         bool grounded{false};
 
-        //! What the actuators are actually doing. This is the proprioception a Program reads back,
-        //! and it disagrees with what was asked for whenever a bound bit or the feet left the floor.
+        //! What the walk actually does: the velocity along the body's facing, as the telling
+        //! said it - for the operator's report; it disagrees with what was asked whenever a
+        //! bound bit or the feet left the floor.
         float forward_speed{0.0f};
-        float turn_rate{0.0f};
 
         //! What every servo holds, radians, joint k between segments k and k + 1, as the world's
         //! letter reports it: the encoder's reading, the joints the chain has and zero beyond.
@@ -251,8 +251,11 @@ namespace RosterLib
         */
         TglActions staged{};
 
-        //! What the body felt this tick, in body frame: the otolith's reading, and every contact.
+        //! What the body felt this tick, in body frame: the otolith's reading, the semicircular
+        //! canals' (radians per second, right-handed, composed by the world - protocol v14), and
+        //! every contact.
         MathLib::Vec3 specific_force{};
+        MathLib::Vec3 angular_velocity{};
         std::vector<TglContact> contacts;
     };
 
@@ -305,21 +308,22 @@ namespace RosterLib
 
         /*!
             The world's telling for one creature: where it is and how it moves, as Master
-            Control's physics settled it. The actuators' proprioception follows from it - the
-            forward speed is the velocity along the body's facing, the turn rate is the yaw
-            rate - because that is what the body actually did, which is what a Program reads back.
+            Control's physics settled it. The forward speed follows from it - the velocity along
+            the body's facing - for the operator's report; no sense is derived here, the rotation
+            sense included: that comes in the owner's letter (tellFeel), composed by the world.
         */
-        void tellPose(uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, float yaw_rate, float vocalisation);
+        void tellPose(uint32_t index, const Pose& pose, const MathLib::Vec3& velocity, float vocalisation);
 
         //! Where the world placed this creature's trailing segments this tick, world frame, in
         //! chain order. Told beside the pose, every tick, by the host.
         void tellTrail(uint32_t index, std::vector<Pose> trail);
 
-        //! The owner's letter for one creature: what the body felt this tick, in body frame, what
-        //! every servo holds, what it swallowed and what its amphids smell.
-        void tellFeel(uint32_t index, bool grounded, const MathLib::Vec3& specific_force, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles,
-            const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts, float intake,
-            const std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS>& odour);
+        //! The owner's letter for one creature: what the body felt this tick, in body frame - the
+        //! otolith's and the canals' readings - what every servo holds, what it swallowed and what
+        //! its amphids smell.
+        void tellFeel(uint32_t index, bool grounded, const MathLib::Vec3& specific_force, const MathLib::Vec3& angular_velocity,
+            const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_angles, const std::array<float, TGL_SEGMENTS_MAX - 1u>& joint_torques, std::vector<TglContact> contacts,
+            float intake, const std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS>& odour);
 
         [[nodiscard]] const std::vector<Creature>& creatures() const noexcept;
 

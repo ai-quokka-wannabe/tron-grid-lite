@@ -315,6 +315,13 @@ that the places protocols actually fail are the places this codebase already has
   are compiled into both ends, one index space with two homes, and a slot-count mismatch
   mis-shades and mis-sounds *silently* — a handshake refusal is the only honest failure for
   build skew.
+- **The rotation sense travels in the letter (ruled 2026-11-04, protocol v14).** Beside the
+  specific force the letter carries `angular_velocity`, the rate the semicircular canals read,
+  radians per second in the same body frame at the same head, composed by Master Control from
+  the yaw and pitch the head actually turned through over the tick; the codec refuses a
+  non-finite one. Until v14 the Grid filled it itself from the rows' yaw rate, the one body
+  sense the host still derived (PERCEPTION.md § Imperfection at the body's own senses); now it
+  copies all three axes and derives nothing.
 - **The world's reflection attenuation travels in `WELCOME` (ruled 2026-11-03, protocol v13).** One number,
   `reflection_attenuation` in [0, 1]: the fraction of radiance and of acoustic energy a surface returns at each
   specular bounce. It is the same number for the Grid's surfaces and for every creature's body (the owner's ruling,
