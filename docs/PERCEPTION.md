@@ -306,8 +306,9 @@ a person in the dark feels like accelerating forwards. The Grid reports the same
 quantity rather than a clean "down" vector, so a creature is fooled in the same way an animal is.
 
 That matters more here than in most worlds. **Every surface is a perfect mirror**, so the reflected
-floor is geometrically indistinguishable from real space below it. A creature navigating on vision
-alone has no way to know which of the two halves it can fall through. Animals resolve exactly this
+floor is geometrically indistinguishable from real space below it, told apart only by being dimmer
+by the world's reflection attenuation. A creature navigating on vision alone has little to know
+which of the two halves it can fall through. Animals resolve exactly this
 ambiguity with inertial sensing, and the world's physics step already computes the numbers.
 
 **Thermoreception is one unresolved radiance figure, and that is biologically defensible rather

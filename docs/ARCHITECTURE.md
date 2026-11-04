@@ -381,8 +381,8 @@ shader's copy of the struct and produced an out-of-bounds read that only GPU-ass
 
 Hearing therefore **had to put its value somewhere**, and it went into a **parallel buffer indexed by the same
 material index** rather than into a wider `Material`, for two reasons that both come out of the history above. In the
-event there is only one such value — source strength — because acoustically every surface is a perfect mirror, so the
-parallel table is six floats.
+event there is only one such value — source strength — because acoustically every surface is a mirror returning the
+world's one reflection attenuation, which belongs to no material, so the parallel table is six floats.
 
 The first is bandwidth, and it is the same argument that removed them. `Material` is exactly two std430 rows; even one
 more float rounds up to three, half again as wide. The visual pass reads a material at every hit of every ray of
@@ -918,8 +918,8 @@ Sound is traced the same way light is, through the same structure:
 
 - The same BVH buffers are bound to an acoustic compute pass.
 - Rays are cast from a sound source, or gathered towards a listener, and traversal is bit-for-bit the same algorithm.
-- On hit, nothing is applied to the surface's account at all: reflection is lossless. Path length accumulates into a
-  delay, and a surface that sings deposits into the bin that delay selects.
+- On hit, the only thing applied to the surface's account is the world's reflection attenuation, one multiply per
+  reflection. Path length accumulates into a delay, and a surface that sings deposits into the bin that delay selects.
 - The output is an impulse response per band — where energy arrives in time — delivered to a creature's hearing
   sensor, not an image.
 
@@ -929,16 +929,18 @@ Nothing about the BVH, its buffer layout or the traversal code has to change: no
 
 The optical side asks two questions of a surface: what does it do to light that arrives, and what light does it
 originate. `colour` and `emission` answer them. **The acoustic side answers only the second.** Every surface on the
-Grid is a perfect acoustic mirror, so the acoustic table is one float per material — source strength — and there is
-no acoustic material model at all beyond it.
+Grid is a specular acoustic mirror returning the world's reflection attenuation — one number for light and sound,
+carried in `WELCOME` — so the acoustic table is one float per material — source strength — and there is no acoustic
+material model at all beyond it.
 
 Three things a room-acoustics engine would carry are absent, and each for its own reason:
 
-- **Absorption** was modelled and then removed on its own numbers. At the authored `alpha = 0.02` of a polished hard
-  surface, ten bounces cost 0.88 dB, and rays on an open plane escape after one or two — so the realistic figure is
-  nearer 0.2 dB against spreading's 26 dB across the range cap. Treble's documentation puts the measurement
-  uncertainty on such a coefficient at about ±0.2, which is larger than the effect it produced. A term whose error bar
-  exceeds its value is decoration rather than physics.
+- **Per-material absorption** was modelled and then removed on its own numbers. At the authored `alpha = 0.02` of a
+  polished hard surface, ten bounces cost 0.88 dB, and rays on an open plane escape after one or two — so the
+  realistic figure is nearer 0.2 dB against spreading's 26 dB across the range cap. Treble's documentation puts the
+  measurement uncertainty on such a coefficient at about ±0.2, which is larger than the effect it produced. What
+  returned in its place is one world-wide reflection attenuation, for perception rather than as measured physics:
+  with lossless surfaces a body could not tell a wall from open space ([ACOUSTICS.md](ACOUSTICS.md)).
 - **Transmission** was never modelled. Sound does pass through a glass slab in reality, and representing that honestly
   needs a thickness, a transmission coefficient and an interface model — the acoustic counterpart of exactly the
   microfacet machinery the optical side does without. On the Grid a slab is an obstacle, and behind one there is quiet.
@@ -947,10 +949,10 @@ Three things a room-acoustics engine would carry are absent, and each for its ow
   fundamental — geometry far larger than the wave, redirecting it specularly in genuinely varied directions. A
   statistical coefficient would model a second time, and less honestly, what the triangles are already doing.
 
-A lossless reflector is only safe because the Grid is an **open half-space**: rays leave and do not come back, total
-path is capped, and reflection order is capped, so nothing accumulates without bound. Enclose any part of the Grid —
-a room, a tunnel, a lid over a terrace hollow — and perfect mirrors would ring forever. That is the condition under
-which this has to be reopened, and it is a geometry decision rather than an acoustic one.
+Even a lossless reflector would be safe here, because the Grid is an **open half-space**: rays leave and do not come
+back, total path is capped, and reflection order is capped, so nothing accumulates without bound. Enclose any part of
+the Grid — a room, a tunnel, a lid over a terrace hollow — and only the attenuation below 1 would make its tail
+decay, by that factor per bounce.
 
 ### Nothing on the Grid sounds continuously
 

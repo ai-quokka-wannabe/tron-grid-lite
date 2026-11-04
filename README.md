@@ -310,7 +310,8 @@ cmake --build build/linux-x11-clang --config Debug
 4. **Creature-first resolution** — animal eyes resolve far less than 800×600; creature vision
    renders tiny, and only the User's window renders big (see [docs/PERCEPTION.md](docs/PERCEPTION.md))
 5. **One Grid, two senses** — a single BVH answers both visual rays and acoustic rays. `Material`
-   carries optical properties only; acoustically every surface is a perfect mirror, and the one
+   carries optical properties only; every surface returns the world's one reflection attenuation of
+   light and of sound alike, and the one
    authored acoustic number — how loudly a surface sings — lives in its own table indexed by the
    same material slot
 6. **Incremental** — every phase produces something visible

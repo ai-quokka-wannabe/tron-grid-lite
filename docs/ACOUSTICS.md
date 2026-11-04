@@ -406,8 +406,10 @@ coefficient — with a scattering coefficient alongside it defaulted to zero.
 ### The resolution: no surface response at all, and one authored float for the source
 
 This document goes further than either lens, in the direction of less. **Every surface on the Grid is
-a perfect acoustic mirror: no absorption, no scattering, no transmission and no frequency dependence.**
-There is no acoustic surface-response model, and therefore no acoustic material table.
+a specular acoustic mirror that returns one world-wide fraction of what reaches it: no per-material
+absorption, no scattering, no transmission and no frequency dependence.** That fraction is the world's
+reflection attenuation (below), not a material property, so there is no acoustic surface-response
+model per material, and therefore no acoustic material table.
 
 One float per material remains and it is not a surface response: **`acoustic_source_strength`, the
 acoustic counterpart of `emission`**, because the neon hums and because optical emission is the wrong
@@ -451,25 +453,54 @@ What bounds the response instead is the range cap, the reflection order cap, sph
 air absorption. Each of those is larger than the term removed, and the first two are hard bounds
 rather than attenuations.
 
-**The regime in which this is correct, stated so it can be checked later.** A lossless reflector is
-safe only because the Grid is an open half-space: rays leave and do not return, total accumulated path
-is capped at 20 m, and reflection order is capped at 4, so nothing can accumulate without bound.
-Enclose any part of the Grid — a room, a tunnel, a lid over a terrace hollow — and perfect mirrors
-would ring forever. **That is the trigger for reopening this decision, and it is a geometry decision
-rather than an acoustic one.**
+**What bounds the response at any attenuation.** Even a lossless reflector is safe on the Grid,
+because it is an open half-space: rays leave and do not return, total accumulated path is capped at
+20 m, and reflection order is capped at 4, so nothing can accumulate without bound. Enclose any part of
+the Grid — a room, a tunnel, a lid over a terrace hollow — and a lab that set the attenuation to 1
+would hear a room that rings until the caps cut it; any value below 1 makes such a tail decay by that
+factor per bounce.
+
+#### The reflection attenuation: the decision reopened, for perception
+
+The numbers above still hold: as *physics*, absorption at a hard surface is too small to model. The
+maintainer's ruling of 2026-11-03 ([TOPOLOGY.md](TOPOLOGY.md) § The protocol) reopened the decision
+for a different reason: **perception and training**. With lossless surfaces a riser face echoed a
+second creature at full strength, and a body could not tell a wall from open space; rc-worm drove into
+one. So the world carries one number, the **reflection attenuation** `a` in [0, 1], the fraction of
+energy a surface returns per reflection. It is the same number the optical walk applies to light
+([MATERIALS.md](MATERIALS.md)), and the same for the Grid's surfaces and for every creature's body.
+
+- **In the gather**, a ray carries one throughput scalar, `a` to the power of the reflections it has
+  made, built by one multiply per reflection; an arrival of order `n` deposits `a^n` of its lossless
+  energy, and the direct arrival is untouched. At `a = 0` a ray that has reflected carries nothing, so
+  it stops.
+- **In a call's delivery**, every first-order image is scaled by `a` once, and the direct path never.
+- **It is one value per world.** Master Control owns it, `WELCOME` carries it, and the creature host
+  hears with the world's. The offline modes use `DEFAULT_REFLECTION_ATTENUATION`, 0.9, in
+  `src/components.hpp`, which mirrors Master Control's default.
+
+At the default one reflection costs 0.46 dB and four cost 1.8 dB: small against spreading's 26 dB
+across the range cap, which is the intent. It marks an echo as an echo without hiding it. A hard wall
+returns nearer 0.98 of sound; one number cannot be both that and a mirror's return of light, and 0.9
+errs towards walls being perceived. It is a hyperparameter iso-lab may set.
+
+`acoustics.slang` applies the same multiply in the same order, so `--verify-acoustics` compares like
+with like, and `src/tests/acoustics_tests.cpp` pins the arithmetic: order `n` scales by `a^n`, `a = 1`
+reproduces a lossless walk bit for bit, and `a = 0` leaves the direct sound only.
 
 #### What the ray actually carries
 
 With no surface term at all, the energy delivered along one path in band `b` is:
 
 ```text
-E_b = S_b * spreading(d) * 10^(-a_b * d / 10)
+E_b = a^n * S_b * spreading(d) * 10^(-alpha_b * d / 10)
 ```
 
-where `d` is the total accumulated path. **Every band-dependent factor now depends only on `d`**, so
-a ray carries exactly one number — its accumulated path length — and populates an N-band histogram
-exactly, not approximately, at a cost of N multiplies per recorded arrival. The earlier revision
-needed a throughput scalar beside the path length; it no longer exists.
+where `d` is the total accumulated path, `n` the reflections the path has made, `a` the world's
+reflection attenuation and `alpha_b` the air absorption in band `b`. **Every band-dependent factor
+depends only on `d`**, so a ray carries exactly two numbers — its accumulated path length and the
+band-free scalar `a^n` — and populates an N-band histogram exactly, not approximately, at a cost of N
+multiplies per recorded arrival.
 
 That has a payoff worth naming, because it settles an architectural question the roster raises. The
 presets do not share band edges: `elegans`, `rodent` and `macropod` have three disjoint sets. Because
@@ -592,7 +623,7 @@ occlusion only, never through the reflection tree.
 
 There is a pleasing inversion worth recording. Optically, glass is the most interesting material on
 the Grid: transmission towards 1, Snell refraction, total internal reflection, the whole apparatus of
-[MATERIALS.md](MATERIALS.md). Acoustically the same slab is a perfect mirror. **The one surface the
+[MATERIALS.md](MATERIALS.md). Acoustically the same slab is a mirror. **The one surface the
 optical renderer treats as transparent is the one the acoustic renderer treats as most opaque** —
 which means a creature with both senses gets information neither alone provides. That is "one Grid,
 two senses" earning its keep rather than merely being asserted.
@@ -1210,9 +1241,10 @@ already left this list the way an entry should: point sources were deferred here
   concrete second use case the repository's own rule demands before a small extraction, and buffer
   ownership lives in `World` (`src/world.hpp`), whose accessors every tracer binds from.
 - **Acoustic source strengths.** A new `StructuredBuffer<float>` of six source strengths, indexed by
-  the same material index, bound only by the acoustic pipeline. There is no absorption term and no
-  acoustic material table: every surface is a perfect mirror. `Material`, `grid_optics.slang` and all six
-  `static_assert`s are untouched. Implemented as `Acoustics::makeAcousticSourceStrengths`.
+  the same material index, bound only by the acoustic pipeline. There is no per-material absorption
+  term and no acoustic material table: every surface is a mirror returning the world's reflection
+  attenuation, which is a push constant. `Material` and all six `static_assert`s are untouched.
+  Implemented as `Acoustics::makeAcousticSourceStrengths`.
 - **The hum spectrum.** One `float4` per solve, the Grid's 3 kHz fundamental and its harmonics resolved
   into the listening ear's four bands. It is a push constant, not a material field, because every
   sounding surface on the Grid shares it.
@@ -1282,9 +1314,9 @@ scenes.
 
 The fixed-point scale is a real question and it is answered by the range cap rather than dodged by it.
 With total path capped at 20 m, spreading costs at most 26 dB relative to a one-metre reference and air
-absorption at 8 kHz adds 1.5 dB over that distance. Surfaces contribute nothing, being lossless. **The
-whole delivered response therefore spans under about 28 dB — a factor of a thousand, not many orders of
-magnitude.** So one scale suffices: put a unit relative arrival at `2^18`, which leaves roughly eight
+absorption at 8 kHz adds 1.5 dB over that distance. At the default reflection attenuation the four
+reflections the order cap allows add 1.8 dB more. **The whole delivered response therefore spans about
+30 dB — a factor of a thousand, not many orders of magnitude.** So one scale suffices: put a unit relative arrival at `2^18`, which leaves roughly eight
 bits of resolution on the quietest arrival the cap permits and, against a worst case of 2,048 directions
 by four orders, 10,240 full-strength deposits landing in one bin — a ray makes `max_order + 1`
 segments, the direct one plus one per reflection, which is the off-by-one this sentence used to make.
@@ -1325,8 +1357,9 @@ acceptance criteria, in increasing order of what they prove:
    directly above has a direct arrival and exactly one image arrival, both at delays computable by
    hand. If the two bins are not where arithmetic says they are, the delay accumulation is wrong.
 4. **Energy sanity.** No arrival may exceed the source strength that produced it, which the one-metre
-   spreading floor makes exactly checkable. And because reflection is lossless, **raising the
-   reflection order cap may only ever add energy — never move or diminish an arrival already found**;
+   spreading floor makes exactly checkable. And because a reflection scales only what the ray
+   collects after it, **raising the reflection order cap may only ever add energy — never move or
+   diminish an arrival already found**;
    if a later order changes an earlier bin, energy is leaking backwards through the model. Between
    them these catch the double-counted spreading the convention note above warns about, and they
    replace an earlier criterion that swept an absorption coefficient which no longer exists.

@@ -429,15 +429,16 @@ resolved into that ear's own frequency bands.
 The prerequisite that used to be open is closed. The Grid now has a sound source, and it is the neon:
 light and sound come from the very same geometry, which is "one Grid, two senses" earning its keep
 rather than being asserted. Surfaces carry one authored acoustic number — how loudly they sing — and
-nothing else, because acoustically every surface on the Grid is a perfect mirror. See
-[ACOUSTICS.md](ACOUSTICS.md) for why, and for the open-half-space assumption that makes it safe.
+nothing else, because acoustically every surface on the Grid is a mirror returning the world's one
+reflection attenuation, which `WELCOME` carries and which light shares. See
+[ACOUSTICS.md](ACOUSTICS.md) for why, and for what bounds the response.
 
 `TglEarDesc` and `TglEarView` are declared in
 [the header](../libs/program-abi/include/tgl/tgl_program_abi.h), like everything else in the
 interface. The decisions behind them:
 
 **An ear has a position and no axis.** The gather casts a full spherical direction set from a point,
-every surface is a perfect acoustic mirror, and there is no directivity term anywhere in the acoustic
+every surface is a specular acoustic mirror, and there is no directivity term anywhere in the acoustic
 model — so an ear facing backwards hears exactly what one facing forwards hears. A `direction` member
 would be a field the Grid reads and nothing acts on, in a document whose own rule is that every field
 is populated. It arrives when directivity does, and the version bumps then.

@@ -206,15 +206,18 @@ build/windows-msvc/src/Release/TronGridLite.exe --record --frames 12 --width 640
 
 | Vendor | Devices measured | Digest |
 |--------|------------------|--------|
-| NVIDIA | GeForce RTX 4090 Laptop (Ada Lovelace) | `70DDA0E77A7B9A0560F4DE4AC0FA6268A39C1B60CF3F6AA8F1E84D4E72A0593F` |
-| AMD | pending: the weekly machine has not seen the vertical risers yet | — |
-| Intel | RaptorLake-S Mobile Graphics, integrated | `BEB778C562B09B955AE92BEB8472E800F965E8E585B24CB3390E7F8CD8EFBB98` |
+| NVIDIA | GeForce RTX 4090 Laptop (Ada Lovelace); GTX 1650 Ti pending | `D46C7B696E2EAE1A3855EC823605705974DB16D50826D59AD1B8347BE097D979` |
+| AMD | pending: the weekly machine has not seen the reflection attenuation yet | — |
+| Intel | RaptorLake-S Mobile Graphics, integrated | `6EB9085ADF161A1498BAF8F3429EEB1A532F1BDA4113A5D25AB8B4D48F2E9878` |
 
-The digests moved legitimately with the vertical-riser floor — the picture was meant to change —
-and were re-recorded on the daily machine's two devices in the same commit. Two rows wait for the
-weekly machine: the AMD digest, and the NVIDIA row's second card (the GTX 1650 Ti), whose agreement
-with the 4090 is what backs the per-vendor claim below. Until it is re-measured, that claim rests
-on the previous scene's evidence.
+The digests moved legitimately with the reflection attenuation — every mirror now returns
+`DEFAULT_REFLECTION_ATTENUATION` (0.9, `src/components.hpp`) of what Fresnel sends it, which is what
+`--record` renders — and were re-recorded on the daily machine's two devices in the same commit. A
+build with the constant set to 1 reproduces the previous digests on both devices bit for bit, which
+is the check that the attenuation is the only thing that moved. Two rows wait for the weekly machine:
+the AMD digest, and the NVIDIA row's second card (the GTX 1650 Ti), whose agreement with the 4090 is
+what backs the per-vendor claim below. Until it is re-measured, that claim rests on an earlier scene's
+evidence.
 
 **Determinism is per vendor rather than per device, and that is measured rather than assumed.** Two
 NVIDIA cards two architecture generations apart — Turing and Ada Lovelace, different machines,
@@ -233,6 +236,9 @@ of multiply-adds and the transcendentals — actually gets spent.
 
 The NVIDIA-to-Intel figure barely moved across a scene change that rebuilt the whole floor — 2.97%
 became 2.95% — which is exactly the stability these rows are kept to watch.
+
+The NVIDIA-to-Intel figure held at 2.95% and 197 across the reflection attenuation as well, which
+dimmed every reflection and moved 33.93% of the 4090's bytes.
 
 Alarming figures that are not: this is a world of mirrors, so a ray passing one side of an edge
 instead of the other lands on a neon tube instead of on black, and a single contracted multiply-add
@@ -521,6 +527,7 @@ which is nothing but the boundary so that nothing can be added outside it.
 | HDR range          | 16-bit float                                | Emissive glow needs headroom               |
 | Present mode       | MAILBOX                                     | Low latency, no tearing                    |
 | Ray tracing        | Deterministic Whitted in compute shaders    | Perfect mirrors + emissives = no MC noise  |
+| Reflection         | One `reflection_attenuation` per world, light and sound | Walls must be perceivable; WELCOME carries it, offline 0.9 |
 | Materials          | One continuous model: colour, index_of_refraction, emission, transmission | The aesthetic is the algorithm |
 | Creature vision    | Tiny sensor renders (≤ 800×600, often far less) | Animal eyes resolve little; cheap rays |
 | Acoustics          | Same BVH as visual rays                     | One Grid, two senses                       |
