@@ -965,7 +965,8 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     WorldHostLib::Host host{master_control_address, std::chrono::milliseconds{5000}, roster};
     std::uint64_t guest_shapes_seen{0u};
     logger.logInfo("Hosting: Master Control at " + master_control_address + ", tick " + std::to_string(host.welcome().current_tick) + ", client id "
-        + std::to_string(host.welcome().client_id) + "; creature " + std::to_string(host.wireIdentity(0u)) + " rezzed from Program \"" + program_identifier + "\".");
+        + std::to_string(host.welcome().client_id) + ", reflection attenuation " + std::to_string(host.welcome().reflection_attenuation) + "; creature "
+        + std::to_string(host.wireIdentity(0u)) + " rezzed from Program \"" + program_identifier + "\".");
 
     const uint64_t first_tick{host.toldTick()};
     uint64_t programs_ticked{0u};

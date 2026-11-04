@@ -108,7 +108,12 @@ namespace
             if (hello.role != LNK_ROLE_CREATURE_HOST) {
                 throw std::runtime_error{"the client did not come as a creature host"};
             }
-            const LnkWelcome welcome{.current_tick = current_tick, .nominal_dt_seconds = 0.03125f, .client_id = client_id, .world_fingerprint = m_world_fingerprint};
+            const LnkWelcome welcome{.current_tick = current_tick,
+                .nominal_dt_seconds = 0.03125f,
+                .client_id = client_id,
+                .world_fingerprint = m_world_fingerprint,
+                .reflection_attenuation = 0.9f,
+                .reserved0 = {}};
             check(m_library.vtable().send_welcome(m_connection, &welcome), "send_welcome");
             flush();
         }

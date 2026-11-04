@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **On the wire at protocol v13.** `external/link` moves to v13 (client ABI 11): `WELCOME` carries the world's
+  reflection attenuation, which the creature host and the window now hold as the world told it - a creature host
+  logs it on joining - and a Disk's header carries it, so a `--replay` holds the value it was recorded under (a test
+  pins the round trip). Nothing renders or sounds differently yet: applying it to light and sound is the next step of
+  #177.
+
 - **Ruled: the world's reflection attenuation travels in `WELCOME`, and a non-finite float is malformed everywhere.**
   `docs/TOPOLOGY.md` § The protocol records protocol v13's two decisions (#177 item 1, link#56): one
   `reflection_attenuation` in [0, 1], owned by Master Control, carried by `WELCOME` rather than the fingerprint, the
