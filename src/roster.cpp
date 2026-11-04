@@ -404,10 +404,6 @@ namespace RosterLib
             senses.tick = m_tick;
             senses.dt_seconds = TICK_SECONDS;
 
-            // What the actuators and the body actually did this tick.
-            senses.body_forward_speed = creature.forward_speed;
-            senses.body_vertical_speed = creature.velocity.y;
-            senses.body_turn_rate = creature.turn_rate;
             // The servos' own readings, as the world's letter said them.
             for (std::size_t joint{0u}; joint < creature.joint_angles.size(); ++joint) {
                 senses.joint_angles[joint] = creature.joint_angles[joint];
