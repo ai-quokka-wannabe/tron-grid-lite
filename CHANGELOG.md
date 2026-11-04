@@ -744,6 +744,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The heat and taste designs carry their built figures.** `docs/THERMORECEPTION.md` gives air's thermal diffusivity
+  as Incropera's 22.5e-6 m^2/s at 300 K (it said "about 2.2e-5") and the Grid's 451.6 m^2/s, as master-control#90 built
+  them; `docs/CHEMORECEPTION.md` gives salt's 1.611e-9 m^2/s and a taste's spread of about 2.8 m a minute (it said
+  "about a metre"), as master-control#92 built them. Documentation only.
+
 - **The rotation sense comes from the world's letter (protocol v14).** `external/link` moves to v14 (link#59): the
   owner's letter carries `angular_velocity`, composed by Master Control at the head in the same body frame as the
   specific force, and the host copies all three axes into `TglSenses` rather than deriving the yaw axis from the
