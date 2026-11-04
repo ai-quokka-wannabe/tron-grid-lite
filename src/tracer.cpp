@@ -69,13 +69,15 @@ namespace
         uint32_t resolution_y{0u};
         uint32_t max_bounces{0u};
         uint32_t instance_count{0u};
+        float reflection_attenuation{0.0f};
     };
 
-    static_assert(sizeof(TracePushConstants) == 80u, "Push constants must match the Slang struct layout exactly.");
+    static_assert(sizeof(TracePushConstants) == 84u, "Push constants must match the Slang struct layout exactly.");
     static_assert(offsetof(TracePushConstants, top_left) == 16u, "top_left must sit at offset 16.");
     static_assert(offsetof(TracePushConstants, pixel_delta_u) == 32u, "pixel_delta_u must sit at offset 32.");
     static_assert(offsetof(TracePushConstants, pixel_delta_v) == 48u, "pixel_delta_v must sit at offset 48.");
     static_assert(offsetof(TracePushConstants, resolution_x) == 64u, "resolution must sit at offset 64.");
+    static_assert(offsetof(TracePushConstants, reflection_attenuation) == 80u, "reflection_attenuation must sit at offset 80.");
 
     // The shader declares each of these structures too, and reads the buffers as flat arrays of
     // them. A silent disagreement here is an out-of-bounds read on the GPU rather than a compile
@@ -298,7 +300,7 @@ void Tracer::stageInstances(const uint32_t frame_slot, const std::vector<BvhLib:
     m_dynamic_counts[frame_slot] = static_cast<uint32_t>(records.size());
 }
 
-void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces) const
+void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces, float reflection_attenuation) const
 {
     // Undefined rather than the previous layout: every pixel is written unconditionally, so there
     // is nothing in the old contents worth preserving and discarding them is free.
@@ -349,7 +351,8 @@ void Tracer::record(const vk::raii::CommandBuffer& command_buffer, uint32_t fram
         .resolution_x = m_extent.width,
         .resolution_y = m_extent.height,
         .max_bounces = max_bounces,
-        .instance_count = hasDynamicInstances() ? m_dynamic_counts[frame_slot] : m_world->instanceCount()};
+        .instance_count = hasDynamicInstances() ? m_dynamic_counts[frame_slot] : m_world->instanceCount(),
+        .reflection_attenuation = reflection_attenuation};
 
     command_buffer.pushConstants<TracePushConstants>(*m_pipeline_layout, vk::ShaderStageFlagBits::eCompute, 0u, {push});
 

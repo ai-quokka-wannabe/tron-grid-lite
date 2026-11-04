@@ -141,41 +141,45 @@ namespace Acoustics
     inline constexpr float GOLDEN_TURN_FRACTION{0.38196601125010515f};
 
     /*
-        Every surface on the Grid is a perfect acoustic mirror.
+        Every surface on the Grid is an acoustic mirror that returns a fixed fraction of what reaches it.
 
-        No absorption, no transmission, no scattering and no frequency dependence: a surface returns
-        all of the energy that reaches it, at the mirror angle, and that is the whole surface
-        response. There is consequently no acoustic *material* table at all — only the source
-        strengths below, which say what a surface emits rather than what it does to what hits it.
+        No scattering, no transmission and no frequency dependence: a surface returns the world's
+        **reflection attenuation** `a` of the energy that reaches it, at the mirror angle, and that
+        is the whole surface response. So an arrival after `n` reflections carries `a^n` of the
+        energy it would carry losslessly, and a first-order image carries `a`. There is
+        consequently no acoustic *material* table at all - only the source strengths below, which
+        say what a surface emits, and the one world-wide `a`, which says what every surface does to
+        what hits it.
 
-        This is the same choice the optical model makes, for the same reason. That model is not a
-        cheap approximation of physically-based rendering; it is PBR at the smooth limit, where the
-        microfacet distribution collapses to a delta function and the BRDF reduces analytically to
-        Fresnel-weighted mirror reflection plus Snell refraction. The acoustic model is likewise the
-        correct closed form for what the Grid actually contains, which is flat hard specular
-        surfaces and nothing else.
+        `a` is the same number the optical walk multiplies each specular bounce by
+        (`grid_optics.slang`), for the Grid's surfaces and for every creature's body alike. Master
+        Control owns it and `WELCOME` carries it (`docs/TOPOLOGY.md` § The protocol); a run with
+        no world uses `DEFAULT_REFLECTION_ATTENUATION`, 0.9.
 
-        **Absorption is left out on its own numbers, not for simplicity.** At the `alpha = 0.02` of a
-        polished hard surface, ten bounces cost 0.88 dB — and on an open plane rays escape after one
-        or two, so the realistic figure is nearer 0.2 dB. Against spherical spreading's 26 dB across
-        the range cap that is the smallest term in the model by an order of magnitude, and Treble's
-        documentation puts the measurement uncertainty on such a coefficient at about ±0.2, which is
-        larger than the effect it would produce. A term whose error bar exceeds its value is
-        decoration rather than physics.
+        **Absorption was once left out on its own numbers, and the maintainer's ruling of
+        2026-11-03 reopened that decision for a different reason.** On the numbers alone it holds:
+        at the `alpha = 0.02` of a polished hard surface, ten bounces cost 0.88 dB, and on an open
+        plane rays escape after one or two, so the measured physical loss is the smallest term in
+        the model and smaller than the uncertainty on its own coefficient. The reason to have it
+        anyway is **perception and training**: with lossless surfaces a riser echoed a second
+        creature at full strength, and a body could not tell a wall from open space. A quieter
+        echo is how a body learns where a wall is, and `a` is a hyperparameter the lab may set for
+        that. At the default, one bounce costs 0.46 dB and four cost 1.8 dB - still small against
+        spreading's 26 dB across the range cap, which is the point: it marks a reflection as a
+        reflection without hiding it.
 
         **Transmission was never modelled, and its absence is a decision rather than an oversight.**
         Sound does pass through a glass slab in reality. Representing that honestly would need a
-        thickness, a transmission coefficient and an interface model — the acoustic counterpart of
+        thickness, a transmission coefficient and an interface model - the acoustic counterpart of
         exactly the microfacet machinery the optical side deliberately does without. On the Grid a
         slab is an obstacle, and behind one there is quiet.
 
-        **The regime in which this is correct, written down so it can be checked later.** A lossless
-        reflector is only safe because the Grid is an open half-space: rays leave and do not come
-        back, total path is capped at `RANGE_METRES`, and reflection order is capped at `MAX_ORDER`,
-        so nothing can accumulate without bound. Enclose any part of the Grid — a room, a tunnel, a
-        lid over a terrace hollow — and perfect mirrors would ring forever. That is the condition
-        under which this decision has to be reopened, and it is a geometry decision rather than an
-        acoustic one.
+        **What bounds the response, written down so it can be checked later.** Even at `a = 1` the
+        Grid cannot ring: it is an open half-space, so rays leave and do not come back, total path
+        is capped at `RANGE_METRES`, and reflection order is capped at `MAX_ORDER`. Enclose any part
+        of the Grid - a room, a tunnel, a lid over a terrace hollow - and a lab that set `a = 1`
+        would hear a lossless room; any `a < 1` makes the tail decay geometrically, by `a` per
+        bounce.
     */
 
     /*!
@@ -315,6 +319,13 @@ namespace Acoustics
         float range_metres{RANGE_METRES};
 
         /*!
+            Fraction of the energy a surface returns per reflection, in [0, 1]: an arrival after
+            `n` reflections is scaled by its `n`th power, and the direct arrival not at all. The
+            world's, from WELCOME; the default is the one every offline mode uses.
+        */
+        float reflection_attenuation{DEFAULT_REFLECTION_ATTENUATION};
+
+        /*!
             Scene instances this gather's rays pass through - a creature's whole body, head and
             chain - empty for none.
 
@@ -359,10 +370,10 @@ namespace Acoustics
         receiver it can afford. The failure mode of getting this wrong is a silent 6 dB per doubling
         that looks like a material problem.
 
-        Surfaces reflect losslessly, so nothing here attenuates on contact. What bounds the
-        response instead is the range cap, the reflection order cap, spreading and air — see the
-        note on the perfect acoustic mirror above for why that is safe on an open plane and where it
-        would stop being safe.
+        Each reflection scales what the ray goes on to collect by `config.reflection_attenuation`, so
+        an arrival of order `n` carries its `n`th power; nothing else attenuates on contact. What
+        bounds the response besides is the range cap, the reflection order cap, spreading and air -
+        see the note on the acoustic mirror above.
 
         \param bvh The Grid. An empty one returns silence.
         \param source_strengths How loudly each material sings, indexed by a triangle's material.
@@ -489,6 +500,10 @@ namespace Acoustics
         //! Total accumulated path cap, in metres. The same physical horizon the gather has.
         float range_metres{RANGE_METRES};
 
+        //! Fraction of the energy a surface returns per reflection, in [0, 1]. Every first-order
+        //! image is scaled by it once; the direct path never is. The same world value the gather has.
+        float reflection_attenuation{DEFAULT_REFLECTION_ATTENUATION};
+
         /*!
             Radius of the sphere the direct-occlusion probe samples, in metres.
 
@@ -533,8 +548,8 @@ namespace Acoustics
 
         Same units, same bins, same spreading floor and same air model as the gather, applied by the
         same arithmetic — the returned response adds bin for bin onto a gathered one, which is how a
-        tick's ear view carries the hum and every call at once. Surfaces reflect losslessly here for
-        the same reason they do there.
+        tick's ear view carries the hum and every call at once. Each image is scaled once by the
+        world's reflection attenuation, exactly as a first-order gathered ray is.
 
         The response is the Grid's answer for the whole flight of the call: an echo later than the
         listener's window is dropped, exactly as `TglEarDesc` documents, and with the range cap at

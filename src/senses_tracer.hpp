@@ -72,9 +72,10 @@ public:
 
         \param rays Origin, direction interleaved: ray i is elements 2i and 2i + 1, w ignored.
         \param max_bounces Total ray segments per sample, at least 1.
+        \param reflection_attenuation Fraction each specular bounce returns, in [0, 1].
         \return One radiance triple per ray, in ray order, with nothing in the w component.
     */
-    [[nodiscard]] std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t max_bounces) override;
+    [[nodiscard]] std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t max_bounces, float reflection_attenuation) override;
 
 private:
     const Device* m_device{nullptr}; //!< Non-owning.

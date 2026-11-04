@@ -29,9 +29,9 @@
 //       bound.
 //     - The output is a **histogram**, not a pixel. Many rays land in the same bin, so the write is
 //       a scattered atomic add rather than one unconditional store.
-//     - Surfaces are **perfect mirrors**: nothing is subtracted on contact, so a ray carries no
-//       throughput at all. See `acoustics.hpp` for why, and for the open-half-space assumption that
-//       makes it safe.
+//     - Surfaces are mirrors that return the world's **reflection attenuation** `a` per bounce, so
+//       a ray carries one scalar throughput, `a` to the power of its order, and nothing else. See
+//       `acoustics.hpp` for why, and for what bounds the response at any `a`.
 //
 // Entry points:
 //     acousticMain — [shader("compute")], [numthreads(64, 1, 1)] — one workgroup per ear.
@@ -44,7 +44,7 @@
 //     binding 4 : RWStructuredBuffer<uint>    histogram        — ear_count * BAND_COUNT * BIN_COUNT.
 //     binding 5 : StructuredBuffer<Instance>  instances        — 144 bytes each, the top level.
 //
-// Push constants (52 bytes):
+// Push constants (56 bytes):
 //     offset  0, size 16 : hum_spectrum       — source strength per band, at full amplitude.
 //     offset 16, size 16 : air_absorption     — dB per kilometre per band.
 //     offset 32, size  4 : direction_count    — rays cast from each ear.
@@ -52,6 +52,7 @@
 //     offset 40, size  4 : instance_count     — placements in the top level; zero means every ray misses.
 //     offset 44, size  4 : material_count     — length of source_strengths, for the bounds guard.
 //     offset 48, size  4 : range_metres       — total accumulated path cap.
+//     offset 52, size  4 : reflection_attenuation — fraction of the energy each reflection returns.
 
 import grid_bvh;
 
@@ -90,9 +91,10 @@ static const uint WORKGROUP_SIZE = 64;
 
     The scale is answered by the range cap rather than dodged by it. With total path capped at 20 m,
     spreading costs at most 26 dB from the one-metre reference and air at 8 kHz adds about 1.5 dB
-    over that distance; surfaces contribute nothing, being lossless. The whole delivered response
-    therefore spans under about 28 dB — a factor of a thousand, not many orders of magnitude — so one
-    scale suffices.
+    over that distance; at the default reflection attenuation of 0.9 the four reflections the order
+    cap allows cost 1.8 dB more. The whole delivered response therefore spans about 30 dB — a
+    factor of a thousand, not many orders of magnitude — so one scale suffices. A lab that sets the
+    attenuation far lower trades resolution on its latest echoes, which are also its quietest.
 
     `2^18` puts a unit arrival at 262,144, which leaves roughly eight bits of resolution on the
     quietest arrival the cap permits. Against a worst case of every ray depositing at full strength
@@ -122,6 +124,7 @@ struct AcousticPushConstants
     uint instance_count;
     uint material_count;
     float range_metres;
+    float reflection_attenuation;
 };
 
 [[vk::push_constant]]
@@ -210,6 +213,9 @@ void acousticMain(uint3 group_id: SV_GroupID, uint3 local_id: SV_GroupThreadID)
         float3 direction = fibonacciDirection(direction_index, push.direction_count);
         float path = 0.0;
 
+        // `a` to the power of the order, one multiply per reflection, exactly as the host builds it.
+        float returned = 1.0;
+
         for (uint order = 0; order <= push.max_order; ++order)
         {
             // The remaining budget is the ray's own limit, so no ray outruns the cap even within a
@@ -233,8 +239,9 @@ void acousticMain(uint3 group_id: SV_GroupID, uint3 local_id: SV_GroupThreadID)
             // A material index past the end of the table would be an out-of-bounds read. An
             // undescribed surface is silent and still reflects, matching the host exactly.
             const float source_strength = (triangle.material < push.material_count) ? source_strengths[triangle.material] : 0.0;
+            const float scale = source_strength * returned;
 
-            if (source_strength > 0.0)
+            if (scale > 0.0)
             {
                 /*
                     Spreading is explicit and measured from a one-metre reference — the Grid's own
@@ -253,7 +260,7 @@ void acousticMain(uint3 group_id: SV_GroupID, uint3 local_id: SV_GroupThreadID)
                         const float air_db = push.air_absorption_db_per_km[band] * (path / 1000.0);
                         const float air = pow(10.0, -air_db / 10.0);
 
-                        const float energy = source_strength * push.hum_spectrum[band] * spreading * air;
+                        const float energy = scale * push.hum_spectrum[band] * spreading * air;
                         /*
                             Rounded, not truncated. Truncation loses on average half a quantum per
                             deposit, and a solve makes tens of thousands of them, so the loss is a
@@ -267,11 +274,13 @@ void acousticMain(uint3 group_id: SV_GroupID, uint3 local_id: SV_GroupThreadID)
                 }
             }
 
-            /*
-                Reflect losslessly. Nothing is subtracted here and nothing needs to be — what bounds
-                the response is the range cap above, this loop's order cap, and the spreading and air
-                terms applied at the deposit.
-            */
+            // Reflect, returning the world's fraction of the energy; a ray with nothing left stops.
+            returned *= push.reflection_attenuation;
+            if (returned <= 0.0)
+            {
+                break;
+            }
+
             // Out to world space first: the edges are in the instance's own frame, and the ray this
             // reflects is a world-space ray. Exact for a rigid placement, which is what a body is,
             // and wrong for a non-uniformly scaled one — the same caveat grid_optics.slang carries, for

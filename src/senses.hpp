@@ -61,9 +61,10 @@ public:
 
         \param rays Origin, direction interleaved: ray i is elements 2i and 2i + 1, w ignored.
         \param max_bounces Total ray segments per sample, at least 1.
+        \param reflection_attenuation Fraction each specular bounce returns, in [0, 1].
         \return One radiance triple per ray, in ray order.
     */
-    [[nodiscard]] virtual std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t max_bounces) = 0;
+    [[nodiscard]] virtual std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t max_bounces, float reflection_attenuation) = 0;
 
 protected:
     RadianceSolver() = default;
@@ -112,9 +113,12 @@ public:
                move and never occlude, such as a test with no bodies. When present, `scene` must
                be the stage's own scene, because the instances this source skips are indices into
                it. Borrowed; must outlive this source.
+        \param reflection_attenuation The world's fraction returned per specular bounce, light and
+               sound alike, as WELCOME tells it. Fixed for this source's lifetime, like the Grid,
+               which is what keeps the caches below exact.
     */
     GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, Acoustics::Reflectors reflectors = {}, RadianceSolver* radiance_solver = nullptr,
-        Stage* stage = nullptr);
+        Stage* stage = nullptr, float reflection_attenuation = DEFAULT_REFLECTION_ATTENUATION);
 
     /*!
         Collects the tick's calls and scratches: who is sounding, from where, and how loudly.
@@ -254,6 +258,7 @@ private:
     Acoustics::Reflectors m_reflectors; //!< Mirror planes for a call's early reflections.
     RadianceSolver* m_radiance_solver{nullptr}; //!< Answers eye and irradiance rays. Non-owning; may be null.
     Stage* m_stage{nullptr}; //!< The bodies' standing in the scene. Non-owning; may be null.
+    float m_reflection_attenuation{DEFAULT_REFLECTION_ATTENUATION}; //!< The world's, for ears and eyes alike.
 
     /*!
         True while any body has moved since the last tick, which stales every traced-sense cache.

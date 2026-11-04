@@ -122,6 +122,9 @@ float maxComponent(float3 value)
 
     Every surface in the Grid is perfectly smooth, so an intersection produces at most two
     outgoing rays with no sampling whatsoever: one reflected, one refracted, weighted by Fresnel.
+    The reflected one is further weighted by the world's reflection attenuation, so a mirror
+    returns that fraction of what Fresnel sends it and a wall reads dimmer than the world it
+    shows.
     That is Whitted's 1980 algorithm, and it is deterministic — the same ray traced twice gives
     bit-identical results, which is why this renderer has no denoiser and needs none.
 
@@ -129,9 +132,12 @@ float maxComponent(float3 value)
     the reflected branch is followed immediately and the refracted one is set aside for later.
 
     \param max_bounces Total ray segments per primary ray; values below one are treated as one.
+    \param reflection_attenuation Fraction of the reflected share each specular bounce returns, in
+           [0, 1]: the world's, from WELCOME, or `DEFAULT_REFLECTION_ATTENUATION` offline. Emission
+           and the transmitted share are untouched by it.
 */
 public float3 radiance(StructuredBuffer<Instance> instances, uint instance_count, StructuredBuffer<Node> nodes, StructuredBuffer<Triangle> triangles,
-    StructuredBuffer<Material> materials, uint max_bounces, float3 primary_origin, float3 primary_direction)
+    StructuredBuffer<Material> materials, uint max_bounces, float reflection_attenuation, float3 primary_origin, float3 primary_direction)
 {
     float3 accumulated = float3(0.0, 0.0, 0.0);
 
@@ -244,7 +250,10 @@ public float3 radiance(StructuredBuffer<Instance> instances, uint instance_count
         // No separate total-internal-reflection case: reflectance is already 1 there, which leaves
         // nothing to transmit and sends the whole throughput down the reflected branch.
         const float transmitted_weight = material.transmission * (1.0 - reflectance);
-        const float reflected_weight = reflectance;
+
+        // The world's reflection attenuation acts on the reflected share alone, and the same number
+        // acts on every reflection order of sound in acoustics.slang.
+        const float reflected_weight = reflectance * reflection_attenuation;
 
         if (transmitted_weight > 0.0)
         {

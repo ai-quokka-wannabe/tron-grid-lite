@@ -221,7 +221,8 @@ namespace Acoustics
         void deliverImage(ImpulseResponse& response, const BvhLib::Scene& scene, const MathLib::Vec3& source, float strength, const MathLib::Vec3& ear,
             const CallConfig& config, const MathLib::Vec3& plane_normal, const MirrorPath& mirror, float radial_velocity)
         {
-            if ((!mirror.valid) || (mirror.path > config.range_metres)) {
+            // A world whose surfaces return nothing has no images to validate.
+            if ((!mirror.valid) || (mirror.path > config.range_metres) || (config.reflection_attenuation <= 0.0f)) {
                 return;
             }
 
@@ -235,7 +236,8 @@ namespace Acoustics
                 return;
             }
 
-            depositCallArrival(response, mirror.path, strength, config, radial_velocity);
+            // One reflection, so the world's attenuation once: the image carries `a` of the energy.
+            depositCallArrival(response, mirror.path, strength * config.reflection_attenuation, config, radial_velocity);
         }
 
     } // namespace
@@ -317,6 +319,14 @@ namespace Acoustics
             // termination rule.
             float path{0.0f};
 
+            /*
+                What the ray's reflections so far have let through: `a` to the power of the order,
+                built by one multiply per reflection exactly as `acoustics.slang` builds it. It
+                starts at one, and a multiply by one is exact, so `a = 1` reproduces the lossless
+                gather bit for bit.
+            */
+            float returned{1.0f};
+
             for (uint32_t order{0u}; order <= config.max_order; ++order) {
                 // The remaining path budget is the ray's own limit, so a ray never travels further
                 // than the cap even in one segment.
@@ -342,17 +352,22 @@ namespace Acoustics
                 */
                 const float source_strength{(triangle.material < source_strengths.size()) ? source_strengths[triangle.material] : 0.0f};
 
-                if (source_strength > 0.0f) {
-                    depositArrival(response, path, source_strength, config.hum_spectrum, config.air_absorption_db_per_km);
+                const float scale{source_strength * returned};
+                if (scale > 0.0f) {
+                    depositArrival(response, path, scale, config.hum_spectrum, config.air_absorption_db_per_km);
                 }
 
                 /*
-                    Reflect losslessly. Nothing is subtracted here and nothing needs to be: every
-                    surface on the Grid is a perfect acoustic mirror, and what bounds the response
-                    is the range cap above, the order cap on this loop, and the spreading and air
-                    terms applied at the deposit. See the note in the header for why that is safe on
-                    an open plane and where it would stop being safe.
+                    Reflect, returning the world's fraction of the energy. What bounds the response
+                    besides is the range cap above, the order cap on this loop, and the spreading
+                    and air terms applied at the deposit. A ray with nothing left to carry collects
+                    nothing further, so it stops here rather than walking on for zeros.
                 */
+                returned *= config.reflection_attenuation;
+                if (returned <= 0.0f) {
+                    break;
+                }
+
                 // `acoustics.slang` derives the same normal from the same three rows, and
                 // `struckFaceNormal` is the line it is held to.
                 const MathLib::Vec3 face_normal{struckFaceNormal(scene, hit)};

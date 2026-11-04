@@ -16,7 +16,8 @@
 // Purpose:
 //     The renderer. Traces the Grid by walking a hand-built bounding volume hierarchy in an
 //     ordinary compute shader, with no ray-tracing hardware of any kind. Every surface is
-//     perfectly smooth, so each intersection spawns at most one reflected and one refracted ray:
+//     perfectly smooth, so each intersection spawns at most one reflected and one refracted ray
+//     (the reflected one carrying the world's reflection attenuation):
 //     the ray tree is deterministic and shallow, there is no Monte Carlo integration, no variance and therefore
 //     no denoiser anywhere in this project.
 //
@@ -30,7 +31,7 @@
 //     binding 3 : StructuredBuffer<Material> materials   — 32 bytes each, indexed per triangle.
 //     binding 4 : StructuredBuffer<Instance> instances   — 144 bytes each, the top level.
 //
-// Push constants (80 bytes):
+// Push constants (84 bytes):
 //     offset  0, size 16 : camera_position   — xyz world space, w unused.
 //     offset 16, size 16 : top_left          — xyz direction through the centre of pixel (0, 0).
 //     offset 32, size 16 : pixel_delta_u     — xyz direction change per pixel step in x.
@@ -38,6 +39,7 @@
 //     offset 64, size  8 : resolution        — output image size in pixels.
 //     offset 72, size  4 : max_bounces       — total ray segments per pixel, at least 1.
 //     offset 76, size  4 : instance_count    — placements in the top level; zero means every ray misses.
+//     offset 80, size  4 : reflection_attenuation — fraction each specular bounce returns, in [0, 1].
 //
 //     The tracer writes linear radiance and nothing else: exposure, tone mapping and sRGB encoding
 //     all belong to postprocess.slang, which sees the bloom chain as well.
@@ -60,6 +62,7 @@ struct TracePushConstants
     uint2 resolution;
     uint max_bounces;
     uint instance_count;
+    float reflection_attenuation;
 };
 
 [[vk::push_constant]]
@@ -94,7 +97,7 @@ void traceMain(uint3 thread_id: SV_DispatchThreadID)
 
     const float3 direction = normalize(push.top_left.xyz + (push.pixel_delta_u.xyz * float(pixel.x)) + (push.pixel_delta_v.xyz * float(pixel.y)));
 
-    const float3 colour = radiance(instances, push.instance_count, nodes, triangles, materials, push.max_bounces, push.camera_position.xyz, direction);
+    const float3 colour = radiance(instances, push.instance_count, nodes, triangles, materials, push.max_bounces, push.reflection_attenuation, push.camera_position.xyz, direction);
 
     // Linear radiance, unencoded. postprocess.slang applies exposure, the ACES curve and sRGB.
     output_image[int2(pixel)] = float4(colour, 1.0);
