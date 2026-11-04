@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Ruled: the organs bump.** The owner accepted every recommendation of `docs/ORGANS.md` on 2026-11-04, amending
+  one: the world's floor under a declared organ's noise is the finest figure measured in any animal for that kind
+  itself (0.01 K for heat), not a tenth of it, since the tenth was an invented factor. Documentation only; the bump
+  itself (protocol v15, client ABI 13, Program ABI 13) is next.
+
 - **Proposed: the organs bump.** `docs/ORGANS.md`, awaiting the owner's ruling: one bump (protocol v15, client ABI 13,
   Program ABI 13) in which a body declares its sense organs at `REZ` - noses, taste organs, thermoreceptors and gas
   sensors, each at a place on a segment, with receptor rows of tuning and affinities, chemoreceptor noise from physics

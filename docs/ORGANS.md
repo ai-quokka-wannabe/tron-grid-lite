@@ -1,6 +1,7 @@
 # Organs
 
-> **Proposal, awaiting the owner's ruling.** Nothing here is built. It drafts the next cross-repo step the rulings of
+> **Ruled by the owner on 2026-11-04**: every recommendation in [§ 8](#8-questions-as-ruled) is accepted, question 4
+> amended so that no organ is finer than any measured animal's. Nothing here is built yet. It sets out the next cross-repo step the rulings of
 > 2026-11-04 call for: one bump of the wire and of the Program ABI, in which a body declares its sense organs at `REZ`
 > and the world samples its fields at those organs. Every number below is either cited, a chosen world setting said to
 > be one, or marked *assumed*.
@@ -162,7 +163,7 @@ judges the Program's arrays first, in the copy that already validates the model,
       `size` positive and no larger than the bounding box's diagonal; `noise == 0` and `noise_basis == PHYSICS`; `gas == 0`;
       `site == OUTSIDE`. Taste: `reach` positive and no larger than the diagonal; a nose's `reach` is zero.
     - *Thermoreceptor and gas sensor*: no receptor rows; `size == 0`, `reach == 0`; `noise` positive (no organ is
-      perfect) and at least the kind's world floor ([open question 4](#8-open-questions)); `noise_basis` `MEASURED` or
+      perfect) and at least the kind's world floor ([question 4](#8-questions-as-ruled)); `noise_basis` `MEASURED` or
       `ASSUMED`. Gas: `gas` in 1 to 2, `site == OUTSIDE`. Thermoreceptor: `gas == 0`.
     - *Inside*: only a thermoreceptor, only on segment 0, at position zero, and at most one per body - the body has one
       temperature.
@@ -264,7 +265,7 @@ typedef struct TglSenses {                /* 152 bytes, no padding */
 `odour[TGL_AMPHIDS][TGL_ODOUR_RECEPTORS]`, `TGL_AMPHIDS` and `TGL_ODOUR_RECEPTORS` are removed: a Program that smells
 declares its noses and knows where in its readings each one's types fall, because it wrote the declaration. The Program
 declares through `TglRenderModel`, which already carries the body's non-render facts (`segment_count`,
-`segment_spacing`), so it becomes the body a Program brings ([open question 2](#8-open-questions)):
+`segment_spacing`), so it becomes the body a Program brings ([question 2](#8-questions-as-ruled)):
 
 ```c
 typedef struct TglRenderModel {           /* 72 bytes */
@@ -333,7 +334,7 @@ A taste organ reads **only what it touches** ([CHEMORECEPTION.md § Taste](CHEMO
 
 Counting noise as for a nose, with each compound's own diffusivity in water (`solutes::DIFFUSIVITY`). The floor's field
 is a surface concentration, so a count needs a volume: the film of water an organ samples, a depth that is **assumed**
-until read from a source, a named parameter beside its status ([open question 12](#8-open-questions)). The reference
+until read from a source, a named parameter beside its status ([question 12](#8-questions-as-ruled)). The reference
 concentration the affinities are relative to is the world's solute unit per square metre.
 
 ### Thermoreceptors
@@ -354,7 +355,7 @@ does not move again when step 3 lands:
   zero-metabolism stand-in.
 - **At step 3**, the same reading becomes the body's stepped temperature. No byte of the wire changes; the golden is
   re-recorded, as every change of the world's arithmetic is.
-- The thermal make-up itself - metabolic heat, heat capacity - is **not** in this bump ([open question 11](#8-open-questions)).
+- The thermal make-up itself - metabolic heat, heat capacity - is **not** in this bump ([question 11](#8-questions-as-ruled)).
 
 ### Gas sensors
 
@@ -362,7 +363,7 @@ The declared gas's fraction of the air at the organ, plus the declared noise, cl
 dioxide are not yet tenants of the air, so the bump stages them as it stages the body's heat: **from v15 a gas sensor
 reads the open air's value** - 0.21 oxygen, 0.0004 carbon dioxide, the values CHEMORECEPTION.md gives the grid's top -
 which is the exact field of a world in which nothing breathes yet. When the tenants land, the same organ reads the solved
-field; the wire does not move ([open question 6](#8-open-questions)).
+field; the wire does not move ([question 6](#8-questions-as-ruled)).
 
 ### Kinds reserved for later
 
@@ -405,7 +406,7 @@ The assumed numbers, each with its line of reasoning and its bounds (conditions 
 
 Two choices to note. The amphids stay lumped - one organ per side with all eight types, as today - so the bump changes
 the plumbing and not the sense, and the migration test can hold the readings to v14's. Splitting AWA from AWC is then a
-change to rc-worm's declaration alone ([open question 7](#8-open-questions)). And the worm tastes salt only: ASH's bitter
+change to rc-worm's declaration alone ([question 7](#8-questions-as-ruled)). And the worm tastes salt only: ASH's bitter
 and the other amphid tasters are left for rc-worm to add, with sources, without touching the wire.
 
 ## 5. The pillars on the wire
@@ -513,7 +514,9 @@ If either changes what it sends after the recording, the golden is re-recorded i
 hand-merged. The bodies' hash does not cover senses, so the readings themselves never move the golden; the `REZ` bytes
 and the log's version do.
 
-## 8. Open questions
+## 8. Questions, as ruled
+
+The owner ruled on 2026-11-04: every recommendation below is accepted, with question 4 amended.
 
 1. **Who declares the organs: the Program or the Grid?** Eyes and ears are the Grid's descriptor ("the Grid decides the
    senses, the Program brings the body"), while the rulings of 2026-11-04 give each Program its nose. *Recommended*: the
@@ -524,6 +527,11 @@ and the log's version do.
 4. **A world floor under declared noise?** A thermoreceptor declared at 1e-9 K leaks nothing but is a superhuman organ.
    *Recommended*: yes - per kind, labelled assumed, a tenth of the finest figure the documents cite for any animal
    (0.001 K for heat, from AFD's 0.01 °C); for gases, a tenth of the worm's assumed figures until a measured one exists.
+   **Ruled, amended**: yes, per kind, but the floor is the finest figure measured in any animal *itself*, with no
+   factor below it - a tenth would be an invented number. For heat that is 0.01 K, AFD's 0.01 °C; for the gases, until
+   a measured figure exists, the worm's assumed figures themselves, labelled as assumed under the
+   [five conditions](PERCEPTION.md#labelled-assumptions-where-biology-has-no-paper-ruled-2026-11-04). A floor moves
+   only when a finer measurement in some animal is cited.
 5. **The body's own temperature: an organ, or a field every body gets?** *Recommended*: an organ (inside
    thermoreceptor), so its noise is declared like every other's and a body without one simply does not feel it.
 6. **Gas sensors before the gases are in the air?** Accept them and read the open air, or refuse them until the
