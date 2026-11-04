@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Ruled: taste, and oxygen and carbon dioxide, for any animal.** `docs/CHEMORECEPTION.md` gains the owner's two
+  rulings of 2026-11-04 and says once for all its senses that they are for any animal: the world computes fields that
+  know nothing of who senses them, each body declares its organs, and the worm is the first example, never the
+  template. Taste: food has a taste profile of water-soluble compounds apart from its odour; the floor's solutes are a
+  slower field in the floor, not the air; taste organs - a worm's ASE, a mammal's tongue, an insect's feet - taste only
+  what they touch. Gases: oxygen and carbon dioxide join the air grid; every orb and every body breathes, bodies from
+  the same declared metabolism that makes their heat; gas senses are declared with the body, and preferences such as
+  the worm's 5-12% oxygen are each Program's to learn. Documentation only.
+
 - **Ruled: heat, as the owner asked on 2026-11-04.** A new design, `docs/THERMORECEPTION.md`, in the split smell
   follows: Master Control owns the temperature field, in the same air grid as the odour, with the floor's thermal map
   (a thermotaxis assay's 0.5 °C/cm by default), the energy pillars as heat sources, and every body a source at its own
