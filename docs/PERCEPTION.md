@@ -396,6 +396,42 @@ simplification of one. The nearest robotic analogue is not a bare potentiometer 
 actuator with a load cell and a separate tachometer, which is roughly where roboticists arrive once
 encoder-difference noise starts eating the derivative term.
 
+### Imperfection at the body's own senses (ruled 2026-11-04)
+
+The body's senses of itself are, today, exact: `specific_force`, `angular_velocity`, `joint_angles`, `joint_torques`
+and the contacts arrive with no noise at all, which no inner ear, stretch receptor or skin has. That is not a
+privileged read - each is a quantity a real body feels - but it is a realism gap, and design rule 6 below says
+noise is the creature's problem to cope with, not the world's to spare it. The owner's ruling closes it:
+
+- **Every body sense carries noise**, drawn from the RNG of record per tick, per body and per channel, exactly as
+  smell's counting noise is, so a life still replays bit for bit and Clu re-simulates it. The noise is added where the
+  sense is composed: by Master Control, in the body's letter.
+- **The rotation sense moves into the letter.** `angular_velocity` is the one body sense the Grid still derives
+  itself, from the world's yaw rate in `TICK_STATE`, against the rule that the host copies and derives nothing. It
+  joins the specific force in the letter, composed and noised by the world like the rest.
+- **Noise belongs to the organ, not the world.** A mammal's otoliths and semicircular canals, an insect's halteres
+  and the worm's body-wall mechanoreceptors are different instruments with different precision, so each body declares
+  its organs' precision with the organs themselves - in the same declaration the noses and thermoreceptors are ruled
+  into ([CHEMORECEPTION.md](CHEMORECEPTION.md#the-air-the-noses-and-the-smoke-ruled-2026-11-04),
+  [THERMORECEPTION.md](THERMORECEPTION.md)), one bump of the wire and the Program ABI for all of them.
+- **No invented numbers.** A precision enters only with its source:
+    - The **worm does sense gravity**, though it has no inner ear: it shows pronounced negative gravitaxis, needing
+      its PVD mechanosensory neurons, the TRPA-1 channel and the MEC-7 and MEC-12 microtubules but not the touch
+      channels (Ackley et al., [bioRxiv 2022](https://www.biorxiv.org/content/10.1101/2022.03.03.482913v2), a
+      preprint). So `specific_force` is honest for the worm, as its gravity sense - but its precision is not measured.
+    - The **worm's proprioception** is real and named: DVA is a stretch receptor through TRP-4
+      ([Li et al. 2006](https://www.nature.com/articles/nature04538.pdf)) that reads curvature through compression of
+      its spectrin skeleton ([Das et al.](https://rcastoragev2.blob.core.windows.net/e35a346c7bbd625409326d1b5c79730b/sciadv.abg4617.PMC8448456.pdf)),
+      and SMDD steers the head through TRP-1 and TRP-2 ([review](https://pmc.ncbi.nlm.nih.gov/articles/PMC8411041)) -
+      but how finely any of them resolves a bend is not measured either.
+    - **Mammalian vestibular thresholds are measured**, and the systematic review to read them from is Fitze, Mast
+      and Ertl 2024, *Gait & Posture* ([full text](https://boris.unibe.ch/186847/1/1-s2.0-S0966636223014339-main.pdf)),
+      whose values are not yet read into this document.
+
+  Until a figure has a source, the noise for that organ is not built, and this document says so rather than guessing.
+  Bounding the worm's figures from its behaviour - how weak its gravitaxis is, how tightly it holds a bend - is open
+  research, the kind iso-lab's night shift takes on.
+
 ## Design rules
 
 These follow from everything above. They are binding on the renderer.

@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Ruled: imperfection at the body's own senses.** `docs/PERCEPTION.md` gains the owner's ruling of 2026-11-04:
+  every body sense (specific force, angular velocity, joint angles and loads, contacts) carries deterministic noise
+  from the RNG of record, composed by Master Control in the letter; `angular_velocity` moves into the letter, since
+  the host still derives it; and noise belongs to each declared organ, in the same bump as the noses and
+  thermoreceptors. No number is invented: the worm's gravity sense (PVD, TRPA-1) and proprioception (DVA, SMDD) are
+  real but unmeasured in precision, and mammals' thresholds await their review's numbers. Documentation only.
+
 - **Ruled: taste, and oxygen and carbon dioxide, for any animal.** `docs/CHEMORECEPTION.md` gains the owner's two
   rulings of 2026-11-04 and says once for all its senses that they are for any animal: the world computes fields that
   know nothing of who senses them, each body declares its organs, and the worm is the first example, never the
