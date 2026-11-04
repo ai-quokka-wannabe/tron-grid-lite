@@ -23,6 +23,12 @@ Grid ([PERCEPTION.md § The senses that are not eyes](PERCEPTION.md#the-senses-t
 pit organ reads infrared. That sense stays as it is; this document adds the other one, the temperature of the
 surroundings, which a worm feels through its body and its sensory endings rather than through light.
 
+**For any animal.** The temperature field knows nothing of who feels it, and every body declares its own thermal
+make-up and thermoreceptors with the body it rezzes. Animals feel warmth with very different organs - a mammal's
+warm and cold receptors spread through its skin, a mosquito's heat sensors on its antennae that find a warm host,
+a snake's pit organs for radiant heat (the Grid's `irradiance`), the worm's AFD pair - and each is one declaration of
+the same sense. The worm is the first body and the worked example below, never the template.
+
 ## The rule this document keeps
 
 [PERCEPTION.md § Design rules](PERCEPTION.md#design-rules), and the owner's ruling that preventing cheating is
