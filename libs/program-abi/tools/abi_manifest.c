@@ -142,17 +142,13 @@
     X(TglSenses, ear_count) \
     X(TglSenses, contact_count) \
     X(TglSenses, dt_seconds) \
-    X(TglSenses, body_forward_speed) \
-    X(TglSenses, body_vertical_speed) \
-    X(TglSenses, body_turn_rate) \
     X(TglSenses, joint_angles) \
     X(TglSenses, joint_torques) \
     X(TglSenses, specific_force) \
     X(TglSenses, angular_velocity) \
     X(TglSenses, irradiance) \
     X(TglSenses, intake) \
-    X(TglSenses, odour) \
-    X(TglSenses, padding0)
+    X(TglSenses, odour)
 
 #define TGL_ACTIONS_MEMBERS(X) \
     X(TglActions, desired_forward_speed) \

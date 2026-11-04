@@ -349,8 +349,8 @@ the world, which is how an animal learns it too.
 `joint_angles` carries the angle every servo actually holds, in the sign `joint_targets` asks in:
 what the joint did rather than what it was asked. The two disagree whenever a servo is still
 swinging to its target, stalls short of it past its torque, or is bent by the world - a wall, a
-neighbour, the floor's grip on a runner - and that disagreement is the only readback a gait has,
-the same way `body_forward_speed` disagrees with `desired_forward_speed`. The world that holds
+neighbour, the floor's grip on a runner - and that disagreement is the only readback a gait has.
+The world that holds
 the servos reports it, in the same letter as the force and the contacts; the Grid copies and
 derives nothing, so that a servo's load, which no pose can yield, joins it on the same channel -
 and since ABI v10 it does: `joint_torques` is the torque each servo holds its angle with at the
@@ -369,7 +369,7 @@ joints, and the Grid copies them as it copies the joints.
 | Sense | Field | What it physically is | Status |
 |-------|-------|----------------------|--------|
 | Vision | `eyes` | Rays traced from each eye through the shared BVH | Phase 6 |
-| Proprioception | `body_forward_speed`, `body_vertical_speed`, `body_turn_rate`, `joint_angles`, `joint_torques` | The body's own actuator state; since ABI v9 every servo's own reading, since v10 its load | Phase 6 |
+| Proprioception | `joint_angles`, `joint_torques` | Every servo's own reading since ABI v9, its load since v10. The body's speeds over the ground (`body_forward_speed`, `body_vertical_speed`, `body_turn_rate`) were removed at ABI 12: no animal feels its speed across the world, and they were filled from the world's own velocity (#189) | Phase 6 |
 | Vestibular | `specific_force`, `angular_velocity` | Derivatives the motion integrator already has | Phase 6 |
 | Touch | `contacts`, `contact_count` | Where the body was struck this tick, and how hard | Phase 6 |
 | Thermoreception | `irradiance` | A fixed quadrature over the whole sphere, undirected | Phase 6 |
@@ -612,7 +612,7 @@ behind the fields:
 **There is deliberately no vertical intent.** Height is physics' business — gravity, the floor and
 whatever the body ran off — and on a Grid with no water and nothing climbable a vertical actuator
 clamped to zero for every plausible body was a field the Grid read and nothing could act on.
-`TglSenses::body_vertical_speed` still reports what gravity is doing.
+What gravity is doing, a body feels as an animal does: in `specific_force`, its inner ear.
 
 **A call is a call, not a channel.** The Grid emits it as a single burst from the creature's own
 position and it is over. There is no field for its duration, spectrum or waveform, because there
@@ -631,10 +631,12 @@ once more in the lifecycle; the numbers it clamps against are the body's, handed
 `TglCreatureDesc` at rez.
 
 **The acceptance test for the whole physics subsystem is written into the senses rather than into a
-benchmark: `body_forward_speed` must disagree with `desired_forward_speed` whenever the body is
-pushed rather than driven.** If a creature dragged against a pillar reads its own command back, both
-proprioceptive channels are carrying zero bits of information, and no amount of stacking or
-throughput proves otherwise. Everything else about the physics — how many contacts, how many
+benchmark: a body pushed rather than driven must feel the push** - in its inner ear
+(`specific_force`), in its contacts and in its joints, whose angles part from the targets it sent and
+whose loads rise. If a creature dragged against a pillar reads only its own commands back, its senses
+are carrying zero bits of information about the world, and no amount of stacking or throughput
+proves otherwise. (Until ABI 12 this test was written against the body's reported speed, which was
+the world's own velocity - a privileged read, removed in #189.) Everything else about the physics — how many contacts, how many
 substeps, how fast — is negotiable; this is not.
 
 There are no fields for "interact with object X", "pick up" or "attack", and adding them would defeat
@@ -1084,7 +1086,7 @@ in this repository regenerates it and fails if it no longer describes the header
 stale silently.
 
 ```text
-struct TglSenses 216 8
+struct TglSenses 200 8
 member TglSenses tick 0 8
 member TglSenses eyes 8 8
 ...
