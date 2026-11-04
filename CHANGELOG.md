@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Proposed: the organs bump.** `docs/ORGANS.md`, awaiting the owner's ruling: one bump (protocol v15, client ABI 13,
+  Program ABI 13) in which a body declares its sense organs at `REZ` - noses, taste organs, thermoreceptors and gas
+  sensors, each at a place on a segment, with receptor rows of tuning and affinities, chemoreceptor noise from physics
+  and other noise declared with its basis - and Master Control samples the air, the floor and the orbs at them. The
+  readings come back as a variable block after the contacts, `TglSenses::odour` gives way to `organ_readings`, the
+  body's own temperature and the gases are staged until their fields exist, the pillars ride in `WELCOME`
+  (master-control#91), and the worm's thirteen organs are the worked example, every assumed number marked. With the
+  no-cheating audit, the PR order, the golden and thirteen open questions. Documentation only.
+
 - **Ruled: labelled assumptions, where biology has no paper.** `docs/PERCEPTION.md` gains the owner's ruling of
   2026-11-04: an unmeasured quantity may be modelled only if it is labelled as assumed, bounded by what is measured,
   borrowed from the nearest measured relative where possible, swept rather than tuned, and replaceable. The noise
