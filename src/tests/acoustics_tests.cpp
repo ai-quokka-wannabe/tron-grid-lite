@@ -24,6 +24,8 @@
 #include "../acoustics.hpp"
 #include "../geometry.hpp"
 #include <testing/testing.hpp>
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -75,14 +77,17 @@ namespace
     //! The ear sits midway between the two plates, so both are exactly five metres away.
     constexpr MathLib::Vec3 EAR{0.0f, 5.0f, 0.0f};
 
-    //! A flat unit spectrum and no air absorption, so that only geometry is under test.
+    //! A flat unit spectrum, no air absorption and surfaces that return everything, so that only
+    //! geometry is under test. The reflection attenuation has tests of its own, at the end.
     [[nodiscard]] Acoustics::GatherConfig plainConfig()
     {
         return Acoustics::GatherConfig{.hum_spectrum = {{1.0f, 1.0f, 1.0f, 1.0f}},
             .air_absorption_db_per_km = {{0.0f, 0.0f, 0.0f, 0.0f}},
             .direction_count = 2048u,
             .max_order = Acoustics::MAX_ORDER,
-            .range_metres = 60.0f};
+            .range_metres = 60.0f,
+            .reflection_attenuation = 1.0f,
+            .skip_instance = {}};
     }
 
     //! Returns the bin a path of the given length lands in.
@@ -207,16 +212,15 @@ TEST_CASE(arrivals_land_in_the_bins_arithmetic_predicts)
     }
 }
 
-TEST_CASE(reflections_are_lossless_so_more_orders_only_ever_add)
+TEST_CASE(more_orders_only_ever_add)
 {
     const BvhLib::Bvh bvh{parallelPlateScene()};
     const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
 
     /*
-        Every surface on the Grid is a perfect acoustic mirror, and this is what that means
-        observably. Raising the reflection order cap can only add arrivals — it cannot change or
-        diminish the ones already found, because nothing is subtracted on contact. If a later order
-        ever moved an earlier bin, energy would be leaking backwards through the model.
+        Raising the reflection order cap can only add arrivals — it cannot change or diminish the
+        ones already found, because a reflection scales only what the ray collects after it. If a
+        later order ever moved an earlier bin, energy would be leaking backwards through the model.
     */
     Acoustics::GatherConfig direct_only{plainConfig()};
     direct_only.max_order = 0u;
@@ -433,10 +437,13 @@ namespace
     //! Energy of the unit-strength direct arrival: spreading alone, over 3.6 metres.
     constexpr float DIRECT_ENERGY{1.0f / (3.6f * 3.6f)};
 
-    //! A flat unit spectrum and transparent air, so only geometry is under test.
+    //! A flat unit spectrum, transparent air and surfaces that return everything, so only geometry
+    //! is under test.
     [[nodiscard]] Acoustics::CallConfig plainCallConfig()
     {
-        return Acoustics::CallConfig{};
+        Acoustics::CallConfig config{};
+        config.reflection_attenuation = 1.0f;
+        return config;
     }
 
 } // namespace
@@ -861,6 +868,235 @@ TEST_CASE(outward_box_faces_face_outward_and_omit_the_bottom)
     }
 
     TEST_CHECK(tops == 1u); // Exactly one top, no bottom.
+}
+
+namespace
+{
+
+    /*!
+        A sounding floor at y = 0 under a silent ceiling at y = 2, both wide, for the ear at y = 1.
+
+        Every order lands inside the histogram here, which the parallel plates above do not allow:
+        an order-`k` path is `(1 + 2k) / cos(theta)` metres, so even the fourth order of a ray
+        within 66 degrees of the vertical arrives before the last bin. Rays leaving downwards
+        collect on the even orders and rays leaving upwards on the odd ones.
+    */
+    [[nodiscard]] BvhLib::Bvh narrowPlateScene()
+    {
+        std::vector<BvhLib::Triangle> triangles;
+        appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_NEON_PRIMARY); // Sings.
+        appendHorizontalQuad(triangles, 2.0f, 200.0f, MATERIAL_PILLAR); // Silent, and reflects.
+        return BvhLib::build(std::move(triangles));
+    }
+
+    //! The ear midway between the narrow plates.
+    constexpr MathLib::Vec3 NARROW_EAR{0.0f, 1.0f, 0.0f};
+
+    /*!
+        A lossless gather written out independently of `Acoustics::gather`: the walk with no
+        reflection attenuation in it at all, deposit by deposit in the same arithmetic.
+
+        It exists to hold the claim that `a = 1` changes nothing to the last bit. Comparing the
+        gather against itself at two attenuations could not show that, because both sides would
+        carry the same multiply.
+    */
+    [[nodiscard]] Acoustics::ImpulseResponse losslessReference(const BvhLib::Bvh& bvh, const std::vector<float>& strengths, const MathLib::Vec3& ear,
+        const Acoustics::GatherConfig& config)
+    {
+        BvhLib::Scene scene{};
+        scene.geometries.push_back(bvh);
+        scene.instances.push_back(BvhLib::makeInstance(bvh, 0u, MathLib::Mat4::identity()));
+
+        Acoustics::ImpulseResponse response{};
+        for (uint32_t index{0u}; index < config.direction_count; ++index) {
+            MathLib::Vec3 origin{ear};
+            MathLib::Vec3 direction{Acoustics::fibonacciDirection(index, config.direction_count)};
+            float path{0.0f};
+            for (uint32_t order{0u}; order <= config.max_order; ++order) {
+                const float remaining{config.range_metres - path};
+                if (remaining <= 0.0f) {
+                    break;
+                }
+                const BvhLib::Hit hit{BvhLib::intersectScene(scene, origin, direction, remaining, BvhLib::InstanceRange{}, BvhLib::InstanceRange{})};
+                if (!hit.valid) {
+                    break;
+                }
+                path += hit.distance;
+
+                const BvhLib::Triangle& triangle{scene.geometries[0].triangles[hit.triangle]};
+                const float strength{(triangle.material < strengths.size()) ? strengths[triangle.material] : 0.0f};
+                if (strength > 0.0f) {
+                    const float spreading{1.0f / std::max(path * path, 1.0f)};
+                    const uint32_t bin{static_cast<uint32_t>(path / (Acoustics::SPEED_OF_SOUND * Acoustics::BIN_SECONDS))};
+                    if (bin < Acoustics::BIN_COUNT) {
+                        for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+                            const float air_db{config.air_absorption_db_per_km[band] * (path / 1000.0f)};
+                            const float air{std::pow(10.0f, -air_db / 10.0f)};
+                            response.at(band, bin) += strength * config.hum_spectrum[band] * spreading * air;
+                        }
+                    }
+                }
+
+                const MathLib::Vec4 rotated{scene.instances[0].to_world * MathLib::Vec4::fromVec3(triangle.geometricNormal(), 0.0f)};
+                const MathLib::Vec3 face_normal{MathLib::Vec3{rotated.x, rotated.y, rotated.z}.normalised()};
+                const MathLib::Vec3 normal{(direction.dot(face_normal) < 0.0f) ? face_normal : -face_normal};
+                const MathLib::Vec3 hit_position{origin + (direction * hit.distance)};
+                origin = hit_position + (normal * Acoustics::SURFACE_EPSILON);
+                direction = direction - (normal * (2.0f * direction.dot(normal)));
+            }
+        }
+        return response;
+    }
+
+    //! Counts the bins in which two responses differ at all.
+    [[nodiscard]] uint32_t differingBins(const Acoustics::ImpulseResponse& first, const Acoustics::ImpulseResponse& second)
+    {
+        uint32_t differing{0u};
+        for (size_t index{0u}; index < first.bins.size(); ++index) {
+            if (first.bins[index] != second.bins[index]) {
+                ++differing;
+            }
+        }
+        return differing;
+    }
+
+} // namespace
+
+TEST_CASE(full_return_reproduces_the_lossless_gather_bit_for_bit)
+{
+    /*
+        `a = 1` is the lossless Grid, and it must be that exactly rather than approximately: one
+        multiply by one per reflection is exact in IEEE-754, so not a single bin may move. Checked
+        on both plate scenes, with air absorption and an uneven spectrum switched on so that every
+        factor of the deposit is exercised.
+    */
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
+    Acoustics::GatherConfig config{plainConfig()};
+    config.hum_spectrum = {{1.0f, 0.8f, 0.5f, 0.2f}};
+    config.air_absorption_db_per_km = {{5.0f, 9.0f, 22.9f, 76.6f}};
+    config.reflection_attenuation = 1.0f;
+
+    const BvhLib::Bvh parallel{parallelPlateScene()};
+    const Acoustics::ImpulseResponse parallel_reference{losslessReference(parallel, strengths, EAR, config)};
+    TEST_CHECK(energyInBin(parallel_reference, binOf(15.0f)) > 0.0f); // An echo to compare, not only the direct sound.
+    TEST_CHECK_EQUAL(differingBins(Acoustics::gather(parallel, strengths, EAR, config), parallel_reference), 0u);
+
+    const BvhLib::Bvh narrow{narrowPlateScene()};
+    const Acoustics::ImpulseResponse narrow_reference{losslessReference(narrow, strengths, NARROW_EAR, config)};
+    TEST_CHECK(narrow_reference.total() > 0.0f);
+    TEST_CHECK_EQUAL(differingBins(Acoustics::gather(narrow, strengths, NARROW_EAR, config), narrow_reference), 0u);
+}
+
+TEST_CASE(each_reflection_order_is_scaled_by_the_attenuation_to_its_power)
+{
+    /*
+        The gather is linear in what each order collects: with `C_k` the energy order `k` deposits
+        losslessly, a world returning `a` hears `sum a^k C_k`, bin by bin. Each `C_k` is measured
+        here as the difference that raising the order cap from `k - 1` to `k` makes at `a = 1`, and
+        the attenuated gather must match the sum. An attenuation applied once per arrival rather
+        than once per reflection, or not at all past the first, would miss it by `C_2` onwards.
+    */
+    const BvhLib::Bvh bvh{narrowPlateScene()};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
+    constexpr float ATTENUATION{0.7f};
+
+    std::array<Acoustics::ImpulseResponse, Acoustics::MAX_ORDER + 1u> capped{};
+    for (uint32_t order{0u}; order <= Acoustics::MAX_ORDER; ++order) {
+        Acoustics::GatherConfig config{plainConfig()};
+        config.max_order = order;
+        capped[order] = Acoustics::gather(bvh, strengths, NARROW_EAR, config);
+    }
+
+    Acoustics::GatherConfig attenuated_config{plainConfig()};
+    attenuated_config.reflection_attenuation = ATTENUATION;
+    const Acoustics::ImpulseResponse attenuated{Acoustics::gather(bvh, strengths, NARROW_EAR, attenuated_config)};
+
+    // Every order must reach the histogram, or the comparison would hold for orders that never happen.
+    for (uint32_t order{1u}; order <= Acoustics::MAX_ORDER; ++order) {
+        TEST_CHECK(capped[order].total() > capped[order - 1u].total());
+    }
+
+    for (size_t index{0u}; index < attenuated.bins.size(); ++index) {
+        float expected{capped[0].bins[index]};
+        float power{1.0f};
+        for (uint32_t order{1u}; order <= Acoustics::MAX_ORDER; ++order) {
+            power *= ATTENUATION;
+            expected += power * (capped[order].bins[index] - capped[order - 1u].bins[index]);
+        }
+        TEST_CHECK_CLOSE(attenuated.bins[index], expected, (1e-5f * capped[Acoustics::MAX_ORDER].bins[index]) + 1e-12f);
+    }
+
+    // And the total sits strictly between direct-only and lossless.
+    TEST_CHECK(attenuated.total() < capped[Acoustics::MAX_ORDER].total());
+    TEST_CHECK(attenuated.total() > capped[0].total());
+}
+
+TEST_CASE(a_world_that_returns_nothing_hears_the_direct_sound_only)
+{
+    // At `a = 0` every reflection returns nothing, so the gather is the order-zero gather exactly.
+    const BvhLib::Bvh bvh{narrowPlateScene()};
+    const std::vector<float> strengths{Acoustics::makeAcousticSourceStrengths()};
+
+    Acoustics::GatherConfig silent_walls{plainConfig()};
+    silent_walls.reflection_attenuation = 0.0f;
+    Acoustics::GatherConfig direct_only{plainConfig()};
+    direct_only.max_order = 0u;
+
+    const Acoustics::ImpulseResponse direct{Acoustics::gather(bvh, strengths, NARROW_EAR, direct_only)};
+    TEST_CHECK(direct.total() > 0.0f);
+    TEST_CHECK_EQUAL(differingBins(Acoustics::gather(bvh, strengths, NARROW_EAR, silent_walls), direct), 0u);
+
+    // A call likewise keeps its direct path and loses every image, arrivals included.
+    std::vector<BvhLib::Triangle> triangles;
+    appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_FLOOR);
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+    const Acoustics::Reflectors reflectors{.level_heights = {0.0f}, .faces = {}};
+
+    Acoustics::CallConfig no_return{plainCallConfig()};
+    no_return.reflection_attenuation = 0.0f;
+    const Acoustics::ImpulseResponse call{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, no_return)};
+    const Acoustics::ImpulseResponse unreflected{Acoustics::deliverCall(scene, Acoustics::Reflectors{}, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+
+    TEST_CHECK(unreflected.total() > 0.0f);
+    TEST_CHECK_EQUAL(call.arrival_count, 1u);
+    TEST_CHECK_EQUAL(differingBins(call, unreflected), 0u);
+}
+
+TEST_CASE(a_first_order_image_carries_the_attenuation_once)
+{
+    // The analytic echo off one level: the direct arrival is untouched and the image is scaled by
+    // `a` exactly once, in its bins and in its arrival record. A power of two keeps it exact.
+    std::vector<BvhLib::Triangle> triangles;
+    appendHorizontalQuad(triangles, 0.0f, 200.0f, MATERIAL_FLOOR);
+    const BvhLib::Scene scene{sceneAround(std::move(triangles))};
+    const Acoustics::Reflectors reflectors{.level_heights = {0.0f}, .faces = {}};
+
+    Acoustics::CallConfig halved{plainCallConfig()};
+    halved.reflection_attenuation = 0.5f;
+
+    const Acoustics::ImpulseResponse lossless{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, plainCallConfig())};
+    const Acoustics::ImpulseResponse attenuated{Acoustics::deliverCall(scene, reflectors, CALL_SOURCE, 1.0f, CALL_EAR, halved)};
+
+    const uint32_t direct_bin{binOf(3.6f)};
+    const uint32_t echo_bin{binOf(std::sqrt((3.6f * 3.6f) + 4.0f))};
+    TEST_CHECK(lossless.at(0u, echo_bin) > 0.0f);
+    TEST_CHECK_EQUAL(lossless.arrival_count, 2u);
+    TEST_CHECK_EQUAL(attenuated.arrival_count, 2u);
+    for (uint32_t band{0u}; band < Acoustics::BAND_COUNT; ++band) {
+        TEST_CHECK(attenuated.at(band, direct_bin) == lossless.at(band, direct_bin));
+        TEST_CHECK(attenuated.at(band, echo_bin) == (0.5f * lossless.at(band, echo_bin)));
+        TEST_CHECK(attenuated.arrivals[0].energy[band] == lossless.arrivals[0].energy[band]);
+        TEST_CHECK(attenuated.arrivals[1].energy[band] == (0.5f * lossless.arrivals[1].energy[band]));
+    }
+}
+
+TEST_CASE(the_default_attenuation_is_the_worlds_default)
+{
+    // An unconfigured gather or delivery perceives a default world, which is what every offline
+    // mode traces; a config that defaulted to a lossless Grid would make them disagree silently.
+    TEST_CHECK(Acoustics::GatherConfig{}.reflection_attenuation == DEFAULT_REFLECTION_ATTENUATION);
+    TEST_CHECK(Acoustics::CallConfig{}.reflection_attenuation == DEFAULT_REFLECTION_ATTENUATION);
+    TEST_CHECK(DEFAULT_REFLECTION_ATTENUATION == 0.9f);
 }
 
 int main()

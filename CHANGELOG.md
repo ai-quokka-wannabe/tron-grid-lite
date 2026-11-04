@@ -708,6 +708,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Surfaces return the world's reflection attenuation, of light and of sound alike (#177 item 1).** Every specular
+  bounce returns `reflection_attenuation` of what reaches it: the optical walk scales the reflected branch by it
+  (transmission and emission untouched), the gather scales an order-`n` arrival by its `n`th power and a call's
+  first-order image by it once, and `acoustics.slang` does the same so the three `--verify-*` modes still compare like
+  with like. The creature host and the window take the value from `WELCOME`, a `--replay` from the Disk's; every
+  offline mode uses `DEFAULT_REFLECTION_ATTENUATION`, 0.9, mirroring Master Control's. The reference digest moved on
+  both daily devices (RTX 4090 `D46C7B69...`, Intel `6EB9085A...`) and a build at 1 reproduces the old ones; the
+  NVIDIA-to-Intel difference holds at 2.95%. Recorded lives' senses move with it; the physics does not.
+  `acoustics.hpp`, MATERIALS.md and ACOUSTICS.md record the reopened decision.
+
 - **On link v12.** `external/link` moves to protocol 12 and client ABI 10; the Grid reads Link's C header, so its
   own code needs nothing, and the world-client and world-host tests' hand-built servers pass the new food argument and
   the header's `food_count`. 22 of 22 tests on MSVC; Master Control moves in the same step, and the two must land

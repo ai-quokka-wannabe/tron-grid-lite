@@ -30,11 +30,13 @@ namespace
         uint32_t ray_count{0u};
         uint32_t max_bounces{0u};
         uint32_t instance_count{0u};
+        float reflection_attenuation{0.0f};
     };
 
-    static_assert(sizeof(SensesPushConstants) == 12u, "Push constants must match the Slang struct layout exactly.");
+    static_assert(sizeof(SensesPushConstants) == 16u, "Push constants must match the Slang struct layout exactly.");
     static_assert(offsetof(SensesPushConstants, max_bounces) == 4u, "max_bounces must sit at offset 4.");
     static_assert(offsetof(SensesPushConstants, instance_count) == 8u, "instance_count must sit at offset 8.");
+    static_assert(offsetof(SensesPushConstants, reflection_attenuation) == 12u, "reflection_attenuation must sit at offset 12.");
 
     //! Block size for the two host-visible buffers. Generous against any sane per-tick ray count.
     constexpr vk::DeviceSize HOST_BLOCK_BYTES{1u * 1024u * 1024u};
@@ -164,7 +166,7 @@ void SensesTracer::stage(const std::vector<BvhLib::InstanceRecord>& instances)
     m_instance_count = static_cast<uint32_t>(instances.size());
 }
 
-std::vector<MathLib::Vec4> SensesTracer::solve(const std::vector<MathLib::Vec4>& rays, uint32_t max_bounces)
+std::vector<MathLib::Vec4> SensesTracer::solve(const std::vector<MathLib::Vec4>& rays, uint32_t max_bounces, float reflection_attenuation)
 {
     if ((rays.size() % 2u) != 0u) {
         throw std::runtime_error{"A senses solve takes origin and direction pairs, so the ray buffer must have even length."};
@@ -184,7 +186,8 @@ std::vector<MathLib::Vec4> SensesTracer::solve(const std::vector<MathLib::Vec4>&
     command_buffer.reset();
     command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-    const SensesPushConstants push{.ray_count = ray_count, .max_bounces = max_bounces, .instance_count = m_instance_count};
+    const SensesPushConstants push{
+        .ray_count = ray_count, .max_bounces = max_bounces, .instance_count = m_instance_count, .reflection_attenuation = reflection_attenuation};
 
     command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, *m_pipeline);
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *m_pipeline_layout, 0u, {*m_descriptor_sets[0]}, {});

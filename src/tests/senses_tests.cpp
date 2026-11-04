@@ -194,9 +194,10 @@ namespace
             staged = instances;
         }
 
-        [[nodiscard]] std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t) override
+        [[nodiscard]] std::vector<MathLib::Vec4> solve(const std::vector<MathLib::Vec4>& rays, uint32_t, float reflection_attenuation) override
         {
             ++calls;
+            last_attenuation = reflection_attenuation;
             std::vector<MathLib::Vec4> out;
             out.reserve(rays.size() / 2u);
             for (std::size_t index{0u}; index < rays.size(); index += 2u) {
@@ -207,6 +208,7 @@ namespace
         }
 
         uint32_t calls{0u};
+        float last_attenuation{-1.0f}; //!< What the last solve was asked to return per bounce.
         std::vector<BvhLib::InstanceRecord> staged;
     };
 
@@ -269,6 +271,62 @@ TEST_CASE(eyes_and_irradiance_are_filled_from_the_solver)
         expected += (std::fabs(direction.x) + std::fabs(direction.y) + std::fabs(direction.z)) / 3.0f;
     }
     TEST_CHECK_CLOSE(senses.irradiance, expected / 4.0f, 1e-5f);
+}
+
+TEST_CASE(eyes_and_ears_perceive_with_the_worlds_reflection_attenuation)
+{
+    /*
+        One number for light and sound: the source hands its world's attenuation to the radiance
+        solver and to the gather alike. A creature host passes WELCOME's; a source told nothing
+        perceives a default world.
+    */
+    const BvhLib::Scene scene{singingFloorScene()};
+    const std::array<TglEyeDesc, 1u> eyes{eyeOf(FORWARD_DIRECTION.data(), 1u, 1u)};
+
+    // A silent ceiling over the singing floor, so the ear's reflections are something to attenuate.
+    const MathLib::Vec3 a{-2.0f, 2.0f, -2.0f};
+    const MathLib::Vec3 b{2.0f, 2.0f, -2.0f};
+    const MathLib::Vec3 c{-2.0f, 2.0f, 2.0f};
+    const MathLib::Vec3 d{2.0f, 2.0f, 2.0f};
+    std::vector<BvhLib::Triangle> triangles{scene.geometries[0].triangles};
+    triangles.push_back(BvhLib::Triangle{.v0 = a, .material = 1u, .edge1 = b - a, .padding0 = 0u, .edge2 = c - a, .padding1 = 0u});
+    triangles.push_back(BvhLib::Triangle{.v0 = b, .material = 1u, .edge1 = d - b, .padding0 = 0u, .edge2 = c - b, .padding1 = 0u});
+    BvhLib::Bvh hierarchy{BvhLib::build(std::move(triangles))};
+    BvhLib::Scene roofed{};
+    roofed.instances.push_back(BvhLib::makeInstance(hierarchy, 0u, MathLib::Mat4::identity()));
+    roofed.geometries.push_back(std::move(hierarchy));
+    const std::vector<float> strengths{1.0f, 0.0f};
+
+    const std::array<TglEarDesc, 1u> ears{earAt(0.0f, 0.0f, 0.0f)};
+    RosterLib::Creature creature{hearingCreature(ears.data(), 1u)};
+    creature.body.eyes = eyes.data();
+    creature.body.eye_count = 1u;
+
+    FakeSolver default_solver;
+    GridSensesSource told_nothing{roofed, strengths, {}, &default_solver};
+    TglSenses default_senses{};
+    told_nothing.fill(creature, default_senses);
+    TEST_CHECK(default_solver.last_attenuation == DEFAULT_REFLECTION_ATTENUATION);
+
+    FakeSolver solver;
+    GridSensesSource source{roofed, strengths, {}, &solver, nullptr, 0.25f};
+    TglSenses senses{};
+    source.fill(creature, senses);
+    TEST_CHECK(solver.last_attenuation == 0.25f);
+
+    // The ear hears exactly the gather at the same attenuation, and not the gather at the default.
+    Acoustics::GatherConfig config{};
+    config.reflection_attenuation = 0.25f;
+    const MathLib::Vec3 world{RosterLib::worldFromBody(creature.pose, MathLib::Vec3{0.0f, 0.0f, 0.0f})};
+    const Acoustics::ImpulseResponse expected{Acoustics::gather(roofed, strengths, world, config)};
+    float differing{0.0f};
+    float from_default{0.0f};
+    for (uint32_t index{0u}; index < (Acoustics::BAND_COUNT * Acoustics::BIN_COUNT); ++index) {
+        differing += std::fabs(senses.ears[0].energy[index] - expected.bins[index]);
+        from_default += std::fabs(senses.ears[0].energy[index] - default_senses.ears[0].energy[index]);
+    }
+    TEST_CHECK(differing == 0.0f);
+    TEST_CHECK(from_default > 0.0f);
 }
 
 TEST_CASE(the_solver_is_asked_once_while_the_pose_holds)

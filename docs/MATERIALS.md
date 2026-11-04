@@ -12,7 +12,7 @@ valid. A glowing translucent mirror is as expressible as any of the three.
 
 | Name | Behaviour | Parameters that define it |
 |------|-----------|---------------------------|
-| **Mirror** | Perfect specular reflection, Fresnel-weighted | `colour` (a tint on the reflection, usually close to white), `index_of_refraction`; zero `emission` and `transmission` |
+| **Mirror** | Perfect specular reflection, Fresnel-weighted and scaled by the world's reflection attenuation | `colour` (a tint on the reflection, usually close to white), `index_of_refraction`; zero `emission` and `transmission` |
 | **Emissive** | Reflects, and additionally emits a constant radiance — the neon | `colour` plus a non-zero `emission` |
 | **Glass** | Fresnel split between one reflected and one refracted ray | `colour` as tint, `index_of_refraction`, `transmission` towards 1 |
 
@@ -44,6 +44,34 @@ resolution, however tiny.
 
 The cost is that the model cannot represent a rough or matte surface at all. That is accepted.
 The aesthetic is the algorithm.
+
+### The Reflection Attenuation
+
+One number sits outside the material table, because it belongs to the world rather than to any
+surface: the **reflection attenuation** `a`, in [0, 1], the fraction of radiance a surface returns
+at each specular bounce. The walk in `../src/grid_optics.slang` multiplies the reflected branch's
+throughput by it, on top of Fresnel and the material's tint; the transmitted branch and emission are
+untouched. It is the same number the acoustic gather applies to each reflection of sound
+([ACOUSTICS.md](ACOUSTICS.md)), and the same for the Grid's surfaces and for every creature's body.
+
+It exists for perception rather than looks. With `a = 1` every mirror returned all that Fresnel sent
+it, so a riser showed a second Grid at full brightness and a body could not tell a wall from open
+space. At `a < 1` each reflection is dimmer than what it reflects, and a reflection seen in a
+reflection dimmer again, which is what lets a body learn where a surface is. The ruling is recorded in
+[TOPOLOGY.md](TOPOLOGY.md) § The protocol: Master Control owns the value, `WELCOME` carries it, and
+the creature host, the window and a `--replay` all adopt the world's. The offline modes (`--record`,
+`--benchmark`, `--debug` and the `--verify-*` modes) use `DEFAULT_REFLECTION_ATTENUATION` in
+`../src/components.hpp`, 0.9, which mirrors Master Control's default and is about what polished
+aluminium returns of visible light.
+
+Within one bounce the reflected throughput is therefore:
+
+```text
+throughput_reflected = throughput * colour * F * a
+```
+
+and after `n` reflections the `a` has compounded to `a^n`. Nothing else in the model changes, so the
+renderer stays deterministic and the reference digest moves only when `a` does.
 
 ---
 
@@ -189,12 +217,14 @@ A glass hit spawns two rays and blends them by the same Schlick term used for mi
 
 ```text
 F     = F0 + (1 - F0) * (1 - cos(theta_v))^5
-final = (F * reflected) + ((1 - F) * transmission * refracted * colour) + emission
+final = (a * F * reflected * colour) + ((1 - F) * transmission * refracted * colour) + emission
 ```
 
-Fresnel decides the reflected share first; `transmission` then decides how much of the remainder
-passes through rather than being absorbed, which is exactly the split `Material::transmission`
-encodes. At `transmission = 0` the second term vanishes and the surface is the opaque mirror.
+Fresnel decides the reflected share first, and the world's reflection attenuation `a` scales it;
+`transmission` then decides how much of the remainder passes through rather than being absorbed,
+which is exactly the split `Material::transmission` encodes. At `transmission = 0` the second term
+vanishes and the surface is the opaque mirror. Total internal reflection is a reflection too, so a
+ray trapped inside glass loses `a` at each internal bounce.
 
 Multiplying the transmitted contribution by the material's tint colour is a Beer-Lambert-lite
 approximation. Full Beer-Lambert attenuates by `exp(-sigma * d)` over the path length `d` inside

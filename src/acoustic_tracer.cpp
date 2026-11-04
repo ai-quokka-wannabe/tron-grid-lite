@@ -43,12 +43,14 @@ namespace
         uint32_t instance_count{0u};
         uint32_t material_count{0u};
         float range_metres{0.0f};
+        float reflection_attenuation{0.0f};
     };
 
-    static_assert(sizeof(AcousticPushConstants) == 52u, "Push constants must match the Slang struct layout exactly.");
+    static_assert(sizeof(AcousticPushConstants) == 56u, "Push constants must match the Slang struct layout exactly.");
     static_assert(offsetof(AcousticPushConstants, air_absorption_db_per_km) == 16u, "air_absorption must sit at offset 16.");
     static_assert(offsetof(AcousticPushConstants, direction_count) == 32u, "direction_count must sit at offset 32.");
     static_assert(offsetof(AcousticPushConstants, range_metres) == 48u, "range_metres must sit at offset 48.");
+    static_assert(offsetof(AcousticPushConstants, reflection_attenuation) == 52u, "reflection_attenuation must sit at offset 52.");
 
     // The shader hard-codes these because a groupshared array needs a compile-time size. If the host
     // ever disagrees, the histogram is read at the wrong stride and every band but the first is
@@ -238,7 +240,8 @@ void AcousticTracer::record(const vk::raii::CommandBuffer& command_buffer, const
         .max_order = config.max_order,
         .instance_count = m_world->instanceCount(),
         .material_count = m_material_count,
-        .range_metres = config.range_metres};
+        .range_metres = config.range_metres,
+        .reflection_attenuation = config.reflection_attenuation};
 
     command_buffer.bindPipeline(vk::PipelineBindPoint::eCompute, *m_pipeline);
     command_buffer.bindDescriptorSets(vk::PipelineBindPoint::eCompute, *m_pipeline_layout, 0u, {*m_descriptor_sets[0]}, {});

@@ -421,7 +421,7 @@ int recordCinematic(const Device& device, Tracer& tracer, PostProcess& post_proc
         command_buffer.reset();
         command_buffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
 
-        tracer.record(command_buffer, 0u, camera, MAX_BOUNCES);
+        tracer.record(command_buffer, 0u, camera, MAX_BOUNCES, DEFAULT_REFLECTION_ATTENUATION);
         post_process.record(command_buffer, 0u, BLOOM_THRESHOLD, BLOOM_STRENGTH, VIGNETTE_STRENGTH, EXPOSURE);
 
         // The post-processing stage leaves its output in eTransferSrcOptimal, which is exactly what
@@ -539,7 +539,7 @@ int benchmark(const Device& device, Tracer& tracer, PostProcess& post_process, L
         profiler.begin(command_buffer, 0u, GpuPass::Frame);
 
         profiler.begin(command_buffer, 0u, GpuPass::Trace);
-        tracer.record(command_buffer, 0u, camera, MAX_BOUNCES);
+        tracer.record(command_buffer, 0u, camera, MAX_BOUNCES, DEFAULT_REFLECTION_ATTENUATION);
         profiler.end(command_buffer, 0u, GpuPass::Trace);
 
         profiler.begin(command_buffer, 0u, GpuPass::Post);
@@ -832,7 +832,7 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     }
 
     SensesTracer senses_tracer{device, world, materials, BvhLib::flatten(scene).instances, FAN_COUNT, (shader_directory / "senses.spv").string(), logger};
-    const std::vector<MathLib::Vec4> measured{senses_tracer.solve(rays, 1u)};
+    const std::vector<MathLib::Vec4> measured{senses_tracer.solve(rays, 1u, DEFAULT_REFLECTION_ATTENUATION)};
 
     float host_total{0.0f};
     float device_total{0.0f};
@@ -959,10 +959,13 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     std::unique_ptr<const World> world{std::make_unique<const World>(device, flat, logger)};
     std::unique_ptr<SensesTracer> senses_tracer{
         std::make_unique<SensesTracer>(device, *world, stage.materials(), with_room_for_food(flat.instances), max_rays, senses_shader, logger)};
-    std::unique_ptr<GridSensesSource> senses_source{
-        std::make_unique<GridSensesSource>(stage.scene(), stage.acousticStrengths(), makeGridReflectors(), senses_tracer.get(), &stage)};
 
     WorldHostLib::Host host{master_control_address, std::chrono::milliseconds{5000}, roster};
+
+    // The world's reflection attenuation, as WELCOME told it: what every hosted eye and ear perceives with.
+    const float reflection_attenuation{host.welcome().reflection_attenuation};
+    std::unique_ptr<GridSensesSource> senses_source{
+        std::make_unique<GridSensesSource>(stage.scene(), stage.acousticStrengths(), makeGridReflectors(), senses_tracer.get(), &stage, reflection_attenuation)};
     std::uint64_t guest_shapes_seen{0u};
     logger.logInfo("Hosting: Master Control at " + master_control_address + ", tick " + std::to_string(host.welcome().current_tick) + ", client id "
         + std::to_string(host.welcome().client_id) + ", reflection attenuation " + std::to_string(host.welcome().reflection_attenuation) + "; creature "
@@ -986,7 +989,8 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
             senses_tracer.reset();
             world = std::make_unique<const World>(device, reshaped, logger);
             senses_tracer = std::make_unique<SensesTracer>(device, *world, stage.materials(), with_room_for_food(reshaped.instances), max_rays, senses_shader, logger);
-            senses_source = std::make_unique<GridSensesSource>(stage.scene(), stage.acousticStrengths(), makeGridReflectors(), senses_tracer.get(), &stage);
+            senses_source = std::make_unique<GridSensesSource>(stage.scene(), stage.acousticStrengths(), makeGridReflectors(), senses_tracer.get(), &stage,
+                reflection_attenuation);
             logger.logInfo("The world's shapes changed (generation " + std::to_string(guest_shapes_seen) + "); " + std::to_string(stage.scene().geometries.size() - 1u)
                 + " body geometries on the stage, the device's world rebuilt.");
         }
@@ -1028,7 +1032,7 @@ int verifyAcoustics(const Device& device, const BvhLib::Bvh& bvh, const std::vec
     \param channel The only state shared with the event thread.
 */
 void runRenderLoop(const Device& device, Swapchain& swapchain, std::unique_ptr<const World>& world, std::unique_ptr<Tracer>& tracer, const std::string& trace_shader,
-    PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel)
+    PostProcess& post_process, LoggingLib::Logger& logger, RenderChannel& channel, float reflection_attenuation)
 {
     std::uint64_t scene_seen{channel.scene_generation.load()};
     const vk::CommandPoolCreateInfo pool_info{.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer, .queueFamilyIndex = device.graphicsFamilyIndex()};
@@ -1346,7 +1350,7 @@ void runRenderLoop(const Device& device, Swapchain& swapchain, std::unique_ptr<c
         profiler.begin(command_buffer, frame_index, GpuPass::Frame);
 
         profiler.begin(command_buffer, frame_index, GpuPass::Trace);
-        tracer->record(command_buffer, frame_index, camera, MAX_BOUNCES);
+        tracer->record(command_buffer, frame_index, camera, MAX_BOUNCES, reflection_attenuation);
         profiler.end(command_buffer, frame_index, GpuPass::Trace);
 
         profiler.begin(command_buffer, frame_index, GpuPass::Post);
@@ -1690,12 +1694,13 @@ int main(int argc, char** argv)
         if (!replay_disk.empty()) {
             world_client = std::make_unique<WorldClientLib::Client>(std::filesystem::path{replay_disk});
             logger.logInfo("Clu: replaying the Disk at " + replay_disk + " from tick " + std::to_string(world_client->welcome().current_tick) + ", dt "
-                + std::to_string(static_cast<double>(world_client->welcome().nominal_dt_seconds)) + " s.");
+                + std::to_string(static_cast<double>(world_client->welcome().nominal_dt_seconds)) + " s, reflection attenuation "
+                + std::to_string(static_cast<double>(world_client->welcome().reflection_attenuation)) + ".");
         } else if (wants_window) {
             world_client = std::make_unique<WorldClientLib::Client>(master_control_address, std::chrono::milliseconds{5000});
             logger.logInfo("Connected: Master Control at " + master_control_address + ", tick " + std::to_string(world_client->welcome().current_tick) + ", dt "
                 + std::to_string(static_cast<double>(world_client->welcome().nominal_dt_seconds)) + " s, client id " + std::to_string(world_client->welcome().client_id)
-                + ".");
+                + ", reflection attenuation " + std::to_string(static_cast<double>(world_client->welcome().reflection_attenuation)) + ".");
         }
 
         const bool any_window{wants_window || wants_debug_view};
@@ -1876,9 +1881,15 @@ int main(int argc, char** argv)
             }
         }
 
-        std::thread render_thread{[&device, &swapchain, &world, &tracer, &trace_shader, &post_process, &logger, &channel, &window]() {
+        /*
+            The world's reflection attenuation: WELCOME's for the live view, and so the Disk's for a
+            replay, which records WELCOME; the compiled default for the debug view, which has no world.
+        */
+        const float reflection_attenuation{(world_client != nullptr) ? world_client->welcome().reflection_attenuation : DEFAULT_REFLECTION_ATTENUATION};
+
+        std::thread render_thread{[&device, &swapchain, &world, &tracer, &trace_shader, &post_process, &logger, &channel, &window, reflection_attenuation]() {
             try {
-                runRenderLoop(device, *swapchain, world, tracer, trace_shader, post_process, logger, channel);
+                runRenderLoop(device, *swapchain, world, tracer, trace_shader, post_process, logger, channel, reflection_attenuation);
             } catch (const std::exception& error) {
                 channel.render_failed = true;
 

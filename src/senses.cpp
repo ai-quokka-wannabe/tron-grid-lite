@@ -22,12 +22,13 @@
 #include <utility>
 
 GridSensesSource::GridSensesSource(const BvhLib::Scene& scene, std::vector<float> source_strengths, Acoustics::Reflectors reflectors, RadianceSolver* radiance_solver,
-    Stage* stage) :
+    Stage* stage, float reflection_attenuation) :
     m_scene(scene),
     m_source_strengths(std::move(source_strengths)),
     m_reflectors(std::move(reflectors)),
     m_radiance_solver(radiance_solver),
-    m_stage(stage)
+    m_stage(stage),
+    m_reflection_attenuation(reflection_attenuation)
 {
 }
 
@@ -243,6 +244,7 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
                 config.air_absorption_db_per_km[band] = ear.air_absorption_db_per_km[band];
             }
             config.skip_instance = own_instance;
+            config.reflection_attenuation = m_reflection_attenuation;
             /*
                 The hum spectrum stays at the config's unit default. The first body's band edges are
                 chosen so that each band holds exactly one harmonic of the Grid's hum, which makes
@@ -281,6 +283,7 @@ void GridSensesSource::fillEars(const RosterLib::Creature& creature, TglSenses& 
             }
             call_config.source_radius_metres = RosterLib::BODY_HALF_HEIGHT;
             call_config.listener_instance = own_instance;
+            call_config.reflection_attenuation = m_reflection_attenuation;
 
             call_config.listener_velocity = creature.velocity;
             for (const Call& call : m_calls) {
@@ -431,7 +434,7 @@ void GridSensesSource::fillVision(const RosterLib::Creature& creature, TglSenses
             m_radiance_solver->stage(records);
         }
 
-        const std::vector<MathLib::Vec4> radiance{m_radiance_solver->solve(rays, SENSES_MAX_BOUNCES)};
+        const std::vector<MathLib::Vec4> radiance{m_radiance_solver->solve(rays, SENSES_MAX_BOUNCES, m_reflection_attenuation)};
         if (radiance.size() != ray_total) {
             // Read below one answer per ray; a short batch would be read past its end.
             throw std::runtime_error{"The radiance solver answered " + std::to_string(radiance.size()) + " of " + std::to_string(ray_total) + " rays."};

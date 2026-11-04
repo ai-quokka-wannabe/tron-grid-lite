@@ -92,8 +92,10 @@ public:
         \param frame_slot Frame in flight, which selects the output image and descriptor set.
         \param camera Viewpoint to trace from.
         \param max_bounces Depth of the ray tree, at least one.
+        \param reflection_attenuation Fraction each specular bounce returns, in [0, 1]: the world's
+               from WELCOME, or `DEFAULT_REFLECTION_ATTENUATION` where no world tells one.
     */
-    void record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces) const;
+    void record(const vk::raii::CommandBuffer& command_buffer, uint32_t frame_slot, const Camera& camera, uint32_t max_bounces, float reflection_attenuation) const;
 
     //! True when this tracer was built with a dynamic instance capacity — the live view's shape.
     [[nodiscard]] bool hasDynamicInstances() const noexcept

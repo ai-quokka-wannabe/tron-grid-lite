@@ -34,10 +34,11 @@
 //                                                          2i + 1 (direction, w unused).
 //     binding 5 : RWStructuredBuffer<float4>   results   — linear radiance per ray, w written zero.
 //
-// Push constants (12 bytes):
+// Push constants (16 bytes):
 //     offset 0, size 4 : ray_count      — rays in the buffer; the dispatch is rounded up.
 //     offset 4, size 4 : max_bounces    — total ray segments per sample, at least 1.
 //     offset 8, size 4 : instance_count — placements in the top level.
+//     offset 12, size 4 : reflection_attenuation — fraction each specular bounce returns, in [0, 1].
 
 import grid_bvh;
 import grid_optics;
@@ -47,6 +48,7 @@ struct SensesPushConstants
     uint ray_count;
     uint max_bounces;
     uint instance_count;
+    float reflection_attenuation;
 };
 
 [[vk::push_constant]]
@@ -84,7 +86,7 @@ void senseMain(uint3 thread_id: SV_DispatchThreadID)
     const float3 origin = rays[index * 2u].xyz;
     const float3 direction = rays[(index * 2u) + 1u].xyz;
 
-    const float3 colour = radiance(instances, push.instance_count, nodes, triangles, materials, push.max_bounces, origin, direction);
+    const float3 colour = radiance(instances, push.instance_count, nodes, triangles, materials, push.max_bounces, push.reflection_attenuation, origin, direction);
 
     // Linear radiance, unencoded and unclamped, exactly as the ABI documents TglEyeView::samples.
     results[index] = float4(colour, 0.0);

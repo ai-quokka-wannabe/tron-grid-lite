@@ -103,6 +103,23 @@ enum MaterialSlot : uint32_t {
     MATERIAL_SLOT_COUNT = 6u //!< Number of the Grid's own slots. A stage appends body and orb slots after them, in both tables.
 };
 
+/*!
+    The world's reflection attenuation where no world tells one: the fraction of radiance and of
+    acoustic energy a surface returns at each specular bounce.
+
+    One number for light and sound, for the Grid's surfaces and for every creature's body, owned by
+    Master Control and carried in `WELCOME` (`docs/TOPOLOGY.md` § The protocol). A run joined to a
+    world - the creature host, the window, a `--replay` of a Disk - adopts the world's value and
+    never reads this one. It is what every offline mode uses instead - `--record`, `--benchmark`,
+    `--debug` and the three `--verify-*` modes - and it mirrors Master Control's own
+    `DEFAULT_REFLECTION_ATTENUATION`, so the offline picture is the picture of a default world.
+
+    0.9 is about what polished aluminium returns of visible light. It lies below a hard wall's
+    acoustic return of about 0.98, which one number cannot also be, and errs towards walls being
+    perceived. Emission and transmission are not attenuated by it; only the reflected share is.
+*/
+inline constexpr float DEFAULT_REFLECTION_ATTENUATION{0.9f};
+
 /*
     Named points in the material space. These are conveniences, not categories: nothing downstream
     branches on which one produced a material, and any blend of them is equally valid.
