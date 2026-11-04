@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Ruled: heat, as the owner asked on 2026-11-04.** A new design, `docs/THERMORECEPTION.md`, in the split smell
+  follows: Master Control owns the temperature field, in the same air grid as the odour, with the floor's thermal map
+  (a thermotaxis assay's 0.5 °C/cm by default), the energy pillars as heat sources, and every body a source at its own
+  temperature, stepped from the metabolism its Program declares; each Program owns its thermoreceptors - the worm's
+  AFD pair, resolving about 0.01 °C - and feels its own body heat as interoception; and humans see the field as a
+  subtle red aura in the spectator window, never in a creature's senses. Documentation only.
+
 - **Ruled: Master Control owns the air, each Program owns its nose, and humans see the smoke.**
   `docs/CHEMORECEPTION.md` gains the owner's ruling of 2026-11-04 for every animal, not only the worm: a numerical
   diffusion field with risers as walls, its constants the Grid's air's; sense organs declared with a Program's body;
