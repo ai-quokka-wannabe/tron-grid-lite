@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **On the wire at protocol v13.** `external/link` moves to v13 (client ABI 11): `WELCOME` carries the world's
+  reflection attenuation, which the creature host and the window now hold as the world told it - a creature host
+  logs it on joining - and a Disk's header carries it, so a `--replay` holds the value it was recorded under (a test
+  pins the round trip). Nothing renders or sounds differently yet: applying it to light and sound is the next step of
+  #177.
+
 - **Claude skills, shared across the org.** `.claude/skills/` gains live-world, windows-build and org-pr-flow - how to run, drive and stop a
   live world, how to build and check on the Windows desk, and the way from a change to a PR - each mirrored verbatim
   in every repo that uses it and improved every time it is used, so no session reinvents them.
