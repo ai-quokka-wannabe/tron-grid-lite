@@ -15,6 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pins the round trip). Nothing renders or sounds differently yet: applying it to light and sound is the next step of
   #177.
 
+- **Ruled: the world's reflection attenuation travels in `WELCOME`, and a non-finite float is malformed everywhere.**
+  `docs/TOPOLOGY.md` § The protocol records protocol v13's two decisions (#177 item 1, link#56): one
+  `reflection_attenuation` in [0, 1], owned by Master Control, carried by `WELCOME` rather than the fingerprint, the
+  same for light and sound and for the Grid and the creatures, default 0.9; and the codec refusing NaN and infinities
+  in `ACTIONS`, `EVENT` and `WELCOME` as it already did elsewhere. Documentation only; the code follows in link,
+  master-control and here.
+
 - **Claude skills, shared across the org.** `.claude/skills/` gains live-world, windows-build and org-pr-flow - how to run, drive and stop a
   live world, how to build and check on the Windows desk, and the way from a change to a PR - each mirrored verbatim
   in every repo that uses it and improved every time it is used, so no session reinvents them.
