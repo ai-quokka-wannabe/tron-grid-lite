@@ -315,6 +315,25 @@ that the places protocols actually fail are the places this codebase already has
   are compiled into both ends, one index space with two homes, and a slot-count mismatch
   mis-shades and mis-sounds *silently* — a handshake refusal is the only honest failure for
   build skew.
+- **The world's reflection attenuation travels in `WELCOME` (ruled 2026-11-03, protocol v13).** One number,
+  `reflection_attenuation` in [0, 1]: the fraction of radiance and of acoustic energy a surface returns at each
+  specular bounce. It is the same number for the Grid's surfaces and for every creature's body (the owner's ruling,
+  kept simple on purpose). Until now every surface was a lossless mirror, optically (MATERIALS.md) and acoustically
+  (`acoustics.hpp`), so a riser showed and echoed a full-strength second world and a body could not tell a wall from
+  open space; this reopens `acoustics.hpp`'s recorded choice to leave absorption out, for perception rather than
+  for a measured loss. **Master Control owns it** - `--reflection-attenuation` and `--config` set it, the input log's
+  header records it so Clu re-simulates with it - and it is **not** part of the world-definition fingerprint, which
+  stays the compiled geometry: `HELLO` is sent before a client could know a value the server chose at launch.
+  Instead `WELCOME` carries the value, every client adopts the server's (creature host, spectator, and a `--replay`,
+  because the Disk records `WELCOME`), and the codec refuses a `WELCOME` whose value is non-finite or outside [0, 1].
+  The default is **0.9**: about what a polished aluminium mirror returns of visible light. One number cannot also be a
+  hard wall's acoustic return (about 0.98), and it errs towards walls being perceived. It is a hyperparameter the
+  lab may set; what it costs and moves is measured in the PR that applies it (tron-grid-lite#177).
+- **A non-finite float is a malformed frame, in every message (ruled 2026-11-03, protocol v13).** The codec already
+  refused NaN and infinities in most messages; `ACTIONS`, `EVENT` and `WELCOME` were the exceptions (link#56). They
+  are refused there too, so a peer that sends one is hung up on like any other malformed frame. Master Control's
+  sanitise-and-clamp stays the path into the world for everything finite - range, bounds, denormals - and keeps its
+  adversarial tests. The same bump makes `lnk_protocol.h`'s language guard and its stated standard agree.
 - **One structural rule bought from the Screeps lineage**: the broadcast is per-subscriber
   filterable from day one. Not filtered — v1 sends everyone everything — but the code path is
   "compose this subscriber's view", not "write the one global buffer to all sockets", so the day
