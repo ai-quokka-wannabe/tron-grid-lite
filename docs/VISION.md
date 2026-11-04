@@ -169,9 +169,11 @@ The Grid is Tron-inspired cyberspace: **neon lines against infinite black**.
 
 - **Infinite black** — there is no sky, no skybox, no horizon, no fog. A ray that hits nothing returns
   black. The void is genuinely empty, and that emptiness is free to render.
-- **Everything is a perfect mirror** — every surface on the Grid is perfectly specular. Their tints are close to white,
-  and it is Fresnel rather than the tint that keeps them dim head-on, so they read as dark polished planes that catch and
-  repeat the neon.
+- **Everything is a mirror that dims what it returns** — every surface on the Grid is perfectly specular, and each
+  reflection returns the world's **reflection attenuation** of what reached it (0.9 unless Master Control says
+  otherwise, the same number for every surface and every body), so an image fades with each bounce and a wall reads as
+  a wall rather than as a second Grid. Their tints are close to white, and it is Fresnel rather than the tint that keeps
+  them dim head-on, so they read as dark polished planes that catch and repeat the neon.
 - **Emissive geometry is the only light source** — there are no point lights, no directional lights, no ambient term.
   Light exists because some geometry glows. The neon tubes and glowing edges that form the visual language of the Grid
   *are* the lighting rig.
@@ -179,7 +181,7 @@ The Grid is Tron-inspired cyberspace: **neon lines against infinite black**.
   creature's optics to be confused by.
 
 The whole surface vocabulary of the Grid is three materials — mirror, emissive, glass — and that is a feature. With
-perfect mirrors and emissive geometry there is nothing stochastic to integrate: the ray tree is **deterministic and
+specular mirrors and emissive geometry there is nothing stochastic to integrate: the ray tree is **deterministic and
 shallow**, Whitted 1980 style. No Monte Carlo sampling, therefore no noise, therefore no denoiser, therefore no
 temporal accumulation and no ghosting. The image a creature sees on tick *N* depends only on the Grid state on
 tick *N*.
@@ -218,8 +220,9 @@ the same geometry that light does — the same hierarchy, the same slab test, th
 does not behave the same way once it arrives, and the differences are the interesting part.
 
 Light is instantaneous for a renderer; sound is not, so an acoustic ray carries its accumulated path length and the
-answer is a function of time rather than a value. Every surface is a **perfect acoustic mirror**: no absorption, no
-scattering, and no transmission, so where light passes through a glass slab, sound bounces off it and behind it there
+answer is a function of time rather than a value. Every surface is a **specular acoustic mirror** that returns the same
+reflection attenuation of the energy at each bounce as it does of light - one number for both senses - with no
+scattering and no transmission, so where light passes through a glass slab, sound bounces off it and behind it there
 is quiet. **The one surface the optical renderer treats as transparent is the one the acoustic renderer treats as most
 opaque**, which is precisely why a creature with both senses learns something neither sense could tell it alone.
 
