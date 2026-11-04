@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Ruled: labelled assumptions, where biology has no paper.** `docs/PERCEPTION.md` gains the owner's ruling of
+  2026-11-04: an unmeasured quantity may be modelled only if it is labelled as assumed, bounded by what is measured,
+  borrowed from the nearest measured relative where possible, swept rather than tuned, and replaceable. The noise
+  ruling now carries its sourced figures: vestibular thresholds as one standard deviation of noise (Bermúdez Rey et
+  al. 2016, Valko et al. 2012), joint position sense (Relph and Herrington 2016), and the plain statement that the
+  worm's body-sense precision is unmeasured (Wen et al. 2012). Documentation only.
+
 - **Ruled: imperfection at the body's own senses.** `docs/PERCEPTION.md` gains the owner's ruling of 2026-11-04:
   every body sense (specific force, angular velocity, joint angles and loads, contacts) carries deterministic noise
   from the RNG of record, composed by Master Control in the letter; `angular_velocity` moves into the letter, since
