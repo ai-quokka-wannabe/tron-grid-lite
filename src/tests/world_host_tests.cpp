@@ -165,12 +165,12 @@ namespace
                     .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u),
                     .reserved0 = {},
                     .specific_force = {0.0f, 9.81f, 0.0f},
+                    .angular_velocity = {0.02f, 0.2f, -0.03f},
                     .joint_angles = {0.25f, -0.5f},
                     .joint_torques = {1.5f, -5.0f},
                     .contact_count = grounded ? 1u : 0u,
                     .intake = 0.0f,
-                    .odour = {},
-                    .reserved1 = {}};
+                    .odour = {}};
                 check(m_library.vtable().send_proprioception(m_connection, &letter, grounded ? contacts.data() : nullptr), "send_proprioception");
             }
             flush();
@@ -197,12 +197,12 @@ namespace
                 .grounded = 1u,
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
+                .angular_velocity = {},
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
                 .intake = 0.0f,
-                .odour = {},
-                .reserved1 = {}};
+                .odour = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
@@ -230,12 +230,12 @@ namespace
                 .grounded = 1u,
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
+                .angular_velocity = {},
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
                 .intake = 0.0f,
-                .odour = {},
-                .reserved1 = {}};
+                .odour = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
@@ -259,12 +259,12 @@ namespace
                 .grounded = 1u,
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
+                .angular_velocity = {},
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
                 .intake = 0.0f,
-                .odour = {},
-                .reserved1 = {}};
+                .odour = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
@@ -285,12 +285,12 @@ namespace
                 .grounded = 1u,
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
+                .angular_velocity = {},
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
                 .intake = 0.25f,
-                .odour = {},
-                .reserved1 = {}};
+                .odour = {}};
             for (std::uint32_t amphid{0u}; amphid < LNK_AMPHIDS; ++amphid) {
                 for (std::uint32_t receptor{0u}; receptor < LNK_ODOUR_RECEPTORS; ++receptor) {
                     letter.odour[(amphid * LNK_ODOUR_RECEPTORS) + receptor] = 0.05f + (0.1f * static_cast<float>(receptor)) + (0.01f * static_cast<float>(amphid));
@@ -316,12 +316,12 @@ namespace
                 .grounded = static_cast<std::uint8_t>(grounded ? 1u : 0u),
                 .reserved0 = {},
                 .specific_force = {0.0f, 9.81f, 0.0f},
+                .angular_velocity = {},
                 .joint_angles = {},
                 .joint_torques = {},
                 .contact_count = 0u,
                 .intake = 0.0f,
-                .odour = {},
-                .reserved1 = {}};
+                .odour = {}};
             check(m_library.vtable().send_proprioception(m_connection, &letter, nullptr), "send_proprioception");
             flush();
         }
@@ -426,7 +426,11 @@ TEST_CASE(the_host_rezzes_its_bodies_reads_the_telling_and_sends_the_programs_in
     TEST_CHECK(near(creature.contacts.front().depth, 0.004f));
     TEST_CHECK(near(creature.contacts.front().slip[2], -0.5f));
     TEST_CHECK(near(creature.specific_force.y, 9.81f));
-    TEST_CHECK(near(creature.turn_rate, 0.1f));
+    // The canals arrive as the letter said them, all three axes: the Grid derives nothing,
+    // not the row's yaw rate (0.1) nor anything else.
+    TEST_CHECK(near(creature.angular_velocity.x, 0.02f));
+    TEST_CHECK(near(creature.angular_velocity.y, 0.2f));
+    TEST_CHECK(near(creature.angular_velocity.z, -0.03f));
     // The servos' readings arrive as the letter said them: the Grid copies, the world judges.
     TEST_CHECK(near(creature.joint_angles[0], 0.25f));
     TEST_CHECK(near(creature.joint_angles[1], -0.5f));

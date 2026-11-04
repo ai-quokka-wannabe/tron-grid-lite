@@ -406,9 +406,11 @@ noise is the creature's problem to cope with, not the world's to spare it. The o
 - **Every body sense carries noise**, drawn from the RNG of record per tick, per body and per channel, exactly as
   smell's counting noise is, so a life still replays bit for bit and Clu re-simulates it. The noise is added where the
   sense is composed: by Master Control, in the body's letter.
-- **The rotation sense moves into the letter.** `angular_velocity` is the one body sense the Grid still derives
-  itself, from the world's yaw rate in `TICK_STATE`, against the rule that the host copies and derives nothing. It
-  joins the specific force in the letter, composed and noised by the world like the rest.
+- **The rotation sense moves into the letter - done in v14.** `angular_velocity` was the one body sense the Grid
+  still derived itself, from the world's yaw rate in `TICK_STATE`, against the rule that the host copies and derives
+  nothing. Since protocol v14 it travels in the letter beside the specific force: Master Control composes it at the
+  head, in the same body frame, from the yaw and the pitch the head actually turned through over the tick, and the
+  Grid copies all three axes. It is still exact; its noise arrives with the rest, with sourced figures.
 - **Noise belongs to the organ, not the world.** A mammal's otoliths and semicircular canals, an insect's halteres
   and the worm's body-wall mechanoreceptors are different instruments with different precision, so each body declares
   its organs' precision with the organs themselves - in the same declaration the noses and thermoreceptors are ruled

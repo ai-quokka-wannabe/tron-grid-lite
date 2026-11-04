@@ -737,6 +737,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The rotation sense comes from the world's letter (protocol v14).** `external/link` moves to v14 (link#59): the
+  owner's letter carries `angular_velocity`, composed by Master Control at the head in the same body frame as the
+  specific force, and the host copies all three axes into `TglSenses` rather than deriving the yaw axis from the
+  `TICK_STATE` row's yaw rate (`docs/PERCEPTION.md` § Imperfection at the body's own senses, now marked done in v14).
+  `Creature::turn_rate` and the yaw rate `tellPose` took for it are gone. The Program ABI is unchanged at 12 - the
+  field was always there - and the GPU checks are untouched, this being senses only.
 - **Surfaces return the world's reflection attenuation, of light and of sound alike (#177 item 1).** Every specular
   bounce returns `reflection_attenuation` of what reaches it: the optical walk scales the reflected branch by it
   (transmission and emission untouched), the gather scales an order-`n` arrival by its `n`th power and a call's

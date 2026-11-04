@@ -351,7 +351,7 @@ namespace WorldHostLib
                     if (state.creature_id == wireIdentity(index)) {
                         // The voice too: what the world sounded, clamped by its law, so the
                         // own ears hear the same call every other ear hears.
-                        m_roster.tellPose(index, pose, MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]}, state.yaw_rate, state.vocalisation);
+                        m_roster.tellPose(index, pose, MathLib::Vec3{state.velocity[0], state.velocity[1], state.velocity[2]}, state.vocalisation);
                         m_roster.tellTrail(index, trail);
                     }
                 }
@@ -397,8 +397,9 @@ namespace WorldHostLib
             // The gut and the amphids, one shape on both sides too: left amphid's eight first.
             std::array<float, TGL_AMPHIDS * TGL_ODOUR_RECEPTORS> odour{};
             std::copy(std::begin(letter.odour), std::end(letter.odour), odour.begin());
-            m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]}, joint_angles,
-                joint_torques, std::move(contacts), letter.intake, odour);
+            m_roster.tellFeel(index, letter.grounded != 0u, MathLib::Vec3{letter.specific_force[0], letter.specific_force[1], letter.specific_force[2]},
+                MathLib::Vec3{letter.angular_velocity[0], letter.angular_velocity[1], letter.angular_velocity[2]}, joint_angles, joint_torques, std::move(contacts),
+                letter.intake, odour);
             m_felt[index] = true;
         }
 
