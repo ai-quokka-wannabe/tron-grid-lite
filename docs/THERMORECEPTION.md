@@ -56,9 +56,9 @@ scalar beside the odour: one implicit, deterministic solver, two fields, risers 
 reservoir: in the worm's world the agar holds the temperature and the thin air above it follows, so each floor cell
 has a temperature and the air exchanges heat with it.
 
-- **Diffusivity**: air's thermal diffusivity is about 2.2e-5 m^2/s at 25 °C (Incropera, *Fundamentals of Heat and Mass
-  Transfer*, the air table at 300 K). It is scaled by the Grid's air scale exactly as the odour's diffusivity is, so
-  the two fields stay one air: about 4.5e2 m^2/s on the Grid, which crosses the 128 m floor in well under a minute.
+- **Diffusivity**: air's thermal diffusivity is 22.5e-6 m^2/s at 300 K (Incropera, *Fundamentals of Heat and Mass
+  Transfer*, Table A.4). It is scaled by the Grid's air scale exactly as the odour's diffusivity is, so the two fields
+  stay one air: 451.6 m^2/s on the Grid (master-control#90), which crosses the 128 m floor in well under a minute.
 - **The floor's thermal map**, a world setting: an ambient temperature and, optionally, a linear gradient across the
   floor in a chosen direction. The default gradient is the classical thermotaxis assay's: about **0.5 °C per
   centimetre**, chosen to resemble moist soil (Hedgecock and Russell 1975, as described by

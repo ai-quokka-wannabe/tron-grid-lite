@@ -264,8 +264,9 @@ split of the rest of this document:
   food can smell one way and taste another and a Program learns which to trust.
 - **The floor's solutes are the world's.** Master Control owns a second, slower field: what an orb leaches into the
   floor beneath it, diffusing **in the floor, not the air**. A solute in water diffuses about ten thousand times
-  slower than an odour in air - sodium chloride in water is about 1.5e-9 m^2/s, to be read out of a handbook's table
-  before the constant is fixed - so scaled as the air is, a taste spreads about a metre in a minute: rings and trails
+  slower than an odour in air - sodium chloride in water is 1.611e-9 m^2/s at 25 °C, by the Nernst-Hartley relation from
+  its ions' limiting conductances (master-control#92 shows the sources) - so scaled as the air is, a taste spreads
+  about 2.8 m in a minute (2 sqrt(D t)), less than a body length: rings and trails
   around food, not plumes. A riser is a wall in the floor too; an eaten orb's taste lingers and fades like its smell.
 - **Taste organs are each Program's**, declared with the body like its nose: where each organ sits (a mouth, a
   tongue, feet, skin that lies on the floor) and its receptor types, each a population of affinities as smell's are.
