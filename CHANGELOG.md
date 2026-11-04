@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Ruled: Master Control owns the air, each Program owns its nose, and humans see the smoke.**
+  `docs/CHEMORECEPTION.md` gains the owner's ruling of 2026-11-04 for every animal, not only the worm: a numerical
+  diffusion field with risers as walls, its constants the Grid's air's; sense organs declared with a Program's body;
+  the odour drawn as green smoke for spectators only, never in a creature's senses. The receptors' bullet now
+  describes master-control#87's five decades of affinity. Documentation only.
+
 - **On the wire at protocol v13.** `external/link` moves to v13 (client ABI 11): `WELCOME` carries the world's
   reflection attenuation, which the creature host and the window now hold as the world told it - a creature host
   logs it on joining - and a Disk's header carries it, so a `--replay` holds the value it was recorded under (a test
