@@ -362,6 +362,7 @@ tracing, 1980 edition, running in compute.
 | [docs/PERCEPTION.md](docs/PERCEPTION.md) | Creature sensor resolutions and the biology behind them |
 | [docs/ACOUSTICS.md](docs/ACOUSTICS.md) | How hearing works on the Grid, and the decisions behind it |
 | [docs/CHEMORECEPTION.md](docs/CHEMORECEPTION.md) | Food, taking it in, and smell on the Grid, and the decisions behind them |
+| [docs/THERMORECEPTION.md](docs/THERMORECEPTION.md) | Heat on the Grid - the air's temperature, the pillars' and the bodies' warmth - and the sense that feels it (a design) |
 | [docs/PROGRAM_INTERFACE.md](docs/PROGRAM_INTERFACE.md) | The plugin contract between the Grid and a Program |
 | [docs/TOPOLOGY.md](docs/TOPOLOGY.md) | How the Grid becomes a world: the four repositories, the three processes and the wire, on audited MMO practice |
 | [docs/RELATED_WORK.md](docs/RELATED_WORK.md) | What research labs build in this area, and what is genuinely unusual here |

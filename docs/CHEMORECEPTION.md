@@ -21,9 +21,18 @@ written down in closed form, and it needs no BVH because odour, unlike light and
   like the joint angles and loads.
 - **Smell**: the concentration of odour at the creature's two amphids, read through receptors that saturate and
   count molecules, as a nose does.
+- **Taste** (ruled 2026-11-04, [below](#taste-ruled-2026-11-04)): chemistry by contact - what dissolves out of food
+  into the floor, and what a mouth or skin touches.
+- **Oxygen and carbon dioxide** (ruled 2026-11-04, [below](#oxygen-and-carbon-dioxide-ruled-2026-11-04)): the air's
+  gases, which food and bodies breathe in and out, and the senses that read them.
 
-Out of scope, each with its trigger in [Deferred](#deferred-with-triggers): taste on contact, wind, odour blocked by
-the terraces, odours that are not food, and a creature that chooses what it eats.
+**Every sense here is for any animal.** The world computes fields - air, floor, heat - that know nothing of who
+breathes or tastes them; a body declares its organs with the body it rezzes, and the world samples its fields at
+those organs. The worm is the first body and the worked example throughout, never the template: what is said of its
+amphids, its ASE or its URX is one declaration among the many other bodies will make.
+
+Out of scope, each with its trigger in [Deferred](#deferred-with-triggers): wind, odours that are not food, and a
+creature that chooses what it eats. Odour around the terraces is ruled in, below.
 
 ## The rule this document keeps
 
@@ -193,14 +202,109 @@ The worm's amphids are paired sense organs at the nose, left and right. On the G
 - **Two amphids**, left and right of the mouth on the head segment, a body's width apart. Their difference is real
   but small, as it is in the worm - which is why the worm learns direction by swinging its head and moving, not by
   comparing its two sides.
-- **Each amphid reports eight readings**, one per receptor type: the fraction of its receptors bound, `c / (c + K)`,
-  which saturates as real binding does; a reading is never a concentration.
+- **Each amphid reports eight readings**, one per receptor type: the fraction of its receptors bound, which saturates
+  as real binding does; a reading is never a concentration. A receptor type is a **population of affinities**, 21 of
+  them log-uniform over five decades centred on `K` (master-control#87), and the reading is the population's mean of
+  `c / (c + K_i)`: roughly the logarithm of the concentration across the middle, exactly a half at `K`. Five decades
+  because the worm follows a point source of diacetyl across a 100,000-fold range
+  ([Bargmann, Hartwieg and Horvitz 1993](https://doi.org/10.1016/0092-8674(93)80053-h), as cited by
+  [Larsch et al. 2015](https://flavell.mit.edu/wp-content/uploads/2016/02/A-Circuit-for-Gradient-Climbing-in-C.-elegans-Chemotaxis.pdf)),
+  partly with receptors of different affinity - ODR-10 in AWA for low concentrations
+  ([Zhang et al. 1997](https://pmc.ncbi.nlm.nih.gov/articles/PMC23737)), another receptor in ASH for high ones - and
+  partly by adapting, which stays the Program's (below). One affinity alone spans about two decades, and with every
+  orb's odour summed it read near full almost everywhere on the floor (master-control#76).
 - **Noise, from physics**: a receptor estimates concentration by counting molecules that arrive, and the counting has
   a floor no organism beats - its relative error falls with diffusion, receptor size, concentration and averaging
   time ([Berg and Purcell 1977](https://doi.org/10.1016/s0006-3495(77)85544-6)). Each reading carries noise of that
   size, drawn from the RNG of record, so it is deterministic and replays, and faint odour is uncertain odour.
 - **No adaptation in the sense.** Real olfactory neurons adapt, and their output tracks change more than level; that
   is computation, and the Program does it. The sense reports bound fractions; the brain differentiates.
+
+### The air, the noses and the smoke (ruled 2026-11-04)
+
+The owner's ruling, for every animal the Grid will hold and not only the worm: **Master Control owns the air and the
+diffusion; each Program owns its nose; humans see the odour as smoke, animals only smell it.**
+
+- **The air is the world's.** Today's field is the exact closed form for a point source, but in an empty half-space:
+  a riser neither shadows nor channels odour, and the air is still. It becomes a **numerical diffusion field** solved
+  by Master Control on a grid over the floor, in which risers are walls odour does not pass, so it fills a hollow,
+  rounds a corner and is shadowed behind a terrace. The solver is implicit (alternating-direction), so it is stable at
+  the 31.25 ms tick, deterministic in f64 like the rest of the world, and cheap on one CPU core; an eaten orb's odour
+  still fades as real odour does. Its constants - the diffusivity, the loss rate - are properties of **the Grid's
+  air**, the same for every body that breathes it, not of one creature (the closed form's diffusivity was scaled to
+  the worm's length). Wind, advection along a world airflow, is the next step behind a written trigger: the first
+  animal whose sensing a plume matters to.
+- **The nose is the Program's.** The sense organs become part of the body a Program declares at `REZ`, as its servos
+  are: where each organ sits on the body, how many receptor types it has (within a cap the wire carries), and each
+  type's affinity population. The world samples its air at whatever organs a body declares. The worm keeps its two
+  amphids of eight types; a mammal might declare two nostrils with many more, and later sniffing - a sampled volume
+  per breath. No adaptation in the sense, for any animal: that is the brain's.
+- **The smoke is the human's.** A human in the Grid has no nose, so the spectator window draws the odour field as
+  **green smoke** whose density follows the concentration, ray-marched through the same grid, behind a key. It exists
+  for the people watching and only for them: **it is never in a creature's senses pass**, so no animal ever sees odour -
+  they smell it, which is the only honest way to have it (the rule this document keeps).
+
+The order: this ruling; the air on the grid in Master Control, with the figures regenerated to show walls at work; the
+organ declaration on the wire (a Link bump) and in the Program ABI, the worm declaring its amphids; then the smoke in
+the spectator window.
+
+### Taste (ruled 2026-11-04)
+
+Smell is chemistry through the air; taste is chemistry by contact, or dissolved in water. Animals taste with very
+different organs - a mammal's tongue, a fly's taste sensilla on its feet and mouthparts, a fish's taste buds over its
+skin - but the physics is one: a receptor touching a solution reads what is dissolved in it. The worm, the first body,
+does both senses: AWA and AWC smell volatiles, while its ASE pair tastes what is dissolved in the agar - salt above
+all, whose gradients it climbs (Bargmann and Horvitz 1991; ASEL fires as the salt rises and ASER as it falls,
+[as reviewed here](https://pmc.ncbi.nlm.nih.gov/articles/PMC6744849), and a well-fed worm returns to the salt it was
+raised on, [Frontiers 2018](https://www.frontiersin.org/articles/10.3389/fnmol.2018.00484)). On the Grid, in the
+split of the rest of this document:
+
+- **Food has a taste.** Each orb carries a taste profile - a non-negative pattern over a few water-soluble compound
+  types (sugars, salts, acids, bitter ones) - drawn per orb from the RNG of record, separately from its odour, so a
+  food can smell one way and taste another and a Program learns which to trust.
+- **The floor's solutes are the world's.** Master Control owns a second, slower field: what an orb leaches into the
+  floor beneath it, diffusing **in the floor, not the air**. A solute in water diffuses about ten thousand times
+  slower than an odour in air - sodium chloride in water is about 1.5e-9 m^2/s, to be read out of a handbook's table
+  before the constant is fixed - so scaled as the air is, a taste spreads about a metre in a minute: rings and trails
+  around food, not plumes. A riser is a wall in the floor too; an eaten orb's taste lingers and fades like its smell.
+- **Taste organs are each Program's**, declared with the body like its nose: where each organ sits (a mouth, a
+  tongue, feet, skin that lies on the floor) and its receptor types, each a population of affinities as smell's are.
+  **An organ tastes only what it touches**: the floor's solutes directly under it, or an orb it is inside. Nothing at
+  a distance, for any animal. The worm declares its ASE pair at the nose; a mammal might declare a tongue reading
+  sweet, salty, sour, bitter and savoury, an insect its feet. Learning and asymmetry - ASEL and ASER, the memory of a
+  salt - are each Program's.
+- **Humans** need no picture of taste - they see the food - though the window may show a faint sparkle where an
+  animal takes a bite, so a spectator knows when it is tasting.
+- **Later, behind a trigger**: taste tied to what food is worth - a bitter orb that nourishes less or harms - the
+  first step to choosing what to eat.
+
+### Oxygen and carbon dioxide (ruled 2026-11-04)
+
+Every animal that breathes senses its gases, though with different organs and for different ends: a mammal's carotid
+bodies read oxygen and its brainstem reads carbon dioxide to drive its breathing, a mosquito finds its host by the
+carbon dioxide on the breeze, and the worm, the first body, lives by its oxygen - it strongly prefers 5 to 12 percent
+and avoids both more and less ([PMC4500246](https://pmc.ncbi.nlm.nih.gov/articles/PMC4500246);
+[Gray et al. 2004](https://deepblue.lib.umich.edu/bitstream/2027.42/62676/1/nature02714.pdf)). Its URX neurons fire as
+oxygen rises (the soluble guanylate cyclases GCY-35 and GCY-36), its BAG neurons as oxygen falls and as carbon
+dioxide rises (GCY-9), and its avoidance of carbon dioxide is muted near the air's 21 percent oxygen by URX's tonic
+signal ([PMC3721734](https://pmc.ncbi.nlm.nih.gov/articles/PMC3721734)). Food matters here too: food is alive, a
+bacterial lawn breathes, so a food patch is low in oxygen and high in carbon dioxide, and an animal can read both.
+
+- **The gases are the world's**: two more scalars in Master Control's air grid, beside the odour and the
+  temperature, by the same solver with risers as walls, relaxing to the open air - 21 percent oxygen, about 0.04
+  percent carbon dioxide - at the grid's top. Their diffusivities are the gases' own in air, scaled as the air is
+  (carbon dioxide's 1.6e-5 m^2/s is cited above; oxygen's, about 2e-5, to be read from the same table).
+- **Everything that lives breathes.** Each orb consumes oxygen and releases carbon dioxide. Each body breathes **from
+  the same metabolism that makes its heat** ([THERMORECEPTION.md](THERMORECEPTION.md#body-heat)): one declared
+  metabolic rate warms the body, draws down the oxygen around it and raises the carbon dioxide, so a crowd of animals
+  leaves stale, warm air behind it, as a crowd does - whether it is worms or anything larger.
+- **Gas senses are each Program's**, declared with the body: where each sits and which gas it reads, outside the body
+  or inside it. A reading is the gas's fraction at that place, with the receptor's noise. The worm declares its URX
+  and BAG pairs; a mammal might declare the inside readings that set its breathing; an insect, carbon dioxide
+  receptors on its palps. Preferences - the worm's 5 to 12 percent, a mosquito's pull to breath - and how one gas
+  tempers another are each animal's behaviour, the Program's to learn, never built into a sense.
+- **Humans** see nothing of the gases by default: the smoke and the aura already show where food and warmth are, and
+  more tints would cloud the window. A later toggle can show them if a spectator needs it.
 
 ### What the worm does with it
 
@@ -239,9 +343,9 @@ A protocol bump (v12, with client ABI 10) and a Program ABI bump (11), taken tog
 
 ## Deferred, with triggers
 
-- **Taste on contact** (the worm's ASE neurons taste salt in what it touches): when a world has dissolved chemistry.
 - **Wind** (advection skews the plume): when a world has moving air.
-- **Odour around the terraces**: the field above treats the Grid as an open half-space over one flat floor, so a
+- **Odour around the terraces** - now ruled in ([The air, the noses and the smoke](#the-air-the-noses-and-the-smoke-ruled-2026-11-04)),
+  so this entry records why it waited: the field above treats the Grid as an open half-space over one flat floor, so a
   riser neither shadows odour nor reflects it. The physics says this is a small error rather than a missing feature:
   odour fills the air above the floor, not a layer along it, and in one second it spreads about 14 m - seventeen
   times a riser's 0.83 m - so a step perturbs the field only within a few step heights of itself, as a stone in a
