@@ -426,13 +426,45 @@ noise is the creature's problem to cope with, not the world's to spare it. The o
       its spectrin skeleton ([Das et al.](https://rcastoragev2.blob.core.windows.net/e35a346c7bbd625409326d1b5c79730b/sciadv.abg4617.PMC8448456.pdf)),
       and SMDD steers the head through TRP-1 and TRP-2 ([review](https://pmc.ncbi.nlm.nih.gov/articles/PMC8411041)) -
       but how finely any of them resolves a bend is not measured either.
-    - **Mammalian vestibular thresholds are measured**, and the systematic review to read them from is Fitze, Mast
-      and Ertl 2024, *Gait & Posture* ([full text](https://boris.unibe.ch/186847/1/1-s2.0-S0966636223014339-main.pdf)),
-      whose values are not yet read into this document.
+    - **Mammalian vestibular thresholds are measured**, and a threshold *is* the noise: it is the width of a
+      Gaussian fitted to left-or-right answers, one standard deviation of the sense's noise. In 105 adults under
+      about 42, at 1 Hz, rotation in yaw is felt from about 0.97 degrees per second, roll tilt from 0.66, sideways
+      translation from 0.58 cm/s and vertical from 1.24 cm/s, rising with age (Bermúdez Rey et al. 2016,
+      [Front Neurol 7:162](https://doi.org/10.3389/fneur.2016.00162)). The thresholds fall as the motion's frequency
+      rises (Valko et al. 2012, [J Neurosci 32:13537](https://pmc.ncbi.nlm.nih.gov/articles/PMC3467969), whose
+      per-frequency table is to be read cell by cell before it is built on), and the systematic review of Fitze, Mast
+      and Ertl 2024, *Gait & Posture* 107:83, reports the same fall in five of six directions of motion. These figures serve a body that declares a
+      vestibular organ; the worm has none.
+    - **Mammalian joint position sense** errs by about 2.5 to 4 degrees at the knee (Relph and Herrington 2016,
+      *The Knee* 23:393, read in its abstract).
 
-  Until a figure has a source, the noise for that organ is not built, and this document says so rather than guessing.
-  Bounding the worm's figures from its behaviour - how weak its gravitaxis is, how tightly it holds a bend - is open
-  research, the kind iso-lab's night shift takes on.
+  Where a figure has a source, it is used as measured. The worm's are not measured - the study of its proprioceptive
+  coupling says outright that it does not quantify the sensory noise (Wen et al. 2012,
+  [Neuron 76:750](https://pmc.ncbi.nlm.nih.gov/articles/PMC3508473)) - and for those the owner ruled the next rule.
+
+### Labelled assumptions, where biology has no paper (ruled 2026-11-04)
+
+Some quantities a faithful body needs have never been measured, and a world that waited for every paper would never
+build them. The owner's ruling: **where no biological paper exists, a realistic assumption may stand in - honestly,
+under five conditions.** It is modelling, not invention, when it keeps all five:
+
+1. **Labelled.** The figure says *assumed, not measured* in the code, the documentation and the pull request that
+   brings it, with a line of reasoning. It never wears a citation it does not have.
+2. **Bounded by what is measured.** The worm's gravitaxis is a weak bias across a population (Ackley et al. 2022), so
+   its gravity sense cannot be precise; its curvature coupling holds a gain of about 0.62 within about 80 ms (Wen et
+   al. 2012), so its stretch sense cannot be so noisy that the coupling fails. An assumption must sit between such
+   bounds, and its pull request shows that it does.
+3. **Borrowed from the nearest measured relative** where one exists - a related animal, a homologous receptor - naming
+   the source and the leap.
+4. **Swept, not tuned.** A result that rests on an assumed figure is reported across a range of it, never at the one
+   value that flatters it. A behaviour that works only at a magic number is a finding, not a feature
+   ([design rule 6](#design-rules)).
+5. **Replaceable.** It is a named parameter with its status recorded beside it, and it is replaced the day a
+   measurement appears.
+
+A setting of the world that has no biology at all - the energy pillars' heat - is not an assumption but a choice, and
+says so. Bounding the worm's body-sense noise under these conditions is open research, the kind iso-lab's night shift
+takes on.
 
 ## Design rules
 

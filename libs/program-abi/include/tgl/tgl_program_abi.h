@@ -665,8 +665,10 @@ typedef struct TglSenses {
     float specific_force[3];
 
     /*! Angular velocity about the body axes, radians per second, the semicircular-canal analogue.
-        Sensed inertially, which is not the commanded turn rate above: the two disagree whenever the
-        body is pushed rather than driven. */
+        Composed by the world in the body's letter, at the same point and in the same frame as
+        specific_force (x right, y up, z backwards), and copied by the host unchanged (protocol 14).
+        It is what the body turns at, not what it commanded: the two disagree whenever the body is
+        pushed, slips or is held. */
     float angular_velocity[3];
 
     /* -- Thermoreception ------------------------------------------------------------------------ */
