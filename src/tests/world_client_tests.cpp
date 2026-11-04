@@ -135,7 +135,12 @@ namespace
                 throw std::runtime_error{"the client did not come as a spectator"};
             }
 
-            const LnkWelcome welcome{.current_tick = current_tick, .nominal_dt_seconds = 0.03125f, .client_id = 1u, .world_fingerprint = m_world_fingerprint};
+            const LnkWelcome welcome{.current_tick = current_tick,
+                .nominal_dt_seconds = 0.03125f,
+                .client_id = 1u,
+                .world_fingerprint = m_world_fingerprint,
+                .reflection_attenuation = 0.9f,
+                .reserved0 = {}};
             check(m_library.vtable().send_welcome(m_connection, &welcome), "send_welcome");
             flush();
         }
@@ -312,7 +317,7 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
     {
         LnkStatus status{LNK_PANIC};
         // A slow Disk - a tenth of a second per tick - so the pacing is observable.
-        LnkClient* const recorder{library.vtable().record_open(path.c_str(), fingerprint, 10u, 0.1f, 1'700'000'000u, &status, nullptr, 0u)};
+        LnkClient* const recorder{library.vtable().record_open(path.c_str(), fingerprint, 10u, 0.1f, 0.75f, 1'700'000'000u, &status, nullptr, 0u)};
         TEST_CHECK_EQUAL(status, LNK_OK);
         for (std::uint64_t tick{11u}; tick <= 13u; ++tick) {
             const LnkTickStateHeader header{.tick = tick, .creature_count = 1u, .food_count = 1u};
@@ -338,6 +343,9 @@ TEST_CASE(clu_replays_a_disk_paced_by_its_dt_and_stands_still_at_its_end)
     TEST_CHECK(clu.replaying());
     TEST_CHECK_EQUAL(clu.welcome().current_tick, 10u);
     TEST_CHECK_CLOSE(clu.welcome().nominal_dt_seconds, 0.1f, 1e-6f);
+    // The world's reflection attenuation travels in the Disk's header, so a replay perceives the
+    // world with the number it was recorded under (protocol v13).
+    TEST_CHECK_EQUAL(clu.welcome().reflection_attenuation, 0.75f);
 
     // The first telling lands at once; the second waits for its time.
     clu.poll();
