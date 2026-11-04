@@ -1279,6 +1279,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **No sense of speed over the ground (Program ABI 12, #189).** `TglSenses` carried `body_forward_speed`,
+  `body_vertical_speed` and `body_turn_rate` as proprioception, but the host filled them from the world's exact
+  velocity - honest for a body that drove by commanded speed, a privileged read of the world for one that moves by
+  undulating, which no animal has. They are removed, with `padding0`: `TglSenses` is 200 bytes with no padding. A body
+  feels its motion as an animal does - its inner ear (`specific_force`, `angular_velocity`), its contacts, its joints -
+  and estimates its speed itself; a Program that commands a speed knows what it commanded. A Program built against
+  ABI 11 is refused at load until it is rebuilt.
+
 - **The shared skills learn the day's lessons.** `windows-build` says how to catch a stale CMake cache that turns
   Release into an unoptimised validation build, `org-pr-flow` how parallel PRs, self-filed dismissals and
   `temp_dir()` in tests go wrong, and `live-world` (where present) how to measure a life's timing - mirrored
