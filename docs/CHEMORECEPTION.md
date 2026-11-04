@@ -193,14 +193,51 @@ The worm's amphids are paired sense organs at the nose, left and right. On the G
 - **Two amphids**, left and right of the mouth on the head segment, a body's width apart. Their difference is real
   but small, as it is in the worm - which is why the worm learns direction by swinging its head and moving, not by
   comparing its two sides.
-- **Each amphid reports eight readings**, one per receptor type: the fraction of its receptors bound, `c / (c + K)`,
-  which saturates as real binding does; a reading is never a concentration.
+- **Each amphid reports eight readings**, one per receptor type: the fraction of its receptors bound, which saturates
+  as real binding does; a reading is never a concentration. A receptor type is a **population of affinities**, 21 of
+  them log-uniform over five decades centred on `K` (master-control#87), and the reading is the population's mean of
+  `c / (c + K_i)`: roughly the logarithm of the concentration across the middle, exactly a half at `K`. Five decades
+  because the worm follows a point source of diacetyl across a 100,000-fold range
+  ([Bargmann, Hartwieg and Horvitz 1993](https://doi.org/10.1016/0092-8674(93)80053-h), as cited by
+  [Larsch et al. 2015](https://flavell.mit.edu/wp-content/uploads/2016/02/A-Circuit-for-Gradient-Climbing-in-C.-elegans-Chemotaxis.pdf)),
+  partly with receptors of different affinity - ODR-10 in AWA for low concentrations
+  ([Zhang et al. 1997](https://pmc.ncbi.nlm.nih.gov/articles/PMC23737)), another receptor in ASH for high ones - and
+  partly by adapting, which stays the Program's (below). One affinity alone spans about two decades, and with every
+  orb's odour summed it read near full almost everywhere on the floor (master-control#76).
 - **Noise, from physics**: a receptor estimates concentration by counting molecules that arrive, and the counting has
   a floor no organism beats - its relative error falls with diffusion, receptor size, concentration and averaging
   time ([Berg and Purcell 1977](https://doi.org/10.1016/s0006-3495(77)85544-6)). Each reading carries noise of that
   size, drawn from the RNG of record, so it is deterministic and replays, and faint odour is uncertain odour.
 - **No adaptation in the sense.** Real olfactory neurons adapt, and their output tracks change more than level; that
   is computation, and the Program does it. The sense reports bound fractions; the brain differentiates.
+
+### The air, the noses and the smoke (ruled 2026-11-04)
+
+The owner's ruling, for every animal the Grid will hold and not only the worm: **Master Control owns the air and the
+diffusion; each Program owns its nose; humans see the odour as smoke, animals only smell it.**
+
+- **The air is the world's.** Today's field is the exact closed form for a point source, but in an empty half-space:
+  a riser neither shadows nor channels odour, and the air is still. It becomes a **numerical diffusion field** solved
+  by Master Control on a grid over the floor, in which risers are walls odour does not pass, so it fills a hollow,
+  rounds a corner and is shadowed behind a terrace. The solver is implicit (alternating-direction), so it is stable at
+  the 31.25 ms tick, deterministic in f64 like the rest of the world, and cheap on one CPU core; an eaten orb's odour
+  still fades as real odour does. Its constants - the diffusivity, the loss rate - are properties of **the Grid's
+  air**, the same for every body that breathes it, not of one creature (the closed form's diffusivity was scaled to
+  the worm's length). Wind, advection along a world airflow, is the next step behind a written trigger: the first
+  animal whose sensing a plume matters to.
+- **The nose is the Program's.** The sense organs become part of the body a Program declares at `REZ`, as its servos
+  are: where each organ sits on the body, how many receptor types it has (within a cap the wire carries), and each
+  type's affinity population. The world samples its air at whatever organs a body declares. The worm keeps its two
+  amphids of eight types; a mammal might declare two nostrils with many more, and later sniffing - a sampled volume
+  per breath. No adaptation in the sense, for any animal: that is the brain's.
+- **The smoke is the human's.** A human in the Grid has no nose, so the spectator window draws the odour field as
+  **green smoke** whose density follows the concentration, ray-marched through the same grid, behind a key. It exists
+  for the people watching and only for them: **it is never in a creature's senses pass**, so no animal ever sees odour -
+  they smell it, which is the only honest way to have it (the rule this document keeps).
+
+The order: this ruling; the air on the grid in Master Control, with the figures regenerated to show walls at work; the
+organ declaration on the wire (a Link bump) and in the Program ABI, the worm declaring its amphids; then the smoke in
+the spectator window.
 
 ### What the worm does with it
 
